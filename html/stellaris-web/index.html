@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stellaris Web — 群星网页版</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="loading-content">
+    <h1>STELLARIS</h1>
+    <p>Galactic Grand Strategy</p>
+    <div class="loading-bar"><div class="loading-fill"></div></div>
+  </div>
+</div>
+
+<div id="empire-creator" class="fullscreen-panel" style="display:none;">
+  <div class="ec-header">
+    <h1>EMPIRE CREATION</h1>
+    <div class="ec-tabs" id="ec-tabs"></div>
+  </div>
+  <div class="ec-body" id="ec-body"></div>
+  <div class="ec-footer">
+    <button id="ec-random" class="btn">Random Empire</button>
+    <button id="ec-start" class="btn btn-primary">BEGIN GAME</button>
+  </div>
+</div>
+
+<div id="game-container" style="display:none;">
+  <div id="top-bar">
+    <div class="tb-left">
+      <span class="tb-empire-name" id="tb-empire-name">Empire Name</span>
+      <span class="tb-empire-flag" id="tb-empire-flag"></span>
+    </div>
+    <div class="tb-resources" id="tb-resources"></div>
+    <div class="tb-right">
+      <span class="tb-date" id="tb-date">2200.01.01</span>
+      <div class="tb-speed">
+        <button class="speed-btn" data-speed="0" title="Pause">⏸</button>
+        <button class="speed-btn" data-speed="1" title="Slow">▶</button>
+        <button class="speed-btn active" data-speed="2" title="Normal">▶▶</button>
+        <button class="speed-btn" data-speed="3" title="Fast">▶▶▶</button>
+        <button class="speed-btn" data-speed="4" title="Fastest">▶▶▶▶</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="main-area">
+    <div id="sidebar-left">
+      <div class="sidebar-tabs">
+        <button class="st-btn active" data-panel="outliner">📋</button>
+        <button class="st-btn" data-panel="situation-log">📜</button>
+        <button class="st-btn" data-panel="planets">🌍</button>
+        <button class="st-btn" data-panel="fleets">🚀</button>
+      </div>
+      <div class="sidebar-content" id="sidebar-content"></div>
+    </div>
+
+    <div id="galaxy-container">
+      <canvas id="galaxy-canvas"></canvas>
+      <div id="galaxy-overlay"></div>
+    </div>
+  </div>
+
+  <div id="bottom-bar">
+    <div class="bb-info" id="bb-info">
+      <span id="bb-selection">Select a system or fleet</span>
+    </div>
+    <div class="bb-actions" id="bb-actions"></div>
+  </div>
+</div>
+
+<div id="planet-panel" class="slide-panel" style="display:none;"></div>
+<div id="research-panel" class="slide-panel" style="display:none;"></div>
+<div id="diplomacy-panel" class="slide-panel" style="display:none;"></div>
+<div id="traditions-panel" class="slide-panel" style="display:none;"></div>
+<div id="ship-designer-panel" class="slide-panel" style="display:none;"></div>
+<div id="event-dialog" class="modal" style="display:none;"></div>
+<div id="notification-area"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

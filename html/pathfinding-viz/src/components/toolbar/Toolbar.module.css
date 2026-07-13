@@ -1,0 +1,102 @@
+.toolbar {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.section {
+  padding: 8px;
+  background: #1a1a2e;
+  border-radius: 6px;
+}
+
+.sectionTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8899aa;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.toolBtn {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  margin-bottom: 3px;
+  border: 1px solid #0f3460;
+  border-radius: 4px;
+  background: #16213e;
+  color: #e0e0e0;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+  transition: all 0.15s;
+}
+
+.toolBtn:hover {
+  background: #1a3a5e;
+}
+
+.toolBtnActive {
+  background: #0f3460;
+  border-color: #e94560;
+}
+
+.label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  margin: 4px 0;
+  color: #8899aa;
+}
+
+.slider {
+  width: 100%;
+  accent-color: #e94560;
+}
+
+.select {
+  width: 100%;
+  padding: 4px;
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 4px;
+  color: #e0e0e0;
+  font-size: 11px;
+}
+
+.actionBtn {
+  width: 100%;
+  padding: 6px;
+  border: none;
+  border-radius: 4px;
+  background: #0f3460;
+  color: #e0e0e0;
+  cursor: pointer;
+  font-size: 11px;
+  margin-top: 4px;
+  transition: background 0.15s;
+}
+
+.actionBtn:hover {
+  background: #1a4a7a;
+}
+
+.actionBtnPrimary {
+  background: #e94560;
+}
+
+.actionBtnPrimary:hover {
+  background: #d63850;
+}
+
+.minimap {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid #0f3460;
+  border-radius: 4px;
+  background: #0a0a1a;
+}

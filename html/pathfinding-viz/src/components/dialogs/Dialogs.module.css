@@ -1,0 +1,130 @@
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.dialog {
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 8px;
+  padding: 16px;
+  min-width: 600px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  color: #e0e0e0;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  color: #8899aa;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.closeBtn:hover {
+  color: #e94560;
+}
+
+.chartRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.chartBox {
+  background: #1a1a2e;
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.chartTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8899aa;
+  margin-bottom: 6px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.table th {
+  background: #0f3460;
+  padding: 6px 8px;
+  text-align: left;
+  color: #8899aa;
+}
+
+.table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #0f3460;
+}
+
+.table tr:hover td {
+  background: #1a3a5e;
+}
+
+.successBadge {
+  color: #4caf50;
+  font-weight: 600;
+}
+
+.failBadge {
+  color: #f44336;
+  font-weight: 600;
+}
+
+.editorArea {
+  background: #0a0a1a;
+  border: 1px solid #0f3460;
+  border-radius: 4px;
+  min-height: 300px;
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.btnRow {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.editorBtn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #e0e0e0;
+}
+
+.editorBtnPrimary {
+  background: #e94560;
+}
+
+.editorBtnSecondary {
+  background: #0f3460;
+}
