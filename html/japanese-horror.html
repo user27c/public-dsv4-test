@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>廃墟 · 日式心理恐怖</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;overflow:hidden;background:#000;}
+  body{
+    font-family:'Yu Mincho','MS Mincho','PingFang SC','Microsoft YaHei',serif;
+    color:#c9d1cd;-webkit-user-select:none;user-select:none;cursor:default;
+  }
+  canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;}
+
+  /* ===== VHS / scanline overlay ===== */
+  #fx{position:fixed;inset:0;pointer-events:none;z-index:20;mix-blend-mode:overlay;opacity:.35;
+    background:
+      repeating-linear-gradient(0deg,rgba(0,0,0,.0) 0px,rgba(0,0,0,.0) 2px,rgba(0,0,0,.35) 3px,rgba(0,0,0,.0) 4px);
+    animation:roll 8s linear infinite;}
+  @keyframes roll{0%{background-position:0 0;}100%{background-position:0 100px;}}
+  #vig{position:fixed;inset:0;pointer-events:none;z-index:21;
+    background:radial-gradient(ellipse at center,rgba(0,0,0,0) 42%,rgba(0,0,0,.75) 100%);}
+
+  /* ===== HUD ===== */
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:15;}
+  #cross{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;
+    border:1px solid rgba(200,220,210,.5);border-radius:50%;transition:opacity .2s;}
+  #keys{position:absolute;left:22px;bottom:22px;font-size:14px;letter-spacing:2px;
+    text-shadow:0 0 6px #000,0 2px 3px #000;opacity:.85;}
+  #keys b{color:#e8d27a;}
+  #batWrap{position:absolute;right:22px;bottom:26px;width:150px;text-align:right;}
+  #batLbl{font-size:11px;letter-spacing:3px;opacity:.6;margin-bottom:5px;}
+  #bat{height:8px;border:1px solid rgba(200,220,210,.35);background:rgba(0,0,0,.5);}
+  #batFill{height:100%;width:100%;background:linear-gradient(90deg,#2b5,#7fd6a0);transition:width .3s;}
+  #prompt{position:absolute;left:50%;top:58%;transform:translateX(-50%);font-size:15px;
+    letter-spacing:2px;text-shadow:0 0 8px #000,0 2px 4px #000;opacity:0;transition:opacity .18s;
+    color:#e6ecdf;text-align:center;}
+  #prompt kbd{border:1px solid rgba(230,236,223,.6);padding:1px 7px;border-radius:3px;
+    font-family:inherit;background:rgba(0,0,0,.35);}
+  #subtitle{position:absolute;left:50%;bottom:12%;transform:translateX(-50%);width:80%;
+    text-align:center;font-size:15px;line-height:1.6;color:#aeb8b0;font-style:italic;
+    text-shadow:0 0 8px #000,0 2px 4px #000;opacity:0;transition:opacity .6s;pointer-events:none;}
+
+  /* ===== overlays ===== */
+  .screen{position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;text-align:center;background:#000;
+    transition:opacity 1.2s;}
+  #start{background:radial-gradient(ellipse at center,#0a0f0d 0%,#000 90%);}
+  #start h1{font-size:44px;letter-spacing:12px;color:#8fa89a;font-weight:400;
+    text-shadow:0 0 30px rgba(80,120,100,.4);margin-bottom:6px;}
+  #start .jp{font-size:16px;letter-spacing:14px;color:#556;margin-bottom:40px;}
+  #start p{font-size:14px;line-height:2.1;color:#7a857d;letter-spacing:1px;max-width:520px;}
+  #start .go{margin-top:38px;font-size:17px;letter-spacing:5px;color:#c9d1cd;
+    border:1px solid rgba(140,168,154,.4);padding:14px 46px;cursor:pointer;
+    transition:all .3s;background:rgba(20,30,26,.3);}
+  #start .go:hover{background:rgba(60,90,76,.4);color:#fff;letter-spacing:8px;}
+  #start .warn{margin-top:26px;font-size:11px;color:#544;letter-spacing:2px;}
+
+  #death{opacity:0;pointer-events:none;background:#000;}
+  #death .msg{font-size:30px;letter-spacing:10px;color:#7a2620;font-weight:400;
+    text-shadow:0 0 24px rgba(120,20,15,.5);}
+  #death .sub{margin-top:20px;font-size:13px;letter-spacing:4px;color:#443;}
+
+  #win{opacity:0;pointer-events:none;background:radial-gradient(ellipse at center,#0d100e,#000);}
+  #win .msg{font-size:34px;letter-spacing:8px;color:#8fa89a;font-weight:400;}
+  #win .sub{margin-top:22px;font-size:14px;letter-spacing:3px;color:#6a756d;line-height:2;}
+
+  #flash{position:fixed;inset:0;z-index:29;background:#000;opacity:0;pointer-events:none;
+    transition:opacity .08s;}
+  .hidden{opacity:0!important;pointer-events:none!important;}
+  #loading{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;
+    background:#000;color:#556;letter-spacing:6px;font-size:14px;}
+</style>
+</head>
+<body>
+  <div id="fx"></div>
+  <div id="vig"></div>
+  <div id="flash"></div>
+
+  <div id="hud">
+    <div id="cross"></div>
+    <div id="keys">鍵 KEYS &nbsp;<b id="keyCount">0</b> / <span id="keyTotal">3</span></div>
+    <div id="batWrap">
+      <div id="batLbl">懐中電灯</div>
+      <div id="bat"><div id="batFill"></div></div>
+    </div>
+    <div id="prompt"></div>
+    <div id="subtitle"></div>
+  </div>
+
+  <div id="death" class="screen">
+    <div class="msg">見ツケタ</div>
+    <div class="sub">— あなたは見つかった —</div>
+  </div>
+
+  <div id="win" class="screen">
+    <div class="msg">出口</div>
+    <div class="sub">あなたは外へ出た……<br>あるいは、そう思っているだけかもしれない。</div>
+  </div>
+
+  <div id="start" class="screen">
+    <h1>廃 墟</h1>
+    <div class="jp">はいきょ</div>
+    <p>あなたは見知らぬ集合住宅の廊下で目を覚ました。<br>
+       三つの鍵を見つけ、奥の扉を開けて出口へ。<br>
+       だが——ここには、あなた以外の何かがいる。</p>
+    <p style="margin-top:24px;color:#5a655d;font-size:13px;">
+       WASD 移動 &nbsp;·&nbsp; マウス 視点 &nbsp;·&nbsp; E 調べる/拾う &nbsp;·&nbsp; Shift 走る<br>
+       足音を、立てすぎるな。</p>
+    <div class="go" id="goBtn">開 始</div>
+    <div class="warn">※ 音量注意 · 心理恐怖 · 点滅光あり</div>
+  </div>
+
+  <div id="loading">読 込 中 …</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+
+/* ============================================================
+   CONSTANTS / GLOBALS
+============================================================ */
+const T = 4;                 // tile size (world units)
+const WALL_H = 3.4;          // wall height
+const EYE = 1.65;            // eye height
+const clock = new THREE.Clock();
+let renderer, scene, camera, composer, vhsPass, bloomPass;
+let controls;
+const RES_SCALE = 0.6;       // internal render scale -> PS1 chunkiness
+
+const keyState = {};
+let started = false, dead = false, won = false;
+let running = true;          // game loop active
+
+/* ============================================================
+   RENDERER + POST PROCESSING
+============================================================ */
+function initRenderer(){
+  renderer = new THREE.WebGLRenderer({ antialias:false, powerPreference:'high-performance' });
+  renderer.setPixelRatio(1);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.domElement.style.width = '100%';
+  renderer.domElement.style.height = '100%';
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.55;
+  document.body.appendChild(renderer.domElement);
+}
+
+// custom VHS / grain / chromatic aberration / vignette pass
+const VHSShader = {
+  uniforms: {
+    tDiffuse:{ value:null },
+    time:{ value:0 },
+    noiseAmt:{ value:0.06 },
+    scan:{ value:0.10 },
+    aberr:{ value:0.0014 },
+    vignette:{ value:0.78 },
+    desat:{ value:0.18 },
+    glitch:{ value:0.0 },
+    resolution:{ value:new THREE.Vector2(1,1) }
+  },
+  vertexShader:`
+    varying vec2 vUv;
+    void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }
+  `,
+  fragmentShader:`
+    uniform sampler2D tDiffuse;
+    uniform float time,noiseAmt,scan,aberr,vignette,desat,glitch;
+    uniform vec2 resolution;
+    varying vec2 vUv;
+    float rand(vec2 c){ return fract(sin(dot(c,vec2(12.9898,78.233)))*43758.5453); }
+    void main(){
+      vec2 uv = vUv;
+      // horizontal jitter / tape warp
+      float line = floor(uv.y*resolution.y*0.5);
+      float j = (rand(vec2(line,floor(time*12.0)))-0.5)*glitch*0.06;
+      uv.x += j;
+      // rolling wave
+      uv.x += sin(uv.y*10.0 + time*1.3)*0.0011;
+      // chromatic aberration
+      float a = aberr*(1.0+glitch*8.0);
+      vec3 col;
+      col.r = texture2D(tDiffuse, uv+vec2(a,0.0)).r;
+      col.g = texture2D(tDiffuse, uv).g;
+      col.b = texture2D(tDiffuse, uv-vec2(a,0.0)).b;
+      // desaturate slightly toward cold green
+      float l = dot(col, vec3(0.299,0.587,0.114));
+      col = mix(col, vec3(l)*vec3(0.85,1.0,0.92), desat);
+      // scanlines
+      float s = sin(uv.y*resolution.y*1.55)*0.5+0.5;
+      col *= 1.0 - scan*s;
+      // grain
+      float n = rand(uv*resolution.xy*0.5 + fract(time))*2.0-1.0;
+      col += n*noiseAmt;
+      // vignette
+      vec2 d = uv-0.5;
+      float v = smoothstep(0.95, 0.30, length(d)*vignette);
+      col *= mix(0.62,1.0,v);
+      // occasional bright glitch band
+      float band = step(0.995, rand(vec2(floor(time*3.0), floor(uv.y*40.0)))) * glitch;
+      col += band*0.3;
+      gl_FragColor = vec4(col,1.0);
+    }
+  `
+};
+
+function initComposer(){
+  const w = Math.floor(window.innerWidth*RES_SCALE);
+  const h = Math.floor(window.innerHeight*RES_SCALE);
+  const rt = new THREE.WebGLRenderTarget(w,h,{ samples:0 });
+  composer = new EffectComposer(renderer, rt);
+  composer.setSize(w,h);
+  composer.addPass(new RenderPass(scene,camera));
+
+  bloomPass = new UnrealBloomPass(new THREE.Vector2(w,h), 0.55, 0.7, 0.72);
+  composer.addPass(bloomPass);
+
+  vhsPass = new ShaderPass(VHSShader);
+  vhsPass.uniforms.resolution.value.set(w,h);
+  composer.addPass(vhsPass);
+
+  composer.addPass(new OutputPass());
+}
+
+/* ============================================================
+   PROCEDURAL PS1 TEXTURES (canvas)
+============================================================ */
+function makeTex(draw, size=128, {repeat=[1,1], filter=THREE.NearestFilter}={}){
+  const c = document.createElement('canvas'); c.width=c.height=size;
+  const g = c.getContext('2d'); draw(g,size);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(repeat[0],repeat[1]);
+  tex.magFilter = filter; tex.minFilter = filter;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 1;
+  return tex;
+}
+function noiseFill(g,size,base,spread,alpha=1){
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+    const n=(Math.random()-0.5)*spread;
+    const r=base[0]+n,gr=base[1]+n,b=base[2]+n;
+    g.fillStyle=`rgba(${r|0},${gr|0},${b|0},${alpha})`;
+    g.fillRect(x,y,1,1);
+  }
+}
+function stains(g,size,color,count,rMax){
+  for(let i=0;i<count;i++){
+    const x=Math.random()*size,y=Math.random()*size,r=Math.random()*rMax+3;
+    const grd=g.createRadialGradient(x,y,0,x,y,r);
+    grd.addColorStop(0,color); grd.addColorStop(1,'rgba(0,0,0,0)');
+    g.fillStyle=grd; g.beginPath(); g.arc(x,y,r,0,7); g.fill();
+  }
+}
+
+const TEX = {};
+function buildTextures(){
+  // mildew wall + peeling wallpaper
+  TEX.wall = makeTex((g,s)=>{
+    noiseFill(g,s,[122,128,114],26);
+    // faded vertical wallpaper stripes
+    for(let x=0;x<s;x+=10){ g.fillStyle='rgba(60,70,58,0.18)'; g.fillRect(x,0,4,s); }
+    stains(g,s,'rgba(30,45,30,0.5)',22,26);   // mildew green
+    stains(g,s,'rgba(50,35,20,0.4)',14,20);   // water damage
+    // peeled patch
+    g.fillStyle='rgba(120,110,95,0.5)';
+    g.beginPath(); g.moveTo(s*0.5,s*0.1); g.lineTo(s*0.8,s*0.3);
+    g.lineTo(s*0.6,s*0.7); g.lineTo(s*0.45,s*0.4); g.fill();
+  }, 128, {repeat:[1,1]});
+
+  TEX.floor = makeTex((g,s)=>{
+    noiseFill(g,s,[84,80,70],20);
+    // wood planks
+    for(let y=0;y<s;y+=16){
+      g.fillStyle='rgba(20,18,14,0.5)'; g.fillRect(0,y,s,2);
+      g.fillStyle='rgba(120,108,88,0.10)'; g.fillRect(0,y+3,s,10);
+    }
+    stains(g,s,'rgba(10,12,8,0.45)',18,22);   // dark damp
+    stains(g,s,'rgba(140,150,140,0.12)',10,26); // wet sheen hint
+  }, 128, {repeat:[1,1]});
+
+  TEX.ceil = makeTex((g,s)=>{
+    noiseFill(g,s,[60,66,60],14);
+    stains(g,s,'rgba(20,25,18,0.5)',20,30);
+  }, 64, {repeat:[1,1]});
+
+  TEX.door = makeTex((g,s)=>{
+    noiseFill(g,s,[70,52,34],18);
+    // panel frame
+    g.strokeStyle='rgba(20,14,8,0.7)'; g.lineWidth=3;
+    g.strokeRect(8,8,s-16,s*0.44); g.strokeRect(8,s*0.52,s-16,s*0.4);
+    stains(g,s,'rgba(30,20,10,0.4)',10,18);
+  }, 128, {repeat:[1,1]});
+
+  TEX.metal = makeTex((g,s)=>{
+    noiseFill(g,s,[70,74,78],20);
+    stains(g,s,'rgba(120,60,20,0.5)',26,14); // rust
+    stains(g,s,'rgba(80,40,15,0.6)',12,20);
+  }, 64);
+
+  TEX.paper = makeTex((g,s)=>{
+    noiseFill(g,s,[150,142,120],14);
+    g.fillStyle='rgba(30,30,28,0.85)';
+    for(let y=6;y<s;y+=7){
+      const w=Math.random()*s*0.7+8;
+      g.fillRect(5, y, w, 2);
+    }
+    stains(g,s,'rgba(90,70,30,0.35)',10,14);
+  }, 64);
+}
+
+/* ============================================================
+   MATERIALS
+============================================================ */
+const MAT = {};
+function buildMaterials(){
+  MAT.wall  = new THREE.MeshStandardMaterial({ map:TEX.wall, roughness:0.95, metalness:0.0 });
+  MAT.floor = new THREE.MeshStandardMaterial({ map:TEX.floor, roughness:0.6, metalness:0.05 });
+  MAT.ceil  = new THREE.MeshStandardMaterial({ map:TEX.ceil, roughness:1.0, metalness:0.0 });
+  MAT.door  = new THREE.MeshStandardMaterial({ map:TEX.door, roughness:0.85 });
+  MAT.metal = new THREE.MeshStandardMaterial({ map:TEX.metal, roughness:0.7, metalness:0.4 });
+  MAT.paper = new THREE.MeshStandardMaterial({ map:TEX.paper, roughness:1.0, side:THREE.DoubleSide });
+  MAT.wood  = new THREE.MeshStandardMaterial({ color:0x3a2c1c, roughness:0.9 });
+  MAT.flesh = new THREE.MeshStandardMaterial({ color:0x9a9284, roughness:1.0 });
+  MAT.dark  = new THREE.MeshStandardMaterial({ color:0x05060a, roughness:1.0 });
+  MAT.key   = new THREE.MeshStandardMaterial({ color:0xe8c25a, roughness:0.4, metalness:0.6,
+                emissive:0x3a2e08, emissiveIntensity:0.6 });
+  MAT.charm = new THREE.MeshStandardMaterial({ color:0xd8d2c0, roughness:0.8,
+                emissive:0x223344, emissiveIntensity:0.5, side:THREE.DoubleSide });
+}
+
+/* ============================================================
+   LEVEL — tile grid, non-euclidean corridors + rooms
+   Map legend: '#'=wall  '.'=floor  'D'=door(cell)  ' '=void(solid)
+   Doors handled separately. We build a grid then add rooms.
+============================================================ */
+const MAP = [
+  "###################",
+  "#........#........E#",
+  "#.######.#.######.#",
+  "#.#....#.#.#....#.#",
+  "#.#.KK.#.#.#.SS.#.#",
+  "#.#....D.D.#....#.#",
+  "#.######.#.######.#",
+  "#........#........#",
+  "###.####.#.####.###",
+  "#.....#..#..#.....#",
+  "#.###.#.##.#.###..#",
+  "#.#.......P.....#.#",
+  "#.#.###.###.###.#.#",
+  "#.....#.....#.....#",
+  "#.###.#####.#.###.#",
+  "#...#...K...#...#.#",
+  "###.#.#####.#.#.###",
+  "#...............#.#",
+  "###################"
+];
+const MH = MAP.length, MW = MAP[0].length;
+
+const solid = [];   // boolean grid: true = blocked (wall)
+let playerStart = new THREE.Vector3();
+const doorCells = [];
+const keySpawns = [];
+let exitCell = null;
+
+function cellCenter(cx,cz){ return new THREE.Vector3((cx-MW/2)*T + T/2, 0, (cz-MH/2)*T + T/2); }
+
+function buildLevel(){
+  const wallGeos=[], floorGeos=[], ceilGeos=[];
+  const floorGeoBase = new THREE.PlaneGeometry(T,T);
+  const ceilGeoBase = new THREE.PlaneGeometry(T,T);
+
+  for(let z=0;z<MH;z++){
+    solid[z]=[];
+    for(let x=0;x<MW;x++){
+      const ch = MAP[z][x];
+      const blocked = (ch==='#');
+      solid[z][x]=blocked;
+      const c = cellCenter(x,z);
+
+      if(ch==='#'){
+        const g = new THREE.BoxGeometry(T,WALL_H,T);
+        g.translate(c.x, WALL_H/2, c.z);
+        wallGeos.push(g);
+      } else {
+        // floor
+        const f = floorGeoBase.clone(); f.rotateX(-Math.PI/2); f.translate(c.x,0,c.z);
+        floorGeos.push(f);
+        // ceiling
+        const ce = ceilGeoBase.clone(); ce.rotateX(Math.PI/2); ce.translate(c.x,WALL_H,c.z);
+        ceilGeos.push(ce);
+      }
+      if(ch==='P') playerStart.copy(c);
+      if(ch==='D') doorCells.push({x,z});
+      if(ch==='K') keySpawns.push(c.clone());
+      if(ch==='S') keySpawns.push(c.clone());  // extra pickup spots (mystery)
+      if(ch==='E'){ exitCell={x,z}; }
+    }
+  }
+
+  const wallMesh = new THREE.Mesh(BufferGeometryUtils.mergeGeometries(wallGeos), MAT.wall);
+  wallMesh.castShadow = true; wallMesh.receiveShadow = true;
+  scene.add(wallMesh);
+
+  const floorMesh = new THREE.Mesh(BufferGeometryUtils.mergeGeometries(floorGeos), MAT.floor);
+  floorMesh.receiveShadow = true; scene.add(floorMesh);
+
+  const ceilMesh = new THREE.Mesh(BufferGeometryUtils.mergeGeometries(ceilGeos), MAT.ceil);
+  ceilMesh.receiveShadow = true; scene.add(ceilMesh);
+
+  // adjust floor UV repeat for tiling look
+  MAT.floor.map.repeat.set(1,1);
+
+  if(!playerStart.lengthSq()) playerStart.copy(cellCenter(9,11));
+}
+
+/* collision test: is world point inside a solid cell (with radius) */
+function isBlocked(wx,wz){
+  const gx = Math.floor((wx)/T + MW/2);
+  const gz = Math.floor((wz)/T + MH/2);
+  if(gx<0||gz<0||gx>=MW||gz>=MH) return true;
+  return solid[gz][gx];
+}
+function collidePoint(wx,wz){
+  const r=0.35;
+  return isBlocked(wx+r,wz)||isBlocked(wx-r,wz)||isBlocked(wx,wz+r)||isBlocked(wx,wz-r);
+}
+
+/* ============================================================
+   DOORS
+============================================================ */
+const doors = [];
+function buildDoors(){
+  for(const dc of doorCells){
+    const c = cellCenter(dc.x,dc.z);
+    // determine orientation: if left/right neighbors are floor -> door faces along X
+    const leftFloor = !solid[dc.z][dc.x-1], rightFloor = !solid[dc.z][dc.x+1];
+    const alongX = leftFloor && rightFloor;
+    const pivot = new THREE.Group();
+    const w = T*0.92, h = WALL_H*0.94, th=0.16;
+    const geo = new THREE.BoxGeometry(w,h,th);
+    geo.translate(w/2,0,0); // hinge at one edge
+    const door = new THREE.Mesh(geo, MAT.door);
+    door.castShadow=true; door.receiveShadow=true;
+    // handle
+    const handle = new THREE.Mesh(new THREE.SphereGeometry(0.07,6,5), MAT.metal);
+    handle.position.set(w*0.85,0,th); door.add(handle);
+    pivot.add(door);
+    pivot.position.set(c.x - (alongX? w/2:0), h/2+0.03, c.z - (alongX?0:w/2));
+    if(!alongX) pivot.rotation.y = Math.PI/2;
+    scene.add(pivot);
+    // block the cell until opened
+    solid[dc.z][dc.x] = true;
+    doors.push({ pivot, cell:dc, open:false, opening:false, angle:0, locked:false, mat:MAT.door });
+  }
+  // Make ONE door the locked "exit gate" near E — the deepest door requires all keys
+  if(doors.length){ doors[doors.length-1].locked=true; }
+}
+
+/* ============================================================
+   PROPS — furniture, newspapers, toys, charms + KEYS
+============================================================ */
+const interactables = []; // {mesh, type, radius, data}
+let keyTotal = 0, keyCount = 0;
+
+function addBox(x,z,w,h,d,mat,rotY=0,yOff=0){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.position.set(x, h/2+yOff, z); m.rotation.y=rotY;
+  m.castShadow=true; m.receiveShadow=true; scene.add(m); return m;
+}
+function scatterNewspaper(x,z){
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.6,0.8), MAT.paper);
+  m.rotation.x=-Math.PI/2; m.rotation.z=Math.random()*6;
+  m.position.set(x+(Math.random()-0.5)*1.5, 0.015, z+(Math.random()-0.5)*1.5);
+  m.receiveShadow=true; scene.add(m);
+}
+function buildProps(){
+  // furniture placed in some open cells
+  const openCells=[];
+  for(let z=1;z<MH-1;z++)for(let x=1;x<MW-1;x++){
+    const ch=MAP[z][x];
+    if(ch==='.'||ch==='K'||ch==='S') openCells.push({x,z,ch});
+  }
+  // cabinets / boxes near walls
+  for(const oc of openCells){
+    const c=cellCenter(oc.x,oc.z);
+    const r=Math.random();
+    if(oc.ch==='.' && r<0.12){
+      addBox(c.x+(Math.random()-0.5), c.z+(Math.random()-0.5), 0.8,1.0,0.6, MAT.wood, Math.random()*3);
+    } else if(oc.ch==='.' && r<0.18){
+      // toppled chair-ish
+      addBox(c.x, c.z, 0.5,0.5,0.5, MAT.wood, Math.random()*3, 0.0);
+    } else if(oc.ch==='.' && r<0.30){
+      scatterNewspaper(c.x,c.z);
+    }
+    // rusty locker occasionally
+    if(oc.ch==='.' && r>0.9){
+      addBox(c.x,c.z,0.7,1.9,0.5, MAT.metal, Math.random()*3);
+    }
+  }
+
+  // KEYS + mystery charms
+  keySpawns.forEach((pos,i)=>{
+    const isKey = i<3; // first 3 are real keys, rest are charms
+    if(isKey){
+      const grp = new THREE.Group();
+      const bow = new THREE.Mesh(new THREE.TorusGeometry(0.12,0.035,6,10), MAT.key);
+      const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.05,0.28,0.05), MAT.key);
+      shaft.position.y=-0.2; grp.add(bow,shaft);
+      grp.position.copy(pos); grp.position.y=1.0;
+      grp.userData.spin=true;
+      // small light
+      const gl = new THREE.PointLight(0xffcc55, 8, 4, 2); gl.position.copy(pos); gl.position.y=1.0;
+      scene.add(gl); grp.userData.light=gl;
+      scene.add(grp);
+      interactables.push({mesh:grp, type:'key', radius:1.6, taken:false});
+      keyTotal++;
+    } else {
+      // hanging paper charm (お札) — lore/scare
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(0.22,0.5), MAT.charm);
+      m.position.copy(pos); m.position.y=1.6; m.rotation.y=Math.random()*3;
+      scene.add(m);
+      interactables.push({mesh:m, type:'charm', radius:1.6, taken:false,
+        text:'古い御札。文字は滲んでいる……「還ってはいけない」'});
+    }
+  });
+  document.getElementById('keyTotal').textContent = Math.min(keyTotal,3);
+  keyTotal = Math.min(keyTotal,3);
+
+  // a doll on the floor (creepy toy)
+  const dollPos = cellCenter(3,15);
+  const doll = new THREE.Group();
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.18,7,6), MAT.flesh);
+  head.position.y=0.5; const body=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.16,0.4,7),MAT.wood);
+  body.position.y=0.2; doll.add(head,body); doll.position.set(dollPos.x,0.05,dollPos.z);
+  doll.rotation.z=1.3; scene.add(doll);
+  interactables.push({mesh:doll,type:'doll',radius:1.6,taken:false,
+    text:'誰かの人形。目の位置に、穴が二つ空いている。'});
+}
+
+/* ============================================================
+   ATMOSPHERE — lights, fog, fluorescents, dust
+============================================================ */
+const fluos = [];
+function buildAtmosphere(){
+  scene.fog = new THREE.FogExp2(0x0a1512, 0.028);
+  scene.background = new THREE.Color(0x0a1210);
+
+  const amb = new THREE.HemisphereLight(0x4a6b60, 0x141c22, 2.6);
+  scene.add(amb);
+  const dir = new THREE.DirectionalLight(0x3a5563, 1.8);
+  dir.position.set(4,10,6); scene.add(dir);
+
+  // flickering fluorescent tubes in some corridor cells
+  for(let z=1;z<MH-1;z+=2){
+    for(let x=1;x<MW-1;x+=2){
+      if(MAP[z][x]==='.' && Math.random()<0.6){
+        const c=cellCenter(x,z);
+        const tube = new THREE.Mesh(new THREE.BoxGeometry(1.6,0.06,0.16),
+          new THREE.MeshStandardMaterial({color:0x223,emissive:0x88bbcc,emissiveIntensity:2}));
+        tube.position.set(c.x,WALL_H-0.12,c.z); scene.add(tube);
+        const pl = new THREE.PointLight(0x9fe6d8, 14, T*3.4, 2);
+        pl.position.set(c.x,WALL_H-0.4,c.z);
+        pl.castShadow = false;
+        scene.add(pl);
+        fluos.push({light:pl, tube, base:14, phase:Math.random()*10, dead:Math.random()<0.08});
+      }
+    }
+  }
+
+  // dust particles (instanced points)
+  const N=1400, pos=new Float32Array(N*3);
+  for(let i=0;i<N;i++){
+    pos[i*3]  =(Math.random()-0.5)*MW*T*0.9;
+    pos[i*3+1]= Math.random()*WALL_H;
+    pos[i*3+2]=(Math.random()-0.5)*MH*T*0.9;
+  }
+  const pg=new THREE.BufferGeometry();
+  pg.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  const pm=new THREE.PointsMaterial({color:0x9fb0a8,size:0.035,transparent:true,opacity:0.35,
+    depthWrite:false, blending:THREE.AdditiveBlending});
+  const dust=new THREE.Points(pg,pm); scene.add(dust);
+  scene.userData.dust=dust;
+}
+function tickAtmosphere(dt,t){
+  // fluorescent flicker
+  for(const f of fluos){
+    if(f.dead){ f.light.intensity=0; f.tube.material.emissiveIntensity=0.02; continue; }
+    const n = Math.sin(t*13+f.phase)*Math.sin(t*7.3+f.phase*2);
+    let inten = f.base*(0.7+0.3*n);
+    if(Math.random()<0.008) inten*=0.05;            // stutter
+    f.light.intensity += (inten - f.light.intensity)*0.4;
+    f.tube.material.emissiveIntensity = 0.5 + f.light.intensity;
+  }
+  // dust drift
+  const d=scene.userData.dust;
+  if(d){ d.rotation.y += dt*0.01; d.position.y = Math.sin(t*0.2)*0.2; }
+}
+
+/* ============================================================
+   MONSTER — low-poly uncanny humanoid, patrol + slow pursuit
+============================================================ */
+let monster, monsterState='patrol';
+const monsterSpeed = { patrol:1.1, chase:1.9 };
+let mstPath=[], mstTarget=null, mstStareT=0;
+
+function buildMonster(){
+  const g = new THREE.Group();
+  // elongated torso
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.22,1.5,6), MAT.flesh);
+  torso.position.y=1.15; g.add(torso);
+  // long neck + tilted head
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.08,0.4,5), MAT.flesh);
+  neck.position.y=1.95; g.add(neck);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.28,0.36,0.26), MAT.flesh);
+  head.position.set(0.04,2.2,0); head.rotation.z=0.28; head.rotation.x=0.1; g.add(head);
+  // hollow eyes
+  const eyeGeo=new THREE.SphereGeometry(0.05,6,5);
+  const eL=new THREE.Mesh(eyeGeo,MAT.dark), eR=new THREE.Mesh(eyeGeo,MAT.dark);
+  eL.position.set(-0.07,2.24,0.13); eR.position.set(0.09,2.24,0.13); g.add(eL,eR);
+  // overlong arms
+  const armGeo=new THREE.CylinderGeometry(0.05,0.05,1.35,5);
+  const aL=new THREE.Mesh(armGeo,MAT.flesh), aR=new THREE.Mesh(armGeo,MAT.flesh);
+  aL.position.set(-0.28,1.15,0); aR.position.set(0.28,1.15,0);
+  aL.rotation.z=0.15; aR.rotation.z=-0.15; g.add(aL,aR);
+  g.userData.arms=[aL,aR]; g.userData.head=head;
+  // legs
+  const legGeo=new THREE.CylinderGeometry(0.06,0.06,1.0,5);
+  const lL=new THREE.Mesh(legGeo,MAT.flesh), lR=new THREE.Mesh(legGeo,MAT.flesh);
+  lL.position.set(-0.1,0.5,0); lR.position.set(0.1,0.5,0); g.add(lL,lR);
+  g.userData.legs=[lL,lR];
+  g.traverse(o=>{ if(o.isMesh) o.castShadow=true; });
+
+  // start far from player
+  const start = cellCenter(1,17);
+  g.position.copy(start);
+  scene.add(g);
+  monster=g;
+  pickMonsterWander();
+}
+
+// pick a random reachable floor cell to walk toward
+function randomFloorCell(){
+  for(let i=0;i<40;i++){
+    const x=1+Math.floor(Math.random()*(MW-2)), z=1+Math.floor(Math.random()*(MH-2));
+    if(!solid[z][x]) return cellCenter(x,z);
+  }
+  return playerStart.clone();
+}
+function pickMonsterWander(){ mstTarget = randomFloorCell(); }
+
+function moveToward(obj, target, speed, dt){
+  const dx=target.x-obj.position.x, dz=target.z-obj.position.z;
+  const dist=Math.hypot(dx,dz);
+  if(dist<0.1) return true;
+  const nx=dx/dist, nz=dz/dist;
+  const step=speed*dt;
+  // try axis-separated move for wall sliding
+  let mx=obj.position.x+nx*step, mz=obj.position.z+nz*step;
+  if(!collideMonster(mx,obj.position.z)) obj.position.x=mx;
+  if(!collideMonster(obj.position.x,mz)) obj.position.z=mz;
+  // face movement
+  const targetRot=Math.atan2(nx,nz);
+  obj.rotation.y += Math.atan2(Math.sin(targetRot-obj.rotation.y),Math.cos(targetRot-obj.rotation.y))*Math.min(1,dt*3);
+  return false;
+}
+function collideMonster(wx,wz){
+  const r=0.3;
+  return isBlocked(wx+r,wz)||isBlocked(wx-r,wz)||isBlocked(wx,wz+r)||isBlocked(wx,wz-r);
+}
+
+function hasLineOfSight(from,to){
+  const dir=new THREE.Vector3().subVectors(to,from); const dist=dir.length(); dir.normalize();
+  const steps=Math.ceil(dist/0.5);
+  for(let i=1;i<steps;i++){
+    const p=from.clone().addScaledVector(dir, i*0.5);
+    if(isBlocked(p.x,p.z)) return false;
+  }
+  return true;
+}
+
+function tickMonster(dt,t){
+  if(!monster||dead||won) return;
+  const pp=controls.getObject().position;
+  const mp=monster.position;
+  const toPlayer=new THREE.Vector3(pp.x-mp.x,0,pp.z-mp.z);
+  const dist=toPlayer.length();
+  const los = dist<16 && hasLineOfSight(mp,new THREE.Vector3(pp.x,mp.y,pp.z));
+
+  // state transitions
+  if(los && dist<14){ if(monsterState!=='chase'){ monsterState='chase'; onMonsterSpotsYou(); } }
+  else if(monsterState==='chase' && dist>20){ monsterState='patrol'; pickMonsterWander(); }
+
+  if(monsterState==='chase'){
+    mstTarget = new THREE.Vector3(pp.x, 0, pp.z);
+    moveToward(monster, mstTarget, monsterSpeed.chase, dt);
+    // whisper intensity via VHS glitch
+    vhsPass.uniforms.glitch.value = Math.min(0.9, (16-dist)/16);
+  } else {
+    vhsPass.uniforms.glitch.value += (0 - vhsPass.uniforms.glitch.value)*0.05;
+    if(!mstTarget || moveToward(monster, mstTarget, monsterSpeed.patrol, dt)){
+      pickMonsterWander();
+    }
+  }
+
+  // stiff limb animation
+  const sp = monsterState==='chase'?7:3;
+  const sw = Math.sin(t*sp);
+  monster.userData.legs[0].rotation.x = sw*0.5;
+  monster.userData.legs[1].rotation.x = -sw*0.5;
+  monster.userData.arms[0].rotation.x = -sw*0.35;
+  monster.userData.arms[1].rotation.x = sw*0.35;
+  monster.userData.head.rotation.z = 0.28 + Math.sin(t*0.7)*0.12;
+
+  // catch
+  if(dist<1.0){ killPlayer(); }
+}
+
+/* ============================================================
+   PLAYER — controls, flashlight, headbob, footsteps, battery
+============================================================ */
+let flashlight, flashTarget, battery=1.0, bob=0, footT=0;
+const velocity = new THREE.Vector3();
+let lastSafe = new THREE.Vector3();
+
+function initPlayer(){
+  camera = new THREE.PerspectiveCamera(72, window.innerWidth/window.innerHeight, 0.05, 120);
+  controls = new PointerLockControls(camera, renderer.domElement);
+  const obj = controls.getObject();
+  obj.position.copy(playerStart); obj.position.y=EYE;
+  scene.add(obj);
+  lastSafe.copy(obj.position);
+
+  // flashlight
+  flashlight = new THREE.SpotLight(0xfff2de, 45, 32, Math.PI/5, 0.45, 1.1);
+  flashlight.castShadow = true;
+  flashlight.shadow.mapSize.set(512,512);
+  flashlight.shadow.camera.near=0.1; flashlight.shadow.camera.far=22;
+  flashTarget = new THREE.Object3D();
+  camera.add(flashlight); camera.add(flashTarget);
+  flashlight.position.set(0.2,-0.1,0.2);
+  flashTarget.position.set(0,0,-1);
+  flashlight.target = flashTarget;
+
+  // subtle camera-held ambient so flashlight isn't only light
+  const held = new THREE.PointLight(0x668099, 7, 8, 2);
+  camera.add(held); held.position.set(0,0,0.3);
+}
+
+function tickPlayer(dt,t){
+  if(!started||dead||won) return;
+  const obj = controls.getObject();
+  const speed = (keyState['shift']?4.6:2.6);
+  const fwd = (keyState['w']?1:0)-(keyState['s']?1:0);
+  const strafe = (keyState['d']?1:0)-(keyState['a']?1:0);
+
+  const dir=new THREE.Vector3();
+  camera.getWorldDirection(dir); dir.y=0; dir.normalize();
+  const right=new THREE.Vector3().crossVectors(dir,new THREE.Vector3(0,1,0)).normalize();
+
+  const move=new THREE.Vector3();
+  move.addScaledVector(dir, fwd).addScaledVector(right, strafe);
+  if(move.lengthSq()>0) move.normalize();
+
+  const nx = obj.position.x + move.x*speed*dt;
+  const nz = obj.position.z + move.z*speed*dt;
+  if(!collidePoint(nx,obj.position.z)) obj.position.x=nx;
+  if(!collidePoint(obj.position.x,nz)) obj.position.z=nz;
+
+  const moving = move.lengthSq()>0.01;
+  // headbob
+  if(moving){ bob+=dt*(keyState['shift']?12:8); footT+=dt*(keyState['shift']?12:8); }
+  obj.position.y = EYE + Math.sin(bob)*0.045;
+  // footsteps
+  if(moving && footT>Math.PI){ footT=0; playFootstep(); if(!collidePoint(obj.position.x,obj.position.z)) lastSafe.copy(obj.position); }
+
+  // flashlight flicker + battery drain
+  battery = Math.max(0, battery - dt*0.006);
+  const flick = 0.9 + Math.random()*0.1;
+  flashlight.intensity = (battery>0.05? 45 : 3) * flick * (battery>0.2?1:battery*3);
+  document.getElementById('batFill').style.width = (battery*100)+'%';
+
+  checkInteractPrompt();
+}
+
+/* ============================================================
+   INTERACTION
+============================================================ */
+const raycaster = new THREE.Raycaster();
+let nearInteract=null;
+function checkInteractPrompt(){
+  const pp=controls.getObject().position;
+  nearInteract=null; let best=1e9;
+  for(const it of interactables){
+    if(it.taken) continue;
+    const d=pp.distanceTo(it.mesh.position);
+    if(d<it.radius && d<best){ best=d; nearInteract=it; }
+  }
+  // doors
+  let doorNear=null, dbest=1e9;
+  for(const d of doors){
+    if(d.open) continue;
+    const c=cellCenter(d.cell.x,d.cell.z);
+    const dist=pp.distanceTo(new THREE.Vector3(c.x,pp.y,c.z));
+    if(dist<2.2 && dist<dbest){ dbest=dist; doorNear=d; }
+  }
+  const prompt=document.getElementById('prompt');
+  if(nearInteract){
+    const label = nearInteract.type==='key'?'鍵を拾う':'調べる';
+    prompt.innerHTML=`<kbd>E</kbd> ${label}`; prompt.style.opacity=1;
+    nearInteract._door=null;
+  } else if(doorNear){
+    if(doorNear.locked && keyCount<keyTotal){
+      prompt.innerHTML=`扉は施錠されている（鍵 ${keyCount}/${keyTotal}）`; prompt.style.opacity=1;
+    } else {
+      prompt.innerHTML=`<kbd>E</kbd> 扉を開ける`; prompt.style.opacity=1;
+    }
+    nearInteract={type:'_door',door:doorNear};
+  } else {
+    prompt.style.opacity=0;
+  }
+}
+
+function doInteract(){
+  if(!nearInteract) return;
+  if(nearInteract.type==='_door'){
+    const d=nearInteract.door;
+    if(d.opening||d.open) return;
+    if(d.locked && keyCount<keyTotal){ playStinger(120,0.15); showSubtitle('……鍵が足りない。'); return; }
+    openDoor(d);
+    playDoorCreak();
+    if(d.locked){ showSubtitle('奥へ続く扉が開いた。出口はもうすぐだ……'); }
+    return;
+  }
+  const it=nearInteract;
+  if(it.type==='key'){
+    it.taken=true; it.mesh.visible=false; if(it.mesh.userData.light) it.mesh.userData.light.visible=false;
+    keyCount++; document.getElementById('keyCount').textContent=keyCount;
+    playStinger(660,0.12); showSubtitle(`古い鍵を手に入れた。（${keyCount}/${keyTotal}）`);
+    if(keyCount===keyTotal){ showSubtitle('三つの鍵が揃った。奥の扉が開けられる。'); triggerScare('allkeys'); }
+  } else {
+    it.taken=true; it.mesh.visible=false;
+    showSubtitle(it.text||'……');
+    playStinger(200,0.2);
+  }
+}
+
+function openDoor(d){
+  d.baseRot = d.pivot.rotation.y;
+  d.swing = 1;
+  d.opening=true;
+  // animate via flag; tickDoors handles rotation using stored base
+  d.angle=0;
+}
+// simpler robust door tick (override the earlier stub)
+function tickDoors2(dt){
+  for(const d of doors){
+    if(d.opening){
+      d.angle += dt*2.2;
+      d.pivot.rotation.y = (d.baseRot||0) - Math.min(d.angle, Math.PI*0.62)*(d.swing||1);
+      if(d.angle>=Math.PI*0.62){ d.opening=false; d.open=true; solid[d.cell.z][d.cell.x]=false; }
+    }
+  }
+}
+
+/* ============================================================
+   EVENTS / SCARES
+============================================================ */
+const triggeredZones=new Set();
+let ambientScareT = 8+Math.random()*10;
+function tickEvents(dt){
+  const pp=controls.getObject().position;
+  // exit zone
+  if(exitCell){
+    const ec=cellCenter(exitCell.x,exitCell.z);
+    if(pp.distanceTo(new THREE.Vector3(ec.x,pp.y,ec.z))<2.0){ winGame(); }
+  }
+  // random ambient scares
+  ambientScareT-=dt;
+  if(ambientScareT<=0){ ambientScareT=12+Math.random()*14; ambientScare(); }
+}
+function ambientScare(){
+  const roll=Math.random();
+  if(roll<0.35){ blackoutPulse(); playStinger(90,0.4); }
+  else if(roll<0.6){ playDistantThud(); }
+  else if(roll<0.8){ playWhisper(); vhsPass.uniforms.glitch.value=0.5; }
+  else { // relocate monster behind player for uncanny turn-around
+    if(monster && monsterState!=='chase'){
+      const pp=controls.getObject().position;
+      const behind=new THREE.Vector3();
+      camera.getWorldDirection(behind); behind.multiplyScalar(-4);
+      const tx=pp.x+behind.x, tz=pp.z+behind.z;
+      if(!collideMonster(tx,tz)){ monster.position.set(tx,0,tz); playWhisper(); }
+    }
+  }
+}
+function onMonsterSpotsYou(){ playStinger(70,0.6); vhsPass.uniforms.glitch.value=0.8; showSubtitle('——見られている。'); }
+function triggerScare(kind){
+  if(kind==='allkeys'){ blackoutPulse(); }
+}
+function blackoutPulse(){
+  const f=document.getElementById('flash');
+  f.style.background='#000'; f.style.opacity='1';
+  for(const fl of fluos) fl.light.intensity=0;
+  setTimeout(()=>{ f.style.opacity='0'; },140);
+}
+
+/* ============================================================
+   AUDIO — Web Audio procedural (no files)
+============================================================ */
+let actx, master, drone;
+function initAudio(){
+  actx=new (window.AudioContext||window.webkitAudioContext)();
+  master=actx.createGain(); master.gain.value=0.5; master.connect(actx.destination);
+  // low drone: two detuned oscillators + slow LFO
+  drone=actx.createGain(); drone.gain.value=0.06; drone.connect(master);
+  const o1=actx.createOscillator(), o2=actx.createOscillator();
+  o1.type='sawtooth'; o2.type='sine'; o1.frequency.value=42; o2.frequency.value=42.6;
+  const lp=actx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=180;
+  o1.connect(lp); o2.connect(lp); lp.connect(drone);
+  const lfo=actx.createOscillator(), lg=actx.createGain();
+  lfo.frequency.value=0.08; lg.gain.value=0.03; lfo.connect(lg); lg.connect(drone.gain);
+  o1.start();o2.start();lfo.start();
+}
+function playStinger(freq,dur){
+  if(!actx) return;
+  const o=actx.createOscillator(), g=actx.createGain();
+  o.type='sawtooth'; o.frequency.value=freq;
+  o.frequency.exponentialRampToValueAtTime(freq*0.5, actx.currentTime+dur);
+  g.gain.value=0.0; g.gain.linearRampToValueAtTime(0.25, actx.currentTime+0.02);
+  g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime+dur);
+  o.connect(g); g.connect(master); o.start(); o.stop(actx.currentTime+dur+0.05);
+}
+function playFootstep(){
+  if(!actx) return;
+  const buf=actx.createBuffer(1,1200,actx.sampleRate); const d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,3);
+  const s=actx.createBufferSource(); s.buffer=buf;
+  const g=actx.createGain(); g.gain.value=0.12;
+  const lp=actx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=400;
+  s.connect(lp); lp.connect(g); g.connect(master); s.start();
+}
+function playDoorCreak(){
+  if(!actx) return;
+  const o=actx.createOscillator(), g=actx.createGain();
+  o.type='sawtooth'; o.frequency.value=180;
+  o.frequency.linearRampToValueAtTime(90, actx.currentTime+1.2);
+  const lp=actx.createBiquadFilter(); lp.type='bandpass'; lp.frequency.value=300; lp.Q.value=8;
+  g.gain.value=0.0; g.gain.linearRampToValueAtTime(0.08,actx.currentTime+0.1);
+  g.gain.linearRampToValueAtTime(0.0,actx.currentTime+1.2);
+  o.connect(lp); lp.connect(g); g.connect(master); o.start(); o.stop(actx.currentTime+1.3);
+}
+function playDistantThud(){ playStinger(55,0.5); }
+function playWhisper(){
+  if(!actx) return;
+  const buf=actx.createBuffer(1, actx.sampleRate*0.8, actx.sampleRate); const d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1);
+  const s=actx.createBufferSource(); s.buffer=buf;
+  const bp=actx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1200; bp.Q.value=3;
+  const g=actx.createGain(); g.gain.value=0; g.gain.linearRampToValueAtTime(0.05,actx.currentTime+0.1);
+  g.gain.linearRampToValueAtTime(0,actx.currentTime+0.8);
+  s.connect(bp); bp.connect(g); g.connect(master); s.start();
+}
+
+/* ============================================================
+   DEATH / WIN / RESPAWN
+============================================================ */
+function killPlayer(){
+  if(dead) return; dead=true;
+  playStinger(60,1.2); vhsPass.uniforms.glitch.value=1.0;
+  const scr=document.getElementById('death');
+  scr.style.opacity='1';
+  controls.unlock();
+  setTimeout(respawn, 2600);
+}
+function respawn(){
+  const scr=document.getElementById('death');
+  const obj=controls.getObject();
+  obj.position.copy(lastSafe.lengthSq()?lastSafe:playerStart); obj.position.y=EYE;
+  // relocate monster far away
+  if(monster) monster.position.copy(cellCenter(1,17));
+  monsterState='patrol'; pickMonsterWander();
+  vhsPass.uniforms.glitch.value=0;
+  scr.style.opacity='0';
+  dead=false;
+  controls.lock();
+}
+function winGame(){
+  if(won) return; won=true;
+  controls.unlock();
+  document.getElementById('win').style.opacity='1';
+  if(drone) drone.gain.exponentialRampToValueAtTime(0.001, actx.currentTime+3);
+}
+
+/* ============================================================
+   SUBTITLES
+============================================================ */
+let subT=0;
+function showSubtitle(txt){
+  const s=document.getElementById('subtitle');
+  s.textContent=txt; s.style.opacity=1; subT=4.5;
+}
+function tickSubtitle(dt){
+  if(subT>0){ subT-=dt; if(subT<=0) document.getElementById('subtitle').style.opacity=0; }
+}
+
+/* ============================================================
+   INTERACTABLE SPIN / KEY BOB
+============================================================ */
+function tickInteractables(dt,t){
+  for(const it of interactables){
+    if(it.taken) continue;
+    if(it.type==='key'){
+      it.mesh.rotation.y+=dt*1.5;
+      it.mesh.position.y=1.0+Math.sin(t*2)*0.08;
+    } else if(it.type==='charm'){
+      it.mesh.rotation.y=Math.sin(t*0.8)*0.4;
+      it.mesh.position.y=1.6+Math.sin(t*1.2)*0.03;
+    }
+  }
+}
+
+/* ============================================================
+   INPUT
+============================================================ */
+function initInput(){
+  addEventListener('keydown',e=>{
+    const k=e.key.toLowerCase(); keyState[k]=true;
+    if(k==='e'&&started&&!dead&&!won) doInteract();
+    if(k==='shift') keyState['shift']=true;
+  });
+  addEventListener('keyup',e=>{ keyState[e.key.toLowerCase()]=false; if(e.key==='Shift')keyState['shift']=false; });
+  addEventListener('resize',onResize);
+
+  document.getElementById('goBtn').addEventListener('click',startGame);
+  controls.addEventListener('lock',()=>{ document.getElementById('start').classList.add('hidden'); });
+  controls.addEventListener('unlock',()=>{
+    if(!dead && !won){ document.getElementById('start').classList.remove('hidden'); }
+  });
+}
+function onResize(){
+  camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+  const w=Math.floor(window.innerWidth*RES_SCALE), h=Math.floor(window.innerHeight*RES_SCALE);
+  composer.setSize(w,h); vhsPass.uniforms.resolution.value.set(w,h);
+}
+
+function startGame(){
+  if(!actx) initAudio(); else if(actx.state==='suspended') actx.resume();
+  started=true;
+  controls.lock();
+  showSubtitle('……ここは、どこだ。');
+}
+
+/* ============================================================
+   MAIN LOOP
+============================================================ */
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05);
+  const t=clock.elapsedTime;
+  if(started){
+    tickPlayer(dt,t);
+    tickMonster(dt,t);
+    tickEvents(dt);
+  }
+  tickDoors2(dt);
+  tickAtmosphere(dt,t);
+  tickInteractables(dt,t);
+  tickSubtitle(dt);
+  vhsPass.uniforms.time.value=t;
+  composer.render();
+}
+
+/* ============================================================
+   BOOT
+============================================================ */
+function boot(){
+  initRenderer();
+  scene=new THREE.Scene();
+  buildTextures();
+  buildMaterials();
+  buildLevel();
+  buildDoors();
+  buildProps();
+  buildAtmosphere();
+  buildMonster();
+  initPlayer();
+  initComposer();
+  initInput();
+  document.getElementById('loading').style.display='none';
+  animate();
+}
+boot();
+</script>
+</body>
+</html>

@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>金门大桥 · 3D 还原</title>
+<style>
+  :root { --orange: #f04a00; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1013; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  #loader {
+    position: fixed; inset: 0; z-index: 50;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 40%, #24303a, #0b1013 75%);
+    color: #e9eef2; transition: opacity .8s ease; gap: 18px;
+  }
+  #loader.hidden { opacity: 0; pointer-events: none; }
+  #loader .title { font-size: 26px; letter-spacing: 4px; font-weight: 600; }
+  #loader .title b { color: var(--orange); }
+  #loader .bar { width: 240px; height: 3px; background: rgba(255,255,255,.15); border-radius: 3px; overflow: hidden; }
+  #loader .bar > i { display: block; height: 100%; width: 30%; background: var(--orange); border-radius: 3px; animation: slide 1.1s ease-in-out infinite; }
+  @keyframes slide { 0%{margin-left:-30%} 100%{margin-left:100%} }
+  #loader .tip { font-size: 12px; color: #8b98a2; letter-spacing: 1px; }
+
+  .panel {
+    position: fixed; z-index: 20; color: #eef3f6;
+    background: rgba(16, 22, 27, .58); backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,.08); border-radius: 14px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.4);
+  }
+  #hud { top: 16px; left: 16px; padding: 14px 16px; max-width: 300px; }
+  #hud h1 { font-size: 17px; letter-spacing: 2px; font-weight: 600; }
+  #hud h1 b { color: var(--orange); }
+  #hud .sub { font-size: 11px; color: #93a1ab; margin-top: 3px; letter-spacing: .5px; }
+  #hud .specs { margin-top: 10px; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 11.5px; color: #c3cdd4; }
+  #hud .specs b { color: #fff; font-weight: 500; }
+
+  #controls { bottom: 16px; left: 50%; transform: translateX(-50%); padding: 10px 12px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  .group { display: flex; gap: 6px; align-items: center; }
+  .group .lbl { font-size: 10px; color: #8b98a2; margin-right: 2px; letter-spacing: 1px; }
+  button.v {
+    font: inherit; font-size: 12px; color: #dfe7ec; cursor: pointer;
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.10);
+    padding: 7px 12px; border-radius: 9px; transition: all .18s ease; white-space: nowrap;
+  }
+  button.v:hover { background: rgba(240,74,0,.22); border-color: rgba(240,74,0,.5); }
+  button.v.active { background: var(--orange); border-color: var(--orange); color: #fff; }
+  .sep { width: 1px; height: 26px; background: rgba(255,255,255,.12); }
+  .toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #cdd6dc; cursor: pointer; user-select: none; }
+  input[type="range"] { width: 110px; accent-color: var(--orange); cursor: pointer; }
+  input[type="checkbox"] { accent-color: var(--orange); width: 15px; height: 15px; cursor: pointer; }
+  #hint { position: fixed; bottom: 78px; left: 50%; transform: translateX(-50%); z-index: 15; font-size: 11px; color: #7d8a93; letter-spacing: 1px; pointer-events: none; }
+  @media (max-width: 720px) { #hud { display: none; } #controls { gap: 8px; padding: 8px; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="loader">
+  <div class="title"><b>金门大桥</b> Golden Gate Bridge</div>
+  <div class="bar"><i></i></div>
+  <div class="tip">正在构建三维场景与海湾环境…</div>
+</div>
+
+<div id="hud" class="panel">
+  <h1><b>金门大桥</b> · 3D 还原</h1>
+  <div class="sub">San Francisco · 按真实比例构建 (1 单位 = 1 米)</div>
+  <div class="specs">
+    <span>主跨</span><b>1,280 m</b>
+    <span>全长</span><b>2,737 m</b>
+    <span>塔高</span><b>227 m</b>
+    <span>桥面净空</span><b>67 m</b>
+    <span>桥面宽</span><b>27.4 m · 6 车道</b>
+    <span>涂装</span><b>国际橘 #F04A00</b>
+  </div>
+</div>
+
+<div id="hint">拖拽旋转 · 滚轮缩放 · 右键平移</div>
+
+<div id="controls" class="panel">
+  <div class="group">
+    <span class="lbl">视角</span>
+    <button class="v" data-view="classic">经典</button>
+    <button class="v" data-view="deck">桥面</button>
+    <button class="v" data-view="midspan">跨中</button>
+    <button class="v" data-view="tower">塔特写</button>
+    <button class="v" data-view="aerial">鸟瞰</button>
+  </div>
+  <div class="sep"></div>
+  <div class="group">
+    <span class="lbl">时间</span>
+    <input id="sun" type="range" min="1" max="90" value="28" />
+  </div>
+  <div class="sep"></div>
+  <label class="toggle"><input id="fog" type="checkbox" checked /> 海雾</label>
+  <label class="toggle"><input id="autorotate" type="checkbox" /> 自动旋转</label>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Sky } from 'three/addons/objects/Sky.js';
+import { Water } from 'three/addons/objects/Water.js';
+
+/* ============================================================
+   金门大桥真实尺寸 (米) —— 全部按比例建模
+   ============================================================ */
+const M = {
+  mainSpan: 1280,        // 主跨 (塔间距)
+  sideSpan: 343,         // 边跨
+  towerHeight: 227,      // 塔顶高出水面
+  deckClearance: 67,     // 桥面高出水面
+  deckWidth: 27.4,       // 桥面宽
+  cableSagMainLow: 82,   // 主跨主缆最低点高度
+  anchorY: 42,           // 锚碇处主缆高度
+  cableZ: 11.5,          // 两根主缆的横向位置 (±)
+  suspenderGap: 15.2,    // 吊索间距 (~50 ft)
+};
+const ORANGE = 0xf0531a;      // 国际橘 (略微提亮以补偿色调映射)
+const towerX = M.mainSpan / 2;         // 桥塔位置 ±640
+const anchorX = towerX + M.sideSpan;   // 锚碇位置 ±983
+const deckHalfLen = anchorX + 60;      // 桥面延伸到锚碇外一点
+
+/* ============================================================
+   渲染器 / 场景 / 相机
+   ============================================================ */
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.52;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0xc7d3d8, 0.00028);
+
+const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 1, 60000);
+camera.position.set(-1150, 300, 980);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.maxPolarAngle = Math.PI * 0.495;   // 不穿到水面以下
+controls.minDistance = 60;
+controls.maxDistance = 8000;
+controls.target.set(0, 110, 0);
+
+/* ============================================================
+   光照
+   ============================================================ */
+const hemi = new THREE.HemisphereLight(0xbcd3e0, 0x2b3138, 0.55);
+scene.add(hemi);
+
+const sun = new THREE.Vector3();
+const dirLight = new THREE.DirectionalLight(0xfff2e0, 2.6);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.set(2048, 2048);
+dirLight.shadow.camera.near = 100;
+dirLight.shadow.camera.far = 6000;
+const sc = 1500;
+dirLight.shadow.camera.left = -sc; dirLight.shadow.camera.right = sc;
+dirLight.shadow.camera.top = sc; dirLight.shadow.camera.bottom = -sc;
+dirLight.shadow.bias = -0.0004;
+scene.add(dirLight);
+scene.add(dirLight.target);
+
+/* ============================================================
+   天空 + 太阳
+   ============================================================ */
+const sky = new Sky();
+sky.scale.setScalar(45000);
+scene.add(sky);
+const skyU = sky.material.uniforms;
+skyU['turbidity'].value = 8;
+skyU['rayleigh'].value = 2.2;
+skyU['mieCoefficient'].value = 0.005;
+skyU['mieDirectionalG'].value = 0.8;
+
+/* ============================================================
+   海水
+   ============================================================ */
+const waterNormals = new THREE.TextureLoader().load(
+  'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/waternormals.jpg',
+  undefined, undefined,
+  () => {                                   // 加载失败 → 程序化法线贴图兜底
+    const c = document.createElement('canvas');
+    c.width = c.height = 256;
+    const g = c.getContext('2d');
+    const img = g.createImageData(256, 256);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const n = 120 + Math.random() * 30;
+      img.data[i] = n; img.data[i+1] = n; img.data[i+2] = 255; img.data[i+3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    const fb = new THREE.CanvasTexture(c);
+    fb.wrapS = fb.wrapT = THREE.RepeatWrapping;
+    water.material.uniforms.normalSampler.value = fb;
+  }
+);
+waterNormals.wrapS = waterNormals.wrapT = THREE.RepeatWrapping;
+
+const water = new Water(new THREE.PlaneGeometry(120000, 120000), {
+  textureWidth: 512, textureHeight: 512,
+  waterNormals,
+  sunDirection: new THREE.Vector3(),
+  sunColor: 0xffffff,
+  waterColor: 0x113344,
+  distortionScale: 3.4,
+  fog: true
+});
+water.rotation.x = -Math.PI / 2;
+water.position.y = 0;
+scene.add(water);
+
+/* PMREM 环境反射 (由天空生成) */
+const pmrem = new THREE.PMREMGenerator(renderer);
+const skyEnvScene = new THREE.Scene();
+let envRT = null;
+
+function updateSun(elevationDeg) {
+  const phi = THREE.MathUtils.degToRad(90 - elevationDeg);
+  const theta = THREE.MathUtils.degToRad(150);
+  sun.setFromSphericalCoords(1, phi, theta);
+  skyU['sunPosition'].value.copy(sun);
+  water.material.uniforms['sunDirection'].value.copy(sun).normalize();
+
+  dirLight.position.copy(sun).multiplyScalar(4000);
+  dirLight.target.position.set(0, 60, 0);
+  const warm = THREE.MathUtils.clamp(elevationDeg / 45, 0, 1);
+  dirLight.color.setHSL(0.09 - (1 - warm) * 0.06, 0.65, 0.55 + warm * 0.15);
+  dirLight.intensity = 1.4 + warm * 1.6;
+  hemi.intensity = 0.35 + warm * 0.35;
+
+  if (envRT) envRT.dispose();
+  skyEnvScene.add(sky);
+  envRT = pmrem.fromScene(skyEnvScene);
+  scene.add(sky);
+  scene.environment = envRT.texture;
+}
+
+/* ============================================================
+   材质
+   ============================================================ */
+const matOrange = new THREE.MeshStandardMaterial({ color: ORANGE, metalness: 0.35, roughness: 0.55 });
+const matOrangeDark = new THREE.MeshStandardMaterial({ color: 0xb83912, metalness: 0.4, roughness: 0.6 });
+const matCable = new THREE.MeshStandardMaterial({ color: 0xc9481c, metalness: 0.5, roughness: 0.45 });
+const matConcrete = new THREE.MeshStandardMaterial({ color: 0x9a988f, metalness: 0.0, roughness: 0.95 });
+const matAsphalt = new THREE.MeshStandardMaterial({ color: 0x33343a, metalness: 0.0, roughness: 0.9 });
+
+/* ============================================================
+   工具: 渐变(锥台)长方体 —— 用于桥塔渐收的塔腿
+   ============================================================ */
+function taperedBox(bx, bz, tx, tz, h) {
+  const g = new THREE.BufferGeometry();
+  const b = [[-bx/2,0,-bz/2],[bx/2,0,-bz/2],[bx/2,0,bz/2],[-bx/2,0,bz/2]];
+  const t = [[-tx/2,h,-tz/2],[tx/2,h,-tz/2],[tx/2,h,tz/2],[-tx/2,h,tz/2]];
+  const V = [];
+  const quad = (a,b2,c,d) => { V.push(...a,...b2,...c, ...a,...c,...d); };
+  quad(b[0],b[3],b[2],b[1]);   // bottom
+  quad(t[0],t[1],t[2],t[3]);   // top
+  quad(b[0],b[1],t[1],t[0]);   // -Z
+  quad(b[2],b[3],t[3],t[2]);   // +Z
+  quad(b[3],b[0],t[0],t[3]);   // -X
+  quad(b[1],b[2],t[2],t[1]);   // +X
+  g.setAttribute('position', new THREE.Float32BufferAttribute(V, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+const bridge = new THREE.Group();
+scene.add(bridge);
+
+/* ============================================================
+   桥塔 (Art Deco) —— 双塔腿 + 阶梯状水平横撑
+   ============================================================ */
+function buildTower(cx) {
+  const tower = new THREE.Group();
+  const baseY = 3;                 // 塔腿从桥墩顶起
+  const legH = M.towerHeight - baseY;
+
+  for (const sign of [-1, 1]) {
+    const legZ = sign * M.cableZ;
+    const leg = new THREE.Mesh(taperedBox(11, 16, 7.5, 11, legH), matOrange);
+    leg.position.set(cx, baseY, legZ);
+    leg.castShadow = leg.receiveShadow = true;
+    tower.add(leg);
+
+    // Art Deco 竖向凹槽装饰 (外侧面细肋)
+    for (let k = -1; k <= 1; k++) {
+      const rib = new THREE.Mesh(
+        new THREE.BoxGeometry(0.9, legH * 0.98, 1.2),
+        matOrangeDark
+      );
+      rib.position.set(cx + k * 3.2, baseY + legH / 2, legZ + sign * 5.6);
+      tower.add(rib);
+    }
+  }
+
+  // 水平横撑 (随高度收窄), 顶部带阶梯状造型
+  const strutY = [72, 108, 146, 186, 222];
+  strutY.forEach((y, i) => {
+    const frac = i / (strutY.length - 1);
+    const width = THREE.MathUtils.lerp(9.5, 7.5, frac);   // X 方向厚度
+    const beamH = i === strutY.length - 1 ? 7 : 5.2;
+    const span = 2 * M.cableZ + 9;
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(width, beamH, span), matOrange);
+    beam.position.set(cx, y, 0);
+    beam.castShadow = true;
+    tower.add(beam);
+
+    // 阶梯装饰块 (中部凸起)
+    const step = new THREE.Mesh(new THREE.BoxGeometry(width + 1.5, beamH * 0.5, span * 0.4), matOrangeDark);
+    step.position.set(cx, y + beamH * 0.55, 0);
+    tower.add(step);
+    const step2 = new THREE.Mesh(new THREE.BoxGeometry(width + 3, beamH * 0.35, span * 0.18), matOrange);
+    step2.position.set(cx, y + beamH * 0.9, 0);
+    tower.add(step2);
+  });
+
+  // 塔顶鞍座
+  for (const sign of [-1, 1]) {
+    const saddle = new THREE.Mesh(new THREE.BoxGeometry(10, 4, 6), matOrangeDark);
+    saddle.position.set(cx, M.towerHeight + 1, sign * M.cableZ);
+    tower.add(saddle);
+  }
+
+  bridge.add(tower);
+}
+buildTower(-towerX);
+buildTower(towerX);
+
+/* ============================================================
+   主缆 —— 分段抛物线 (锚碇→塔顶→跨中→塔顶→锚碇)
+   ============================================================ */
+function cableY(x) {
+  const ax = Math.abs(x);
+  if (ax <= towerX) {
+    // 主跨抛物线: 塔顶 227, 跨中 82
+    const k = (M.towerHeight - M.cableSagMainLow) / (towerX * towerX);
+    return M.cableSagMainLow + k * x * x;
+  } else if (ax <= anchorX) {
+    // 边跨: 塔顶 227 → 锚碇 42, 抛物线
+    const s = (ax - towerX) / M.sideSpan;              // 0..1
+    return THREE.MathUtils.lerp(M.towerHeight, M.anchorY, s * s * 0.85 + s * 0.15);
+  }
+  return M.anchorY;
+}
+
+function buildMainCable(z) {
+  const pts = [];
+  const N = 400;
+  for (let i = 0; i <= N; i++) {
+    const x = -anchorX + (2 * anchorX) * (i / N);
+    pts.push(new THREE.Vector3(x, cableY(x), z));
+  }
+  const curve = new THREE.CatmullRomCurve3(pts);
+  const geo = new THREE.TubeGeometry(curve, 500, 0.46, 10, false);
+  const cable = new THREE.Mesh(geo, matCable);
+  cable.castShadow = true;
+  bridge.add(cable);
+}
+buildMainCable(-M.cableZ);
+buildMainCable(M.cableZ);
+
+/* ============================================================
+   吊索 —— InstancedMesh (250 对)
+   ============================================================ */
+(function buildSuspenders() {
+  const positions = [];
+  for (let x = -anchorX + M.suspenderGap; x < anchorX; x += M.suspenderGap) {
+    const cy = cableY(x);
+    if (cy > M.deckClearance + 2) {
+      for (const z of [-M.cableZ, M.cableZ]) positions.push([x, cy, z]);
+    }
+  }
+  const geo = new THREE.CylinderGeometry(0.28, 0.28, 1, 6);
+  const mesh = new THREE.InstancedMesh(geo, matCable, positions.length);
+  const dummy = new THREE.Object3D();
+  positions.forEach((p, i) => {
+    const [x, cy, z] = p;
+    const len = cy - M.deckClearance;
+    dummy.position.set(x, M.deckClearance + len / 2, z);
+    dummy.scale.set(1, len, 1);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(i, dummy.matrix);
+  });
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.castShadow = true;
+  bridge.add(mesh);
+})();
+
+/* ============================================================
+   桥面路面纹理 (6 车道 + 双黄线 + 白虚线)
+   ============================================================ */
+function roadTexture() {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 512;           // 高度=横向(桥宽), 宽度=纵向(重复)
+  const g = c.getContext('2d');
+  g.fillStyle = '#33343a'; g.fillRect(0, 0, 64, 512);
+  const W = 512;
+  const laneCount = 6;
+  // 外侧白实线
+  g.fillStyle = '#d7d7d2';
+  g.fillRect(0, 14, 64, 4); g.fillRect(0, W - 18, 64, 4);
+  // 双黄线 (中央)
+  g.fillStyle = '#e8b23a';
+  g.fillRect(0, W/2 - 5, 64, 3); g.fillRect(0, W/2 + 2, 64, 3);
+  // 车道白虚线
+  g.fillStyle = '#cfcfca';
+  for (let l = 1; l < laneCount; l++) {
+    if (l === laneCount / 2) continue;
+    const y = 16 + (W - 34) * (l / laneCount);
+    g.fillRect(6, y, 40, 3);             // 虚线段 (纵向重复形成虚线)
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(Math.round((2 * deckHalfLen) / 12), 1);
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return tex;
+}
+
+/* ============================================================
+   桥面 —— 路面 + 加劲桁架 + 护栏
+   ============================================================ */
+(function buildDeck() {
+  const L = 2 * deckHalfLen;
+  const trussTop = M.deckClearance;
+  const trussDepth = 7.6;
+
+  // 路面
+  const roadMat = new THREE.MeshStandardMaterial({ map: roadTexture(), roughness: 0.9, metalness: 0 });
+  const road = new THREE.Mesh(new THREE.BoxGeometry(L, 0.5, M.deckWidth), roadMat);
+  road.position.set(0, trussTop - 0.25, 0);
+  road.receiveShadow = true;
+  bridge.add(road);
+
+  // 桁架上下弦 (两侧)
+  const chordGeo = new THREE.BoxGeometry(L, 0.9, 1.1);
+  for (const z of [-M.deckWidth/2, M.deckWidth/2]) {
+    const top = new THREE.Mesh(chordGeo, matOrangeDark);
+    top.position.set(0, trussTop - 0.6, z); bridge.add(top);
+    const bot = new THREE.Mesh(chordGeo, matOrangeDark);
+    bot.position.set(0, trussTop - trussDepth, z); bridge.add(bot);
+  }
+
+  // 桁架腹杆 (竖杆 + 斜杆) —— 实例化
+  const bays = [];
+  for (let x = -deckHalfLen; x <= deckHalfLen; x += M.suspenderGap) bays.push(x);
+  const postGeo = new THREE.BoxGeometry(0.6, trussDepth, 0.6);
+  const posts = new THREE.InstancedMesh(postGeo, matOrangeDark, bays.length * 2);
+  const diagGeo = new THREE.BoxGeometry(0.5, Math.hypot(trussDepth, M.suspenderGap), 0.5);
+  const diags = new THREE.InstancedMesh(diagGeo, matOrangeDark, (bays.length - 1) * 2);
+  const d = new THREE.Object3D();
+  let pi = 0, di = 0;
+  const midY = trussTop - trussDepth / 2 - 0.3;
+  const ang = Math.atan2(M.suspenderGap, trussDepth);
+  for (const z of [-M.deckWidth/2, M.deckWidth/2]) {
+    for (let b = 0; b < bays.length; b++) {
+      d.position.set(bays[b], midY, z); d.rotation.set(0,0,0); d.scale.set(1,1,1);
+      d.updateMatrix(); posts.setMatrixAt(pi++, d.matrix);
+      if (b < bays.length - 1) {
+        d.position.set((bays[b] + bays[b+1]) / 2, midY, z);
+        d.rotation.set(0, 0, (b % 2 ? ang : -ang));
+        d.updateMatrix(); diags.setMatrixAt(di++, d.matrix);
+      }
+    }
+  }
+  posts.instanceMatrix.needsUpdate = true;
+  diags.instanceMatrix.needsUpdate = true;
+  bridge.add(posts, diags);
+
+  // 护栏 (两侧栏杆 + 立柱)
+  const railGeo = new THREE.BoxGeometry(L, 0.35, 0.35);
+  for (const z of [-M.deckWidth/2 + 0.4, M.deckWidth/2 - 0.4]) {
+    const rail = new THREE.Mesh(railGeo, matOrange);
+    rail.position.set(0, trussTop + 1.35, z); bridge.add(rail);
+  }
+  const railPostGeo = new THREE.BoxGeometry(0.28, 1.4, 0.28);
+  const railPosts = new THREE.InstancedMesh(railPostGeo, matOrange, bays.length * 4);
+  let ri = 0;
+  for (const z of [-M.deckWidth/2 + 0.4, M.deckWidth/2 - 0.4]) {
+    for (let x = -deckHalfLen; x <= deckHalfLen; x += M.suspenderGap / 2) {
+      d.position.set(x, trussTop + 0.7, z); d.rotation.set(0,0,0);
+      d.updateMatrix(); railPosts.setMatrixAt(ri++, d.matrix);
+    }
+  }
+  railPosts.count = ri;
+  railPosts.instanceMatrix.needsUpdate = true;
+  bridge.add(railPosts);
+})();
+
+/* ============================================================
+   桥墩 + 锚碇
+   ============================================================ */
+(function buildBases() {
+  // 桥塔墩 (伸入水中)
+  for (const cx of [-towerX, towerX]) {
+    const pier = new THREE.Mesh(new THREE.BoxGeometry(30, 24, 2 * M.cableZ + 16), matConcrete);
+    pier.position.set(cx, -8, 0);
+    pier.receiveShadow = pier.castShadow = true;
+    bridge.add(pier);
+    // 防撞围堰 (南塔特征, 椭圆环)
+    const fender = new THREE.Mesh(
+      new THREE.CylinderGeometry(34, 36, 10, 24, 1, true),
+      matConcrete
+    );
+    fender.scale.set(1.15, 1, 0.75);
+    fender.position.set(cx, -1, 0);
+    bridge.add(fender);
+  }
+  // 锚碇块
+  for (const ax of [-anchorX, anchorX]) {
+    const anchor = new THREE.Mesh(new THREE.BoxGeometry(55, M.anchorY + 20, 60), matConcrete);
+    anchor.position.set(ax * 1.02, (M.anchorY - 20) / 2, 0);
+    anchor.receiveShadow = anchor.castShadow = true;
+    bridge.add(anchor);
+  }
+  // 引桥支墩
+  for (const cx of [-deckHalfLen + 20, deckHalfLen - 20]) {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(8, M.deckClearance, 24), matConcrete);
+    p.position.set(cx, M.deckClearance / 2, 0);
+    bridge.add(p);
+  }
+})();
+
+/* ============================================================
+   视角预设 + 相机缓动
+   ============================================================ */
+const views = {
+  classic:  { pos: [-940, 250, 760],  tgt: [120, 95, 0] },
+  deck:     { pos: [-935, 78, 4],     tgt: [700, 92, 0] },
+  midspan:  { pos: [0, 22, 210],      tgt: [-320, 175, 0] },
+  tower:    { pos: [-495, 128, 205],  tgt: [-640, 178, 0] },
+  aerial:   { pos: [340, 760, 900],   tgt: [0, 20, 0] },
+};
+let tween = null;
+function goTo(name) {
+  const v = views[name]; if (!v) return;
+  tween = {
+    fromP: camera.position.clone(), toP: new THREE.Vector3(...v.pos),
+    fromT: controls.target.clone(), toT: new THREE.Vector3(...v.tgt),
+    t: 0
+  };
+  document.querySelectorAll('button.v').forEach(b =>
+    b.classList.toggle('active', b.dataset.view === name));
+}
+document.querySelectorAll('button.v').forEach(b =>
+  b.addEventListener('click', () => goTo(b.dataset.view)));
+const easeInOut = t => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
+
+/* UI 事件 */
+const sunSlider = document.getElementById('sun');
+sunSlider.addEventListener('input', () => updateSun(+sunSlider.value));
+const fogChk = document.getElementById('fog');
+fogChk.addEventListener('change', () => scene.fog.density = fogChk.checked ? 0.00028 : 0.0);
+const autoChk = document.getElementById('autorotate');
+autoChk.addEventListener('change', () => controls.autoRotate = autoChk.checked);
+controls.autoRotateSpeed = 0.35;
+
+/* ============================================================
+   初始化 + 渲染循环
+   ============================================================ */
+updateSun(+sunSlider.value);
+goTo('classic');
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  water.material.uniforms['time'].value += dt;
+
+  if (tween) {
+    tween.t = Math.min(tween.t + dt * 0.7, 1);
+    const k = easeInOut(tween.t);
+    camera.position.lerpVectors(tween.fromP, tween.toP, k);
+    controls.target.lerpVectors(tween.fromT, tween.toT, k);
+    if (tween.t >= 1) tween = null;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+/* 隐藏加载层 */
+setTimeout(() => document.getElementById('loader').classList.add('hidden'), 600);
+
+/* 调试钩子 (便于自动化验证) */
+window.__ggb = { THREE, scene, renderer, camera, controls, water };
+</script>
+</body>
+</html>

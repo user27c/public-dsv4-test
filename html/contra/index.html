@@ -1,0 +1,1615 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>魂斗罗 Contra - NES Style</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: #111;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  overflow: hidden;
+  font-family: 'Courier New', monospace;
+}
+#game-container {
+  position: relative;
+  width: 768px;
+  height: 720px;
+}
+canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border: 2px solid #333;
+}
+#overlay {
+  position: absolute; top:0; left:0;
+  width: 768px; height: 720px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+#overlay > div { pointer-events: auto; }
+.overlay-text {
+  color: #fff;
+  text-align: center;
+  text-shadow: 2px 2px 0 #000;
+}
+.overlay-title {
+  font-size: 48px;
+  font-weight: bold;
+  letter-spacing: 4px;
+  color: #ff0;
+  margin-bottom: 20px;
+}
+.overlay-subtitle {
+  font-size: 18px;
+  color: #aaa;
+  margin-bottom: 30px;
+}
+.overlay-btn {
+  background: #c44;
+  color: #fff;
+  border: 3px solid #a22;
+  padding: 10px 30px;
+  font-size: 20px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  margin: 5px;
+  text-shadow: 1px 1px 0 #000;
+}
+.overlay-btn:hover { background: #e55; }
+</style>
+</head>
+<body>
+
+<div id="game-container">
+  <canvas id="c"></canvas>
+  <div id="overlay">
+    <div id="title-screen" style="display:none;"></div>
+    <div id="pause-screen" style="display:none;">
+      <div class="overlay-title" style="font-size:36px;">PAUSE</div>
+      <div style="color:#aaa;font-size:16px;">PRESS P TO RESUME</div>
+    </div>
+    <div id="gameover-screen" style="display:none;">
+      <div class="overlay-title" style="font-size:36px;color:#f44;">GAME OVER</div>
+      <button class="overlay-btn" onclick="startGame()">CONTINUE</button>
+    </div>
+    <div id="ending-screen" style="display:none;">
+      <div class="overlay-title" style="font-size:30px;">MISSION COMPLETE</div>
+      <div style="color:#ff0;font-size:16px;margin:10px 0;">CONGRATULATIONS!</div>
+      <div style="color:#aaa;font-size:14px;">The alien threat has been neutralized.</div>
+      <button class="overlay-btn" style="margin-top:20px;" onclick="startGame()">PLAY AGAIN</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+canvas.width = 256;
+canvas.height = 240;
+canvas.style.width = '768px';
+canvas.style.height = '720px';
+const ctx = canvas.getContext('2d');
+
+const W = canvas.width;
+const H = canvas.height;
+const TILE = 16;
+
+const GRAVITY = 0.35;
+const MAX_FALL = 7;
+const PLAYER_SPEED = 1.6;
+const JUMP_VEL = -7.5;
+const BULLET_SPEED = 5;
+const ENEMY_BULLET_SPEED = 3;
+
+const TILE_EMPTY = 0;
+const TILE_GROUND = 1;
+const TILE_PLATFORM = 2;
+
+const NES_COLORS = {
+  sky: '#5c94fc',
+  ground: '#6b4c2a',
+  groundTop: '#44a844',
+  darkBrown: '#4a3020',
+  water: '#2048a0',
+  platform: '#8b6b4a',
+  white: '#fcfcfc',
+  black: '#000000',
+  red: '#e04040',
+  orange: '#fca044',
+  yellow: '#fcfc54',
+  green: '#44a844',
+  blue: '#5c94fc',
+  skin: '#fca044',
+  grey: '#808080',
+  darkGrey: '#404040',
+  metal: '#a0a0a8',
+};
+
+const KEYS = {};
+const KEY_JUST = {};
+window.addEventListener('keydown', e => {
+  if (!KEYS[e.code]) KEY_JUST[e.code] = true;
+  KEYS[e.code] = true;
+  e.preventDefault();
+});
+window.addEventListener('keyup', e => {
+  KEYS[e.code] = false;
+  KEY_JUST[e.code] = false;
+  e.preventDefault();
+});
+
+let gameState = 'title';
+let currentStage = 0;
+let score = 0;
+let lives = 3;
+let highScore = parseInt(localStorage.getItem('contra_high')) || 0;
+
+let cameraX = 0, cameraY = 0;
+let stageClear = false;
+let stageClearTimer = 0;
+let screenShake = 0;
+
+let players = [];
+let bullets = [];
+let enemyBullets = [];
+let enemies = [];
+let powerUps = [];
+let particles = [];
+let tileMap = [];
+let tileWidth = 0, tileHeight = 0;
+
+let stageTimer = 0;
+let konamiCode = [];
+const KONAMI_SEQ = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','KeyB','KeyA'];
+
+let titleBlink = 0;
+let titleSelection = 0;
+
+const STAGE_NAMES = ['JUNGLE', 'WATERFALL'];
+
+class Entity {
+  constructor(x, y, w, h) {
+    this.x = x; this.y = y; this.w = w; this.h = h;
+    this.vx = 0; this.vy = 0;
+    this.alive = true;
+  }
+  get left() { return this.x; }
+  get right() { return this.x + this.w; }
+  get top() { return this.y; }
+  get bottom() { return this.y + this.h; }
+  get cx() { return this.x + this.w / 2; }
+  get cy() { return this.y + this.h / 2; }
+}
+
+class Player extends Entity {
+  constructor(x, y, id) {
+    super(x, y, 14, 24);
+    this.id = id;
+    this.onGround = false;
+    this.crouching = false;
+    this.aimX = 0;
+    this.aimY = 0;
+    this.facing = 1;
+    this.weapon = 'rifle';
+    this.fireCooldown = 0;
+    this.baseFireRate = 14;
+    this.rapidFire = false;
+    this.invincible = 0;
+    this.dead = false;
+    this.deathTimer = 0;
+    this.animFrame = 0;
+    this.animTimer = 0;
+    this.jumpHeld = false;
+    this.canDrop = false;
+    this.dropTimer = 0;
+  }
+
+  get fireRate() {
+    let rate = this.baseFireRate;
+    if (this.weapon === 'machine') rate = 6;
+    else if (this.weapon === 'spread') rate = 16;
+    else if (this.weapon === 'fire') rate = 10;
+    else if (this.weapon === 'laser') rate = 14;
+    if (this.rapidFire) rate = Math.floor(rate * 0.65);
+    return Math.max(rate, 3);
+  }
+
+  update() {
+    if (this.dead) {
+      this.deathTimer--;
+      if (this.deathTimer <= 0) return;
+      this.vy += GRAVITY;
+      this.y += this.vy;
+      return;
+    }
+    if (this.invincible > 0) this.invincible--;
+    if (this.fireCooldown > 0) this.fireCooldown--;
+    if (this.dropTimer > 0) this.dropTimer--;
+
+    let moveX = 0;
+    if (KEYS['ArrowLeft'] || KEYS['KeyA']) moveX = -1;
+    if (KEYS['ArrowRight'] || KEYS['KeyD']) moveX = 1;
+    if (moveX !== 0) this.facing = moveX;
+
+    let up = KEYS['ArrowUp'] || KEYS['KeyW'];
+    let down = KEYS['ArrowDown'] || KEYS['KeyS'];
+
+    this.aimX = 0;
+    this.aimY = 0;
+
+    if (!this.onGround) {
+      if (up && !down) { this.aimX = 0; this.aimY = -1; }
+      else if (down && !up) { this.aimX = 0; this.aimY = 1; }
+      else if (moveX !== 0) { this.aimX = moveX; this.aimY = 0; }
+      else { this.aimX = this.facing; this.aimY = 0; }
+
+      if (up && moveX !== 0) { this.aimX = moveX; this.aimY = -1; }
+      if (down && moveX !== 0) { this.aimX = moveX; this.aimY = 1; }
+    } else {
+      if (down && !up) {
+        this.crouching = true;
+        this.aimX = this.facing;
+        this.aimY = 0;
+      } else if (up && !moveX) {
+        this.crouching = false;
+        this.aimX = 0;
+        this.aimY = -1;
+      } else if (up && moveX !== 0) {
+        this.crouching = false;
+        this.aimX = moveX;
+        this.aimY = -1;
+      } else {
+        this.crouching = false;
+        this.aimX = moveX !== 0 ? moveX : this.facing;
+        this.aimY = 0;
+      }
+    }
+
+    this.vx = moveX * PLAYER_SPEED;
+    let crouchMod = this.crouching ? 0.5 : 1;
+    this.vx *= crouchMod;
+
+    if (this.onGround && this.crouching && KEYS['Space'] && this.dropTimer <= 0) {
+      let below = this.checkDropPlatform();
+      if (below) {
+        this.y += 2;
+        this.onGround = false;
+        this.vy = 0;
+        this.dropTimer = 15;
+      }
+    }
+
+    if (KEYS['Space'] || KEYS['KeyZ']) {
+      if (this.onGround && !this.jumpHeld) {
+        this.vy = JUMP_VEL;
+        this.onGround = false;
+        this.jumpHeld = true;
+      } else if (!this.onGround && this.jumpHeld && this.vy < -1.5) {
+        this.vy -= 0.55;
+      }
+    } else {
+      this.jumpHeld = false;
+      if (!this.onGround && this.vy < -1) this.vy = -1;
+    }
+
+    this.vy += GRAVITY;
+    if (this.vy > MAX_FALL) this.vy = MAX_FALL;
+    this.x += this.vx;
+    this.resolveCollisionX();
+    this.y += this.vy;
+    this.resolveCollisionY();
+
+    if (KEYS['KeyX'] || KEYS['KeyJ']) {
+      this.shoot();
+    }
+
+    if (moveX !== 0) {
+      this.animTimer++;
+      if (this.animTimer > 6) { this.animTimer = 0; this.animFrame = (this.animFrame + 1) % 4; }
+    } else {
+      this.animFrame = 0;
+      this.animTimer = 0;
+    }
+  }
+
+  checkDropPlatform() {
+    let px = Math.floor(this.x / TILE);
+    let py = Math.floor((this.bottom + 1) / TILE);
+    if (py < 0 || py >= tileHeight) return false;
+    if (px < 0 || px >= tileWidth) return false;
+    let t = tileMap[py]?.[px];
+    return t === TILE_PLATFORM;
+  }
+
+  resolveCollisionX() {
+    let pLeft = Math.floor(this.x / TILE);
+    let pRight = Math.floor((this.x + this.w - 1) / TILE);
+    let pTop = Math.floor((this.y + 1) / TILE);
+    let pBottom = Math.floor((this.y + this.h - 1) / TILE);
+
+    for (let r = pTop; r <= pBottom; r++) {
+      for (let c = pLeft; c <= pRight; c++) {
+        if (r < 0 || r >= tileHeight || c < 0 || c >= tileWidth) {
+          if (c < 0) this.x = 0;
+          continue;
+        }
+        let t = tileMap[r][c];
+        if (t === TILE_GROUND) {
+          let tileR = c * TILE + TILE;
+          let tileL = c * TILE;
+          if (this.vx > 0) this.x = tileL - this.w;
+          else if (this.vx < 0) this.x = tileR;
+          this.vx = 0;
+        }
+      }
+    }
+  }
+
+  resolveCollisionY() {
+    this.onGround = false;
+    let pLeft = Math.floor((this.x + 1) / TILE);
+    let pRight = Math.floor((this.x + this.w - 1) / TILE);
+    let pTop = Math.floor(this.y / TILE);
+    let pBottom = Math.floor((this.y + this.h) / TILE);
+
+    for (let r = pTop; r <= pBottom; r++) {
+      for (let c = pLeft; c <= pRight; c++) {
+        if (r < 0 || r >= tileHeight || c < 0 || c >= tileWidth) continue;
+        let t = tileMap[r][c];
+        if (t === TILE_GROUND) {
+          let tileB = r * TILE;
+          let tileTp = r * TILE + TILE;
+          if (this.vy > 0) {
+            this.y = tileB - this.h;
+            this.vy = 0;
+            this.onGround = true;
+          } else if (this.vy < 0) {
+            this.y = tileTp;
+            this.vy = 0;
+          }
+        } else if (t === TILE_PLATFORM && this.vy >= 0) {
+          let platTop = r * TILE;
+          let prevBottom = this.y + this.h - this.vy;
+          if (prevBottom <= platTop + 1) {
+            this.y = platTop - this.h;
+            this.vy = 0;
+            this.onGround = true;
+          }
+        }
+      }
+    }
+
+    if (this.y > cameraY + H + 40) this.die();
+    if (stageData && stageData.type === 'vert' && this.y < cameraY - 40) this.die();
+  }
+
+  shoot() {
+    if (this.fireCooldown > 0) return;
+    this.fireCooldown = this.fireRate;
+
+    let ax = this.aimX;
+    let ay = this.aimY;
+    if (ax === 0 && ay === 0) { ax = this.facing; ay = 0; }
+    let len = Math.sqrt(ax * ax + ay * ay);
+    if (len === 0) { ax = this.facing; len = 1; }
+    ax /= len; ay /= len;
+
+    let gx = this.cx - 1;
+    let gy = this.cy - 2;
+    if (this.crouching) gy = this.y + 6;
+
+    if (this.weapon === 'rifle') {
+      spawnBullet(gx, gy, ax, ay);
+    } else if (this.weapon === 'machine') {
+      spawnBullet(gx, gy, ax, ay);
+    } else if (this.weapon === 'spread') {
+      for (let i = -2; i <= 2; i++) {
+        let angle = Math.atan2(ay, ax) + i * 0.22;
+        spawnBullet(gx, gy, Math.cos(angle), Math.sin(angle));
+      }
+    } else if (this.weapon === 'fire') {
+      let angle = Math.atan2(ay, ax) + Math.sin(Date.now() * 0.02) * 0.3;
+      spawnBullet(gx, gy, Math.cos(angle), Math.sin(angle), 'fire');
+    } else if (this.weapon === 'laser') {
+      spawnBullet(gx, gy, ax, ay, 'laser');
+    }
+  }
+
+  die() {
+    if (this.invincible > 0) return;
+    if (this.dead) return;
+    this.dead = true;
+    this.deathTimer = 40;
+    this.vy = -6;
+    this.vx = 0;
+    this.invincible = 0;
+    lives--;
+    spawnParticles(this.cx, this.cy, '#fcfc54', 12);
+    screenShake = 8;
+  }
+
+  hit() {
+    if (this.dead) return;
+    if (this.invincible > 0) return;
+    this.die();
+  }
+
+  respawn() {
+    this.x = stageData.playerStart.x;
+    this.y = stageData.playerStart.y;
+    this.vx = 0; this.vy = 0;
+    this.dead = false;
+    this.deathTimer = 0;
+    this.weapon = 'rifle';
+    this.rapidFire = false;
+    this.invincible = 90;
+    this.onGround = false;
+  }
+}
+
+class Bullet extends Entity {
+  constructor(x, y, vx, vy, type) {
+    super(x, y, type === 'laser' ? 12 : 3, type === 'laser' ? 3 : 3);
+    this.vx = vx * BULLET_SPEED;
+    this.vy = vy * BULLET_SPEED;
+    this.type = type || 'normal';
+    this.life = this.type === 'laser' ? 30 : 60;
+
+    this.angle = this.type === 'fire' ? Math.random() * Math.PI * 2 : 0;
+    this.fireTimer = 0;
+  }
+
+  update() {
+    this.life--;
+    if (this.life <= 0) { this.alive = false; return; }
+    if (this.type === 'fire') {
+      this.fireTimer++;
+      this.x += this.vx + Math.sin(this.fireTimer * 0.5) * 1.5;
+      this.y += this.vy + Math.cos(this.fireTimer * 0.5) * 1.5;
+    } else {
+      this.x += this.vx;
+      this.y += this.vy;
+    }
+    if (this.x < cameraX - 20 || this.x > cameraX + W + 20 ||
+        this.y < cameraY - 20 || this.y > cameraY + H + 20) {
+      this.alive = false;
+    }
+  }
+}
+
+class EnemyBullet extends Entity {
+  constructor(x, y, vx, vy) {
+    super(x, y, 4, 4);
+    this.vx = vx;
+    this.vy = vy;
+  }
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    if (this.x < cameraX - 20 || this.x > cameraX + W + 20 ||
+        this.y < cameraY - 20 || this.y > cameraY + H + 20) {
+      this.alive = false;
+    }
+  }
+}
+
+class Enemy extends Entity {
+  constructor(x, y, type) {
+    let w = 14, h = 22;
+    super(x, y, w, h);
+    this.type = type;
+    this.hp = 1;
+    this.facing = -1;
+    this.fireTimer = 0;
+    this.fireRate = 0;
+    this.patrolTimer = 0;
+    this.patrolDir = 0;
+    this.onGround = false;
+    this.spawnX = x;
+    this.patrolRange = 48;
+    this.alive = true;
+    this.dropPowerUp = false;
+    this.animFrame = 0;
+    this.animTimer = 0;
+    this.activated = false;
+    this.flashTimer = 0;
+    this.bossPhase = 0;
+    this.bossTimer = 0;
+    this.bossAttackTimer = 0;
+
+    switch (type) {
+      case 'soldier':
+        this.fireRate = 90 + Math.random() * 60;
+        this.fireTimer = 30 + Math.random() * 40;
+        this.patrolDir = this.facing;
+        break;
+      case 'red_guard':
+        this.fireRate = 80 + Math.random() * 50;
+        this.fireTimer = 25 + Math.random() * 30;
+        this.patrolDir = this.facing;
+        this.dropPowerUp = true;
+        break;
+      case 'turret':
+        this.w = 16; this.h = 14;
+        this.fireRate = 45;
+        this.fireTimer = 20;
+        break;
+      case 'runner':
+        this.w = 14; this.h = 22;
+        this.facing = -1;
+        this.fireRate = 999;
+        break;
+      case 'boss1':
+        this.w = 48; this.h = 40;
+        this.hp = 30; this.fireRate = 30;
+        this.bossPhase = 0; this.bossTimer = 0;
+        break;
+      case 'boss2':
+        this.w = 40; this.h = 36;
+        this.hp = 40; this.fireRate = 25;
+        this.bossPhase = 0; this.bossTimer = 0;
+        break;
+    }
+  }
+
+  update() {
+    if (this.flashTimer > 0) this.flashTimer--;
+    if (!this.activated) {
+      if (this.x < cameraX + W + 40 && this.x > cameraX - 40 &&
+          this.y < cameraY + H + 40 && this.y > cameraY - 40) {
+        this.activated = true;
+      } else return;
+    }
+    if (this.fireTimer > 0) this.fireTimer--;
+    if (this.bossTimer > 0) this.bossTimer--;
+    if (this.bossAttackTimer > 0) this.bossAttackTimer--;
+    this.vy += GRAVITY;
+    if (this.vy > MAX_FALL) this.vy = MAX_FALL;
+
+    switch (this.type) {
+      case 'soldier':
+      case 'red_guard':
+        this.patrolTimer++;
+        if (this.patrolTimer > 60 + Math.random() * 60) {
+          this.patrolTimer = 0;
+          this.patrolDir = this.patrolDir === 0 ? (Math.random() > 0.5 ? 1 : -1) : 0;
+        }
+        this.vx = this.patrolDir * 0.8;
+        if (this.vx !== 0) this.facing = this.vx > 0 ? 1 : -1;
+
+        if (this.fireTimer <= 0 && this.activated) {
+          let p = players[0];
+          if (p && !p.dead) {
+            let dx = p.cx - this.cx;
+            let dy = p.cy - this.cy;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > 0) {
+              enemyBullets.push(new EnemyBullet(this.cx, this.cy, dx/dist * 2, dy/dist * 2));
+              this.fireTimer = this.fireRate;
+            }
+          }
+        }
+        this.animTimer++;
+        if (this.animTimer > 8) { this.animTimer = 0; this.animFrame ^= 1; }
+        break;
+
+      case 'turret':
+        this.vx = 0; this.vy = 0;
+        if (this.fireTimer <= 0) {
+          let p = players[0];
+          if (p && !p.dead) {
+            let dx = p.cx - this.cx;
+            let dy = p.cy - this.cy;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > 0) {
+              enemyBullets.push(new EnemyBullet(this.cx, this.cy, dx/dist * 2.5, dy/dist * 2.5));
+              this.fireTimer = this.fireRate;
+            }
+          }
+        }
+        break;
+
+      case 'runner':
+        this.vx = this.facing * 3;
+        this.animTimer++;
+        if (this.animTimer > 4) { this.animTimer = 0; this.animFrame = (this.animFrame + 1) % 4; }
+        break;
+
+      case 'boss1':
+        this.updateBoss1();
+        break;
+
+      case 'boss2':
+        this.updateBoss2();
+        break;
+    }
+
+    this.x += this.vx;
+    this.resolveGroundCollisionX();
+    this.y += this.vy;
+    this.resolveGroundCollisionY();
+  }
+
+  resolveGroundCollisionX() {
+    let pL = Math.floor(this.x / TILE), pR = Math.floor((this.x + this.w - 1) / TILE);
+    let pT = Math.floor((this.y + 1) / TILE), pB = Math.floor((this.y + this.h - 1) / TILE);
+    for (let r = pT; r <= pB; r++) {
+      for (let c = pL; c <= pR; c++) {
+        if (r < 0 || r >= tileHeight || c < 0 || c >= tileWidth) { this.alive = false; return; }
+        if (tileMap[r][c] === TILE_GROUND) {
+          if (this.vx > 0) this.x = c * TILE - this.w;
+          else this.x = (c + 1) * TILE;
+          this.vx = 0;
+          if (this.type === 'runner') this.alive = false;
+        }
+      }
+    }
+  }
+
+  resolveGroundCollisionY() {
+    this.onGround = false;
+    let pL = Math.floor((this.x + 1) / TILE), pR = Math.floor((this.x + this.w - 1) / TILE);
+    let pT = Math.floor(this.y / TILE), pB = Math.floor((this.y + this.h) / TILE);
+    for (let r = pT; r <= pB; r++) {
+      for (let c = pL; c <= pR; c++) {
+        if (r < 0 || r >= tileHeight || c < 0 || c >= tileWidth) continue;
+        if (tileMap[r][c] === TILE_GROUND) {
+          if (this.vy > 0) { this.y = r * TILE - this.h; this.vy = 0; this.onGround = true; }
+          else { this.y = (r + 1) * TILE; this.vy = 1; }
+        } else if (tileMap[r][c] === TILE_PLATFORM && this.vy >= 0) {
+          if (this.y + this.h - this.vy <= r * TILE + 1) {
+            this.y = r * TILE - this.h; this.vy = 0; this.onGround = true;
+          }
+        }
+      }
+    }
+    if (this.y > H + cameraY + 80) this.alive = false;
+  }
+
+  updateBoss1() {
+    let p = players[0];
+    this.bossTimer++;
+    let t = this.bossTimer;
+    this.vx = Math.sin(t * 0.02) * 1.5;
+    this.vy = 0;
+
+    if (this.bossAttackTimer <= 0) {
+      this.bossAttackTimer = this.fireRate;
+      let phase = Math.floor(this.hp / 10);
+      if (p && !p.dead) {
+        let dx = p.cx - this.cx;
+        let dy = p.cy - this.cy;
+        let d = Math.sqrt(dx * dx + dy * dy) || 1;
+        let count = phase < 2 ? 3 : 5;
+        for (let i = 0; i < count; i++) {
+          let a = Math.atan2(dy, dx) + (i - (count - 1) / 2) * 0.25;
+          enemyBullets.push(new EnemyBullet(this.cx, this.cy, Math.cos(a) * 2.5, Math.sin(a) * 2.5));
+        }
+      }
+    }
+  }
+
+  updateBoss2() {
+    let p = players[0];
+    this.bossTimer++;
+    let t = this.bossTimer;
+    this.vx = Math.sin(t * 0.015) * 1;
+    this.vy = Math.cos(t * 0.02) * 0.5;
+
+    if (this.bossAttackTimer <= 0) {
+      this.bossAttackTimer = this.fireRate;
+      if (p && !p.dead) {
+        let dx = p.cx - this.cx;
+        let dy = p.cy - this.cy;
+        let d = Math.sqrt(dx * dx + dy * dy) || 1;
+        enemyBullets.push(new EnemyBullet(this.cx, this.cy, dx/d * 3, dy/d * 3));
+        enemyBullets.push(new EnemyBullet(this.cx, this.cy, dx/d * 2, dy/d * 2 + 1));
+        enemyBullets.push(new EnemyBullet(this.cx, this.cy, dx/d * 2, dy/d * 2 - 1));
+      }
+    }
+
+    if (this.hp < 20 && this.bossTimer % 60 < 10) {
+      enemyBullets.push(new EnemyBullet(this.cx, this.cy, 1, 1));
+      enemyBullets.push(new EnemyBullet(this.cx, this.cy, -1, 1));
+    }
+  }
+
+  damage(dmg) {
+    this.hp -= dmg;
+    this.flashTimer = 4;
+    if (this.hp <= 0) {
+      this.alive = false;
+      spawnParticles(this.cx, this.cy, '#fcfc54', 20);
+      screenShake = 10;
+      score += (this.type === 'boss1' || this.type === 'boss2') ? 5000 : (this.type === 'red_guard' ? 500 : 100);
+      if (this.dropPowerUp) {
+        spawnPowerUp(this.cx, this.cy);
+      }
+      if (this.type === 'boss1' || this.type === 'boss2') {
+        stageClear = true;
+        stageClearTimer = 120;
+      }
+    }
+  }
+}
+
+class PowerUp extends Entity {
+  constructor(x, y, type) {
+    super(x, y, 14, 14);
+    this.type = type;
+    this.vy = -1;
+    this.bobTimer = 0;
+  }
+  update() {
+    this.bobTimer++;
+    this.vy += 0.03;
+    if (this.vy > 1.5) this.vy = 1.5;
+    this.y += this.vy;
+    if (this.y > H + cameraY + 40) this.alive = false;
+    let p = players[0];
+    if (p && !p.dead && this.collidesWith(p)) {
+      this.collect(p);
+    }
+  }
+  collidesWith(p) {
+    return this.x < p.x + p.w && this.x + this.w > p.x &&
+           this.y < p.y + p.h && this.y + this.h > p.y;
+  }
+  collect(p) {
+    this.alive = false;
+    spawnParticles(this.cx, this.cy, '#fcfc54', 6);
+    switch (this.type) {
+      case 'M': p.weapon = 'machine'; break;
+      case 'S': p.weapon = 'spread'; break;
+      case 'F': p.weapon = 'fire'; break;
+      case 'L': p.weapon = 'laser'; break;
+      case 'R': p.rapidFire = true; p.invincible = Math.max(p.invincible, 10); break;
+      case 'B': p.invincible = 600; break;
+    }
+  }
+}
+
+class Particle extends Entity {
+  constructor(x, y, color) {
+    super(x, y, 3, 3);
+    this.color = color;
+    this.vx = (Math.random() - 0.5) * 4;
+    this.vy = (Math.random() - 0.5) * 4 - 1;
+    this.life = 20 + Math.random() * 15;
+    this.alive = true;
+  }
+  update() {
+    this.life--;
+    if (this.life <= 0) { this.alive = false; return; }
+    this.x += this.vx;
+    this.y += this.vy;
+    this.vy += 0.1;
+    this.vx *= 0.96;
+  }
+}
+
+function spawnBullet(x, y, vx, vy, type) {
+  bullets.push(new Bullet(x, y, vx, vy, type));
+}
+
+function spawnPowerUp(x, y) {
+  let types = ['M', 'S', 'F', 'L', 'R', 'B'];
+  let type = types[Math.floor(Math.random() * types.length)];
+  powerUps.push(new PowerUp(x, y, type));
+}
+
+function spawnParticles(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    particles.push(new Particle(x, y, color));
+  }
+}
+
+function getStage1Data() {
+  let map = [];
+  let h = 15;
+  let spawns = [];
+
+  for (let r = 0; r < h; r++) {
+    map[r] = [];
+    for (let c = 0; c < 200; c++) {
+      if (r === h - 1) {
+        map[r][c] = TILE_GROUND;
+      } else if (r === h - 2 && c % 3 === 0) {
+        map[r][c] = TILE_GROUND;
+      } else {
+        map[r][c] = TILE_EMPTY;
+      }
+    }
+  }
+
+  let gaps = [30, 32, 55, 57, 78, 80, 105, 107, 130, 133, 155, 158];
+  for (let i = 0; i < gaps.length; i += 2) {
+    for (let c = gaps[i]; c <= gaps[i + 1]; c++) {
+      map[h - 1][c] = TILE_EMPTY;
+      map[h - 2][c] = TILE_EMPTY;
+    }
+  }
+
+  let plats = [
+    {x:25, y:11, w:4}, {x:35, y:9, w:3}, {x:42, y:11, w:4},
+    {x:50, y:8, w:3}, {x:60, y:10, w:3}, {x:68, y:8, w:4},
+    {x:76, y:9, w:3}, {x:85, y:10, w:3}, {x:93, y:8, w:4},
+    {x:100, y:11, w:3}, {x:110, y:9, w:4}, {x:120, y:10, w:3},
+    {x:128, y:8, w:3}, {x:138, y:10, w:4}, {x:148, y:9, w:3},
+  ];
+  for (let p of plats) {
+    for (let c = p.x; c < p.x + p.w; c++) {
+      map[p.y][c] = TILE_PLATFORM;
+    }
+  }
+
+  spawns = [
+    {x:300, enemies:[{type:'soldier',x:320,y:200}]},
+    {x:380, enemies:[{type:'soldier',x:400,y:200}]},
+    {x:450, enemies:[{type:'soldier',x:470,y:200}]},
+    {x:500, enemies:[{type:'turret',x:520,y:210},{type:'soldier',x:540,y:200}]},
+    {x:580, enemies:[{type:'red_guard',x:600,y:200}]},
+    {x:650, enemies:[{type:'soldier',x:670,y:200},{type:'soldier',x:690,y:200}]},
+    {x:720, enemies:[{type:'turret',x:740,y:210}]},
+    {x:800, enemies:[{type:'soldier',x:820,y:200},{type:'red_guard',x:840,y:200}]},
+    {x:880, enemies:[{type:'runner',x:900,y:200},{type:'runner',x:920,y:200}]},
+    {x:950, enemies:[{type:'turret',x:970,y:210},{type:'soldier',x:990,y:200}]},
+    {x:1020, enemies:[{type:'red_guard',x:1040,y:200}]},
+    {x:1080, enemies:[{type:'soldier',x:1100,y:200},{type:'soldier',x:1120,y:200}]},
+    {x:1150, enemies:[{type:'turret',x:1170,y:210}]},
+    {x:1220, enemies:[{type:'soldier',x:1240,y:200},{type:'runner',x:1260,y:200}]},
+    {x:1300, enemies:[{type:'red_guard',x:1320,y:200}]},
+    {x:1380, enemies:[{type:'turret',x:1400,y:210},{type:'turret',x:1420,y:210}]},
+    {x:1460, enemies:[{type:'soldier',x:1480,y:200},{type:'soldier',x:1500,y:200}]},
+    {x:1550, enemies:[{type:'red_guard',x:1570,y:200}]},
+    {x:1620, enemies:[{type:'runner',x:1640,y:200},{type:'runner',x:1655,y:200},{type:'runner',x:1670,y:200}]},
+    {x:1700, enemies:[{type:'boss1',x:1730,y:200}]},
+    {x:1900, enemies:[]},
+  ];
+
+  for (let c = 170; c < 195; c++) {
+    for (let r = h - 1; r >= h - 2; r--) {
+      if (r >= 0 && c < 200) map[r][c] = TILE_GROUND;
+    }
+  }
+
+  return { map, spawns, width: 200, height: h, playerStart: {x:80, y:180}, type:'horiz' };
+}
+
+function getStage2Data() {
+  let map = [];
+  let h = 80;
+  let w = 16;
+  let groundRow = h - 3;
+
+  for (let r = 0; r < h; r++) {
+    map[r] = [];
+    for (let c = 0; c < w; c++) {
+      if (c < 2 || c >= w - 2) map[r][c] = TILE_GROUND;
+      else map[r][c] = TILE_EMPTY;
+    }
+  }
+
+  for (let r = h - 2; r < h; r++) {
+    for (let c = 0; c < w; c++) map[r][c] = TILE_GROUND;
+  }
+
+  for (let r = 4; r < groundRow; r++) {
+    let phase = (h - r) * 0.6;
+    let col1 = 3 + Math.floor(Math.sin(phase) * 4 + 3);
+    let col2 = w - 5 + Math.floor(Math.cos(phase * 0.7) * 3);
+
+    col1 = Math.max(2, Math.min(w - 5, col1));
+    for (let i = 0; i < 3; i++) map[r][col1 + i] = TILE_PLATFORM;
+
+    if (r % 6 === 0 || r % 6 === 1) {
+      col2 = Math.max(2, Math.min(w - 5, col2));
+      for (let i = 0; i < 3; i++) map[r][col2 + i] = TILE_PLATFORM;
+    }
+  }
+
+  let spawns = [
+    {y:groundRow-2, enemies:[{type:'turret',x:64,y:(groundRow-2)*TILE-10},{type:'turret',x:192,y:(groundRow-2)*TILE-10}]},
+    {y:groundRow-8, enemies:[{type:'soldier',x:96,y:(groundRow-8)*TILE}]},
+    {y:groundRow-14, enemies:[{type:'soldier',x:80,y:(groundRow-14)*TILE},{type:'soldier',x:160,y:(groundRow-14)*TILE}]},
+    {y:groundRow-20, enemies:[{type:'red_guard',x:120,y:(groundRow-20)*TILE}]},
+    {y:groundRow-26, enemies:[{type:'turret',x:64,y:(groundRow-26)*TILE},{type:'turret',x:192,y:(groundRow-26)*TILE}]},
+    {y:groundRow-32, enemies:[{type:'soldier',x:96,y:(groundRow-32)*TILE},{type:'soldier',x:160,y:(groundRow-32)*TILE}]},
+    {y:groundRow-38, enemies:[{type:'red_guard',x:80,y:(groundRow-38)*TILE},{type:'red_guard',x:176,y:(groundRow-38)*TILE}]},
+    {y:groundRow-44, enemies:[{type:'runner',x:64,y:(groundRow-44)*TILE},{type:'runner',x:192,y:(groundRow-44)*TILE}]},
+    {y:groundRow-50, enemies:[{type:'turret',x:100,y:(groundRow-50)*TILE},{type:'turret',x:156,y:(groundRow-50)*TILE},{type:'soldier',x:128,y:(groundRow-50)*TILE}]},
+    {y:groundRow-56, enemies:[{type:'red_guard',x:80,y:(groundRow-56)*TILE},{type:'red_guard',x:176,y:(groundRow-56)*TILE}]},
+    {y:groundRow-62, enemies:[{type:'soldier',x:96,y:(groundRow-62)*TILE},{type:'soldier',x:160,y:(groundRow-62)*TILE}]},
+    {y:groundRow-66, enemies:[{type:'turret',x:80,y:(groundRow-66)*TILE},{type:'turret',x:176,y:(groundRow-66)*TILE}]},
+    {y:groundRow-70, enemies:[{type:'runner',x:64,y:(groundRow-70)*TILE},{type:'runner',x:192,y:(groundRow-70)*TILE},{type:'red_guard',x:128,y:(groundRow-70)*TILE}]},
+    {y:4, enemies:[{type:'boss2',x:104,y:4*TILE}]},
+  ];
+
+  for (let r = 1; r < 4; r++) {
+    for (let c = 0; c < w; c++) map[r][c] = TILE_GROUND;
+  }
+
+  return { map, spawns, width: w, height: h, playerStart: {x:104, y: (groundRow - 3) * TILE + 6}, type:'vert' };
+}
+
+let stageData;
+let spawnedTriggers = [];
+
+function loadStage(n) {
+  stageData = n === 0 ? getStage1Data() : getStage2Data();
+  tileMap = stageData.map;
+  tileWidth = stageData.width;
+  tileHeight = stageData.height;
+  spawnedTriggers = [];
+  players = [];
+  bullets = [];
+  enemyBullets = [];
+  enemies = [];
+  powerUps = [];
+  particles = [];
+  stageClear = false;
+  stageClearTimer = 0;
+  screenShake = 0;
+  currentStage = n;
+  stageTimer = 0;
+
+  if (stageData.type === 'vert') {
+    cameraX = 0;
+    cameraY = Math.max(0, stageData.playerStart.y - H + 40);
+  } else {
+    cameraX = 0;
+    cameraY = 0;
+  }
+
+  let p = new Player(stageData.playerStart.x, stageData.playerStart.y, 0);
+  players.push(p);
+}
+
+function startGame() {
+  score = 0;
+  lives = 3;
+  gameState = 'stage_intro';
+  currentStage = 0;
+  loadStage(0);
+  document.getElementById('title-screen').style.display = 'none';
+  document.getElementById('gameover-screen').style.display = 'none';
+  document.getElementById('ending-screen').style.display = 'none';
+  document.getElementById('pause-screen').style.display = 'none';
+}
+
+function processSpawns() {
+  if (!stageData || stageClear) return;
+  for (let i = 0; i < stageData.spawns.length; i++) {
+    if (spawnedTriggers.includes(i)) continue;
+    let trig = stageData.spawns[i];
+    let shouldSpawn = false;
+
+    if (stageData.type === 'vert') {
+      let twy = trig.y * TILE;
+      if (cameraY + H / 2 <= twy + 100) shouldSpawn = true;
+    } else {
+      if (cameraX + W >= trig.x) shouldSpawn = true;
+    }
+
+    if (shouldSpawn) {
+      for (let e of trig.enemies) {
+        enemies.push(new Enemy(e.x, e.y, e.type));
+      }
+      spawnedTriggers.push(i);
+    }
+  }
+}
+
+function update() {
+  if (gameState === 'title') {
+    titleBlink++;
+    if (KEY_JUST['Enter'] || KEY_JUST['Space']) startGame();
+    if (KEY_JUST['ArrowUp']) konamiCode.push('ArrowUp');
+    if (KEY_JUST['ArrowDown']) konamiCode.push('ArrowDown');
+    if (KEY_JUST['ArrowLeft']) konamiCode.push('ArrowLeft');
+    if (KEY_JUST['ArrowRight']) konamiCode.push('ArrowRight');
+    if (KEY_JUST['KeyB']) konamiCode.push('KeyB');
+    if (KEY_JUST['KeyA']) konamiCode.push('KeyA');
+    if (konamiCode.length > KONAMI_SEQ.length) konamiCode.shift();
+    let match = konamiCode.join(',') === KONAMI_SEQ.join(',');
+    if (match) { lives = 30; konamiCode = []; }
+    return;
+  }
+
+  if (gameState === 'stage_intro') {
+    stageTimer++;
+    if (stageTimer > 90 || KEYS['Enter'] || KEYS['Space']) {
+      gameState = 'playing';
+      stageTimer = 0;
+    }
+    return;
+  }
+
+  if (gameState === 'gameover') {
+    if (KEYS['Enter'] || KEYS['Space'] || KEY_JUST['KeyX'] || KEY_JUST['KeyJ']) {
+      startGame();
+    }
+    return;
+  }
+
+  if (gameState === 'ending') {
+    stageTimer++;
+    if (stageTimer > 180 && (KEYS['Enter'] || KEYS['Space'])) {
+      startGame();
+    }
+    return;
+  }
+
+  if (KEYS['KeyP'] || KEYS['Escape']) {
+    if (KEY_JUST['KeyP'] || KEY_JUST['Escape']) {
+      if (gameState === 'playing') {
+        gameState = 'paused';
+        document.getElementById('pause-screen').style.display = 'flex';
+      } else if (gameState === 'paused') {
+        gameState = 'playing';
+        document.getElementById('pause-screen').style.display = 'none';
+      }
+    }
+    if (gameState === 'paused') return;
+  }
+
+  if (gameState !== 'playing') return;
+
+  if (screenShake > 0) screenShake--;
+
+  if (stageClear) {
+    stageClearTimer--;
+    if (stageClearTimer <= 0) {
+      if (currentStage === 0) {
+        currentStage = 1;
+        loadStage(1);
+        gameState = 'stage_intro';
+        lives = Math.max(lives, 1);
+      } else {
+        gameState = 'ending';
+        stageTimer = 0;
+        document.getElementById('ending-screen').style.display = 'flex';
+        if (score > highScore) {
+          highScore = score;
+          localStorage.setItem('contra_high', highScore);
+        }
+      }
+    }
+    return;
+  }
+
+  processSpawns();
+
+  for (let p of players) p.update();
+
+  for (let p of players) {
+    if (p.dead && p.deathTimer <= 0) {
+      if (lives > 0) {
+        p.respawn();
+      }
+    }
+  }
+
+  let allDead = players.every(p => p.dead && p.deathTimer <= 0);
+  if (allDead && lives <= 0) {
+    gameState = 'gameover';
+    document.getElementById('gameover-screen').style.display = 'flex';
+    if (score > highScore) {
+      highScore = score;
+      localStorage.setItem('contra_high', highScore);
+    }
+    return;
+  }
+
+  for (let b of bullets) b.update();
+  for (let eb of enemyBullets) eb.update();
+  for (let e of enemies) e.update();
+  for (let pu of powerUps) pu.update();
+  for (let pt of particles) pt.update();
+
+  for (let b of bullets) {
+    if (!b.alive) continue;
+    for (let e of enemies) {
+      if (!e.alive || !e.activated) continue;
+      if (b.x < e.x + e.w && b.x + b.w > e.x &&
+          b.y < e.y + e.h && b.y + b.h > e.y) {
+        b.alive = false;
+        e.damage(1);
+        spawnParticles(b.cx, b.cy, '#fff', 3);
+        break;
+      }
+    }
+  }
+
+  for (let eb of enemyBullets) {
+    if (!eb.alive) continue;
+    for (let p of players) {
+      if (p.dead) continue;
+      if (eb.x < p.x + p.w && eb.x + eb.w > p.x &&
+          eb.y < p.y + p.h && eb.y + eb.h > p.y) {
+        eb.alive = false;
+        p.hit();
+        break;
+      }
+    }
+  }
+
+  for (let e of enemies) {
+    if (!e.alive || !e.activated) continue;
+    for (let p of players) {
+      if (p.dead) continue;
+      if (p.x < e.x + e.w && p.x + p.w > e.x &&
+          p.y < e.y + e.h && p.y + p.h > e.y) {
+        p.hit();
+      }
+    }
+  }
+
+  bullets = bullets.filter(b => b.alive);
+  enemyBullets = enemyBullets.filter(eb => eb.alive);
+  enemies = enemies.filter(e => e.alive);
+  powerUps = powerUps.filter(pu => pu.alive);
+  particles = particles.filter(pt => pt.alive);
+
+  if (stageData.type === 'vert') {
+    cameraY -= 0.55;
+    if (cameraY < 0) cameraY = 0;
+  } else {
+    let p = players[0];
+    if (p && !p.dead) {
+      let targetX = p.x - W / 3;
+      cameraX += (targetX - cameraX) * 0.1;
+      if (cameraX < 0) cameraX = 0;
+      let maxCamX = tileWidth * TILE - W;
+      if (cameraX > maxCamX) cameraX = maxCamX;
+    }
+  }
+}
+
+function drawPlayer(p) {
+  if (p.dead) {
+    if (p.deathTimer > 0 && p.deathTimer % 4 < 2) ctx.globalAlpha = 0.6;
+    else return;
+  }
+  if (p.invincible > 0 && Math.floor(p.invincible / 4) % 2 === 0) return;
+
+  let x = Math.round(p.x), y = Math.round(p.y), f = p.facing;
+  let aimUp = p.aimY < 0, aimDn = p.aimY > 0;
+
+  if (p.crouching) {
+    ctx.fillStyle = NES_COLORS.skin;
+    ctx.fillRect(x + 2, y + 5, 10, 4);
+    ctx.fillStyle = '#fcb060';
+    ctx.fillRect(x + 4, y + 6, 6, 2);
+    ctx.fillStyle = NES_COLORS.red;
+    ctx.fillRect(x + 1, y + 8, 12, 8);
+    ctx.fillStyle = NES_COLORS.blue;
+    ctx.fillRect(x, y + 2, 14, 4);
+    ctx.fillStyle = NES_COLORS.skin;
+    ctx.fillRect(x + (f > 0 ? 10 : 0), y + 2, 4, 4);
+    ctx.fillStyle = NES_COLORS.grey;
+    ctx.fillRect(x + (f > 0 ? 12 : -4), y + 9, 8, 2);
+    ctx.fillStyle = NES_COLORS.darkGrey;
+    ctx.fillRect(x + 3, y + 14, 8, 2);
+  } else if (!p.onGround) {
+    ctx.fillStyle = NES_COLORS.red;
+    ctx.fillRect(x + 2, y + 10, 10, 10);
+    ctx.fillStyle = '#a03020';
+    ctx.fillRect(x + 3, y + 12, 8, 2);
+    ctx.fillStyle = NES_COLORS.blue;
+    ctx.fillRect(x + 1, y + 3, 12, 3);
+    ctx.fillStyle = NES_COLORS.skin;
+    ctx.fillRect(x + 4, y, 6, 5);
+    ctx.fillStyle = '#fcb060';
+    ctx.fillRect(x + 5, y + 1, 4, 3);
+    ctx.fillStyle = NES_COLORS.darkGrey;
+    ctx.fillRect(x + 3, y + 18, 3, 4);
+    ctx.fillRect(x + 8, y + 14, 3, 4);
+
+    ctx.fillStyle = NES_COLORS.grey;
+    if (aimUp) {
+      ctx.fillRect(x + 6, y - 3, 2, 10);
+    } else if (aimDn) {
+      ctx.fillRect(x + 6, y + 14, 2, 8);
+    } else {
+      let gx = f > 0 ? x + 12 : x - 6;
+      ctx.fillRect(gx, y + 6, 6, 2);
+    }
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x + (f > 0 ? 8 : 4), y + 1, 3, 2);
+  } else {
+    ctx.fillStyle = NES_COLORS.blue;
+    ctx.fillRect(x + 1, y + 1, 12, 3);
+    ctx.fillStyle = NES_COLORS.skin;
+    ctx.fillRect(x + 3, y, 8, 5);
+    ctx.fillStyle = '#fcb060';
+    ctx.fillRect(x + 4, y + 1, 6, 3);
+    ctx.fillStyle = NES_COLORS.red;
+    ctx.fillRect(x + 1, y + 7, 12, 11);
+    ctx.fillStyle = '#a03020';
+    ctx.fillRect(x + 2, y + 9, 10, 2);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x + (f > 0 ? 9 : 4), y + 1, 3, 2);
+
+    let legPhase = p.vx !== 0 ? Math.sin(p.animFrame * Math.PI / 2) * 4 : 0;
+    ctx.fillStyle = NES_COLORS.red;
+    ctx.fillRect(x + 2, y + 18, 5 + legPhase * 0.5, 4);
+    ctx.fillRect(x + 8 - legPhase * 0.5, y + 18, 5 - legPhase * 0.5, 4);
+    ctx.fillStyle = NES_COLORS.darkGrey;
+    ctx.fillRect(x + 3 + legPhase * 0.5, y + 21, 4, 2);
+    ctx.fillRect(x + 9 - legPhase * 0.5, y + 21, 4, 2);
+
+    ctx.fillStyle = NES_COLORS.grey;
+    if (aimUp) {
+      ctx.fillRect(x + 6, y - 4, 2, 11);
+    } else {
+      let gx = f > 0 ? x + 12 : x - 6;
+      ctx.fillRect(gx, y + 5, 6, 2);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawBullet(b) {
+  let x = Math.round(b.x), y = Math.round(b.y);
+  if (b.type === 'laser') {
+    let dx = b.vx, dy = b.vy;
+    let len = Math.sqrt(dx * dx + dy * dy);
+    if (len > 0) { dx /= len; dy /= len; }
+    ctx.fillStyle = '#ff4444';
+    ctx.fillRect(x - 1, y - 6, 3, 12);
+    ctx.fillStyle = '#ff8888';
+    ctx.fillRect(x, y - 5, 1, 10);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x, y - 2, 2, 4);
+  } else if (b.type === 'fire') {
+    ctx.fillStyle = '#ff8800';
+    ctx.fillRect(x - 2, y - 2, 5, 5);
+    ctx.fillStyle = '#ffcc00';
+    ctx.fillRect(x - 1, y - 1, 3, 3);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x, y, 1, 1);
+  } else {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x - 1, y - 1, 3, 2);
+    ctx.fillStyle = '#ffff88';
+    ctx.fillRect(x, y, 1, 1);
+  }
+}
+
+function drawEnemy(e) {
+  if (!e.activated) return;
+  if (e.flashTimer > 0 && e.flashTimer % 2 === 0) ctx.globalAlpha = 0.5;
+
+  let x = Math.round(e.x), y = Math.round(e.y);
+
+  switch (e.type) {
+    case 'soldier':
+    case 'red_guard':
+      ctx.fillStyle = e.type === 'red_guard' ? '#e04040' : '#8080c0';
+      ctx.fillRect(x + 3, y, 8, 8);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(x + 5, y + 2, 2, 2);
+      ctx.fillRect(x + 8, y + 2, 2, 2);
+      ctx.fillStyle = e.type === 'red_guard' ? '#c03030' : '#6060a0';
+      ctx.fillRect(x + 2, y + 8, 10, 4);
+      ctx.fillStyle = '#606060';
+      ctx.fillRect(x + 2, y + 11, 10, 8);
+      ctx.fillStyle = '#808080';
+      ctx.fillRect(x, y + 10, 2, 2);
+      let legOff = Math.abs(e.vx) > 0.1 ? (e.animFrame ? 2 : -2) : 0;
+      ctx.fillStyle = '#404040';
+      ctx.fillRect(x + 3, y + 16, 3, 5);
+      ctx.fillRect(x + 8, y + 16 + legOff, 3, 5);
+      if (e.type === 'red_guard') {
+        ctx.fillStyle = '#ff0';
+        ctx.fillRect(x + 10, y + 5, 4, 2);
+      }
+      break;
+    case 'turret':
+      ctx.fillStyle = '#888';
+      ctx.fillRect(x + 1, y + 3, 14, 8);
+      ctx.fillStyle = '#666';
+      ctx.fillRect(x, y, 16, 5);
+      ctx.fillStyle = '#c44';
+      ctx.fillRect(x + 5, y + 1, 6, 3);
+      ctx.fillStyle = '#444';
+      ctx.fillRect(x + 3, y + 10, 2, 4);
+      ctx.fillRect(x + 11, y + 10, 2, 4);
+      break;
+    case 'runner':
+      ctx.fillStyle = '#ff8844';
+      ctx.fillRect(x + 3, y, 8, 8);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(x + 5, y + 2, 2, 2);
+      ctx.fillStyle = '#cc6622';
+      ctx.fillRect(x + 1, y + 8, 12, 4);
+      ctx.fillStyle = '#444';
+      ctx.fillRect(x + 3, y + 11, 8, 8);
+      break;
+    case 'boss1':
+      ctx.fillStyle = '#666';
+      ctx.fillRect(x, y, e.w, e.h);
+      ctx.fillStyle = '#888';
+      ctx.fillRect(x + 2, y + 2, e.w - 4, e.h - 4);
+      ctx.fillStyle = '#c00';
+      ctx.fillRect(x + 12, y + 8, 24, 10);
+      ctx.fillStyle = '#ff0';
+      ctx.fillRect(x + 16, y + 10, 16, 6);
+      ctx.fillStyle = '#ff4444';
+      ctx.fillRect(x + 14, y + 10, 6, 6);
+      ctx.fillRect(x + 28, y + 10, 6, 6);
+      ctx.fillStyle = '#444';
+      ctx.fillRect(x + 6, y + 24, 8, 6);
+      ctx.fillRect(x + 34, y + 24, 8, 6);
+      ctx.fillRect(x + 4, y + 32, 40, 6);
+      break;
+    case 'boss2':
+      ctx.fillStyle = '#6633aa';
+      ctx.fillRect(x, y, e.w, e.h);
+      ctx.fillStyle = '#5522aa';
+      ctx.fillRect(x + 2, y + 2, e.w - 4, e.h - 4);
+      ctx.fillStyle = '#ff3333';
+      ctx.fillRect(x + 6, y + 6, 12, 8);
+      ctx.fillRect(x + 22, y + 6, 12, 8);
+      ctx.fillStyle = '#ff0';
+      ctx.fillRect(x + 8, y + 8, 8, 4);
+      ctx.fillRect(x + 24, y + 8, 8, 4);
+      ctx.fillStyle = '#ff6600';
+      ctx.fillRect(x + 10, y + 20, 20, 4);
+      ctx.fillStyle = '#cc00cc';
+      ctx.fillRect(x + 4, y + 26, e.w - 8, 8);
+      break;
+  }
+
+  ctx.globalAlpha = 1;
+
+  if ((e.type === 'boss1' || e.type === 'boss2') && e.hp > 0) {
+    let maxHp = e.type === 'boss1' ? 30 : 40;
+    let barW = e.w;
+    let barX = x;
+    let barY = y - 8;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(barX, barY, barW, 4);
+    ctx.fillStyle = '#c00';
+    ctx.fillRect(barX + 1, barY + 1, barW - 2, 2);
+    ctx.fillStyle = '#ff0';
+    ctx.fillRect(barX + 1, barY + 1, (barW - 2) * (e.hp / maxHp), 2);
+  }
+}
+
+function drawPowerUp(pu) {
+  let x = Math.round(pu.x), y = Math.round(pu.y);
+  let bob = Math.sin(pu.bobTimer * 0.1) * 2;
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x, y + bob, 14, 14);
+  ctx.fillStyle = '#fcc';
+  ctx.fillRect(x + 1, y + 1 + bob, 12, 12);
+
+  ctx.fillStyle = '#f44';
+  ctx.fillRect(x + 3, y + 3 + bob, 8, 8);
+
+  ctx.fillStyle = '#fff';
+  ctx.font = '8px monospace';
+  ctx.fillText(pu.type, x + 4, y + 11 + bob);
+}
+
+function drawParticle(pt) {
+  ctx.globalAlpha = pt.life / 35;
+  ctx.fillStyle = pt.color;
+  ctx.fillRect(Math.round(pt.x), Math.round(pt.y), pt.w, pt.h);
+  ctx.globalAlpha = 1;
+}
+
+function drawHUD() {
+  let hudY = 0;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, hudY, W, 20);
+  ctx.fillStyle = '#fff';
+  ctx.font = '8px monospace';
+  ctx.fillText('SCORE', 5, 8);
+  ctx.fillText(String(score).padStart(6, '0'), 5, 17);
+  ctx.fillText('HI', 80, 8);
+  ctx.fillText(String(highScore).padStart(6, '0'), 80, 17);
+  ctx.fillText('STAGE', 150, 8);
+  ctx.fillText(STAGE_NAMES[currentStage] || '', 150, 17);
+
+  if (players[0]) {
+    let wpn = players[0].weapon.toUpperCase();
+    if (players[0].rapidFire) wpn += '+R';
+    ctx.fillText('WPN:' + wpn, 200, 12);
+  }
+
+  ctx.fillText('LIVES', 110, 8);
+  ctx.fillText(String(lives), 110, 17);
+  ctx.fillText('REST', 60, 17);
+}
+
+function drawStageIntro() {
+  let alpha = 1;
+  if (stageTimer < 20) alpha = stageTimer / 20;
+  else if (stageTimer > 70) alpha = (90 - stageTimer) / 20;
+  alpha = Math.max(0, Math.min(1, alpha));
+
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, H/2 - 20, W, 40);
+  ctx.fillStyle = '#fff';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('STAGE ' + (currentStage + 1), W/2, H/2 - 2);
+  ctx.fillText(STAGE_NAMES[currentStage], W/2, H/2 + 12);
+  ctx.textAlign = 'start';
+  ctx.globalAlpha = 1;
+}
+
+function render() {
+  ctx.fillStyle = NES_COLORS.black;
+  ctx.fillRect(0, 0, W, H);
+
+  let shakeX = screenShake > 0 ? (Math.random() - 0.5) * screenShake : 0;
+  let shakeY = screenShake > 0 ? (Math.random() - 0.5) * screenShake : 0;
+  ctx.save();
+  ctx.translate(shakeX, shakeY);
+
+  ctx.save();
+  ctx.translate(-Math.round(cameraX), -Math.round(cameraY));
+
+  ctx.fillStyle = NES_COLORS.sky;
+  ctx.fillRect(cameraX, cameraY, W, H);
+
+  if (stageData && stageData.type !== 'vert') {
+    let treeSpacing = 120;
+    for (let tx = Math.floor(cameraX / treeSpacing) * treeSpacing; tx < cameraX + W + treeSpacing; tx += treeSpacing) {
+      let ty = (tileHeight - 2) * TILE - 4;
+      ctx.fillStyle = '#2a7a28';
+      ctx.fillRect(tx + 8, ty - 28, 4, 32);
+      ctx.fillRect(tx, ty - 28, 20, 8);
+      ctx.fillRect(tx + 2, ty - 34, 16, 8);
+      ctx.fillRect(tx - 2, ty - 22, 24, 12);
+      ctx.fillStyle = '#3a9a38';
+      ctx.fillRect(tx, ty - 30, 12, 4);
+    }
+    for (let bx = Math.floor(cameraX / 90) * 90; bx < cameraX + W + 90; bx += 90) {
+      let by = (tileHeight - 1) * TILE - 6;
+      ctx.fillStyle = '#1a5a18';
+      ctx.fillRect(bx + 10, by - 6, 14, 8);
+      ctx.fillStyle = '#2a7a28';
+      ctx.fillRect(bx + 12, by - 8, 10, 6);
+    }
+  }
+
+  if (stageData && stageData.type === 'vert') {
+    ctx.fillStyle = '#101838';
+    ctx.fillRect(0, 0, tileWidth * TILE, tileHeight * TILE);
+    for (let r = 0; r < tileHeight; r += 2) {
+      let wx = 3 * TILE + Math.sin(r * 0.3 + cameraY * 0.05) * TILE;
+      ctx.fillStyle = '#183860';
+      ctx.fillRect(wx, r * TILE, TILE, TILE * 2);
+    }
+  }
+
+  let startCol = Math.floor(cameraX / TILE) - 1;
+  let endCol = Math.floor((cameraX + W) / TILE) + 1;
+  let startRow = Math.floor(cameraY / TILE) - 1;
+  let endRow = Math.floor((cameraY + H) / TILE) + 1;
+
+  for (let r = startRow; r <= endRow; r++) {
+    for (let c = startCol; c <= endCol; c++) {
+      if (r >= 0 && r < tileHeight && c >= 0 && c < tileWidth) {
+        let t = tileMap[r][c];
+        if (t !== TILE_EMPTY) {
+          drawTileCell(c * TILE, r * TILE, t);
+        }
+      }
+    }
+  }
+
+  for (let pt of particles) drawParticle(pt);
+  for (let pu of powerUps) drawPowerUp(pu);
+  for (let e of enemies) drawEnemy(e);
+  for (let eb of enemyBullets) {
+    ctx.fillStyle = '#f44';
+    ctx.fillRect(Math.round(eb.x), Math.round(eb.y), 4, 4);
+  }
+  for (let b of bullets) drawBullet(b);
+  for (let p of players) drawPlayer(p);
+
+  ctx.restore();
+
+  if (gameState === 'playing' || gameState === 'paused' || gameState === 'stage_intro') {
+    drawHUD();
+    if (gameState === 'stage_intro') drawStageIntro();
+  }
+
+  ctx.restore();
+}
+
+function drawTileCell(rx, ry, t) {
+  if (t === TILE_GROUND) {
+    ctx.fillStyle = NES_COLORS.darkBrown;
+    ctx.fillRect(rx, ry, TILE, TILE);
+    ctx.fillStyle = NES_COLORS.green;
+    ctx.fillRect(rx, ry, TILE, 3);
+    ctx.fillStyle = NES_COLORS.ground;
+    ctx.fillRect(rx + 1, ry + 3, TILE - 2, TILE - 3);
+  } else if (t === TILE_PLATFORM) {
+    ctx.fillStyle = NES_COLORS.platform;
+    ctx.fillRect(rx, ry, TILE, 6);
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(rx, ry, TILE, 2);
+  }
+}
+
+function drawTitle() {
+  let alpha = 0.6 + Math.sin(titleBlink * 0.04) * 0.4;
+  ctx.fillStyle = NES_COLORS.black;
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#ff0';
+  ctx.font = '18px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('HUN DOU LUO', W/2, 60);
+  ctx.fillStyle = '#f44';
+  ctx.font = '12px monospace';
+  ctx.fillText('C O N T R A', W/2, 80);
+
+  ctx.fillStyle = '#fff';
+  ctx.font = '8px monospace';
+  ctx.fillText('© 1988 KONAMI', W/2, 105);
+
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#fff';
+  ctx.font = '8px monospace';
+  ctx.fillText('PRESS ENTER', W/2, 150);
+  ctx.globalAlpha = 1;
+
+  ctx.fillStyle = '#888';
+  ctx.font = '7px monospace';
+  ctx.fillText('ARROWS=Move  Z/JUMP  X/SHOOT', W/2, 170);
+  ctx.fillText('P=PAUSE  ↑↓↙↗=AIM  ↓+SPACE=DROP', W/2, 182);
+
+  ctx.fillStyle = '#666';
+  ctx.fillText('HI-SCORE: ' + String(highScore).padStart(6, '0'), W/2, 200);
+
+  ctx.textAlign = 'start';
+}
+
+function gameLoop() {
+  update();
+  ctx.clearRect(0, 0, W, H);
+  if (gameState === 'title') {
+    drawTitle();
+  } else {
+    render();
+  }
+
+  for (let k in KEY_JUST) KEY_JUST[k] = false;
+  requestAnimationFrame(gameLoop);
+}
+
+function init() {
+  gameState = 'title';
+  lives = 3;
+  score = 0;
+  currentStage = 0;
+  loadStage(0);
+  document.getElementById('title-screen').style.display = 'block';
+  document.getElementById('gameover-screen').style.display = 'none';
+  document.getElementById('ending-screen').style.display = 'none';
+  document.getElementById('pause-screen').style.display = 'none';
+}
+
+init();
+gameLoop();
+</script>
+</body>
+</html>

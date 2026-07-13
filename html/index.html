@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>节奏模仿 · Call &amp; Response</title>
+<style>
+  :root{
+    --ink:#2b2b2b;
+    --paper:#f5ecd7;
+    --paper2:#efe3c4;
+    --accent:#ff5d5d;
+    --good:#3fb0ff;
+    --perfect:#ffcf3f;
+    --miss:#8a8a8a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{
+    font-family:'Comic Sans MS','Chalkboard SE','Segoe Print',cursive,sans-serif;
+    background:
+      radial-gradient(circle at 20% 15%, #fff8e6 0%, transparent 40%),
+      radial-gradient(circle at 80% 85%, #ffe9d6 0%, transparent 45%),
+      var(--paper);
+    color:var(--ink);
+    display:flex;align-items:center;justify-content:center;
+    min-height:100vh;overflow:hidden;
+    -webkit-user-select:none;user-select:none;
+  }
+  /* 手绘纸张噪点 */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;opacity:.05;
+    background-image:repeating-linear-gradient(0deg,#000 0 1px,transparent 1px 3px),
+                     repeating-linear-gradient(90deg,#000 0 1px,transparent 1px 3px);
+  }
+  #stage{
+    position:relative;width:min(820px,94vw);height:min(560px,92vh);
+    background:var(--paper2);
+    border:4px solid var(--ink);
+    border-radius:24px 18px 26px 16px/18px 26px 16px 24px;
+    box-shadow:6px 8px 0 rgba(0,0,0,.18), inset 0 0 0 6px rgba(255,255,255,.25);
+    padding:22px;display:flex;flex-direction:column;
+  }
+  .screen{position:absolute;inset:22px;display:none;flex-direction:column;}
+  .screen.active{display:flex;}
+
+  h1{
+    font-size:clamp(32px,6vw,54px);text-align:center;line-height:1.05;
+    transform:rotate(-2deg);letter-spacing:1px;margin-top:6px;
+  }
+  h1 .sub{display:block;font-size:.42em;transform:rotate(1.5deg);color:var(--accent);margin-top:6px;}
+  .center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;text-align:center;}
+  p.lead{font-size:clamp(15px,2.6vw,19px);line-height:1.7;max-width:520px;}
+  kbd{
+    display:inline-block;background:#fff;border:2.5px solid var(--ink);
+    border-radius:8px 6px 9px 5px;padding:2px 12px;margin:0 2px;
+    box-shadow:2px 3px 0 rgba(0,0,0,.2);font-weight:bold;transform:rotate(-1deg);
+  }
+  button.btn{
+    font-family:inherit;font-size:clamp(18px,3vw,24px);font-weight:bold;
+    background:var(--accent);color:#fff;border:3.5px solid var(--ink);
+    padding:12px 34px;border-radius:16px 12px 18px 10px/12px 18px 10px 16px;
+    box-shadow:4px 5px 0 rgba(0,0,0,.25);cursor:pointer;transform:rotate(-1.5deg);
+    transition:transform .08s, box-shadow .08s;
+  }
+  button.btn:hover{transform:rotate(-1.5deg) translate(1px,1px);}
+  button.btn:active{transform:rotate(-1.5deg) translate(3px,4px);box-shadow:1px 1px 0 rgba(0,0,0,.25);}
+
+  /* 游戏屏 */
+  .topbar{display:flex;justify-content:space-between;align-items:center;font-size:16px;}
+  .phase{
+    font-size:clamp(22px,4.5vw,34px);font-weight:bold;text-align:center;margin:4px 0 2px;
+    transform:rotate(-1deg);min-height:1.2em;transition:color .2s;
+  }
+  .phase.listen{color:var(--good);}
+  .phase.play{color:var(--accent);}
+  .combo{font-size:16px;text-align:center;height:22px;color:#a06b00;font-weight:bold;}
+
+  .creatureWrap{flex:1;display:flex;align-items:center;justify-content:center;position:relative;}
+  #creature{width:min(230px,42vw);height:auto;transition:transform .05s;transform-origin:50% 100%;}
+
+  /* 判定文字弹出 */
+  #judge{
+    position:absolute;top:38%;left:50%;transform:translate(-50%,-50%);
+    font-size:clamp(38px,8vw,64px);font-weight:bold;pointer-events:none;opacity:0;
+    text-shadow:3px 4px 0 rgba(0,0,0,.25);
+  }
+  #judge.show{animation:pop .5s ease-out;}
+  @keyframes pop{
+    0%{opacity:0;transform:translate(-50%,-50%) scale(.4) rotate(-8deg);}
+    30%{opacity:1;transform:translate(-50%,-58%) scale(1.15) rotate(4deg);}
+    100%{opacity:0;transform:translate(-50%,-72%) scale(1) rotate(-3deg);}
+  }
+
+  /* 节拍指示条 */
+  .track{
+    height:64px;position:relative;background:#fff;
+    border:3px solid var(--ink);border-radius:14px 10px 14px 10px;
+    margin-top:8px;overflow:hidden;
+  }
+  .beatDot{
+    position:absolute;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;
+    border-radius:50%;background:var(--paper2);border:3px solid var(--ink);
+    transition:transform .1s, background .1s;
+  }
+  .beatDot.hitP{background:var(--perfect);transform:scale(1.35);}
+  .beatDot.hitG{background:var(--good);transform:scale(1.25);}
+  .beatDot.hitM{background:var(--miss);transform:scale(.85);}
+  .beatDot.callOn{background:var(--good);transform:scale(1.3);}
+  .playhead{position:absolute;top:0;bottom:0;width:3px;background:var(--accent);left:0;opacity:0;}
+
+  .spaceHint{text-align:center;font-size:15px;margin-top:8px;color:#666;height:20px;}
+
+  /* 结算 */
+  .grade{font-size:clamp(70px,16vw,130px);font-weight:bold;transform:rotate(-4deg);
+    text-shadow:4px 6px 0 rgba(0,0,0,.2);}
+  .stats{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;font-size:18px;}
+  .stat{background:#fff;border:3px solid var(--ink);border-radius:12px 8px 12px 8px;
+    padding:8px 18px;box-shadow:3px 4px 0 rgba(0,0,0,.18);transform:rotate(-1deg);}
+  .stat b{display:block;font-size:26px;}
+  .sP{color:#d99a00;} .sG{color:var(--good);} .sM{color:var(--miss);}
+  .flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;border-radius:20px;}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="flash" id="flash"></div>
+
+  <!-- 开始屏 -->
+  <section class="screen active" id="scr-start">
+    <h1>节奏模仿<span class="sub">~ Call &amp; Response ~</span></h1>
+    <div class="center">
+      <p class="lead">
+        先<b style="color:var(--good)">听</b>小家伙敲出一段节奏 🥁<br>
+        然后<b style="color:var(--accent)">用同样的节奏</b>回敬它！<br><br>
+        节奏点上按 <kbd>空格</kbd> 敲击<br>
+        判定 <b style="color:#d99a00">Perfect</b> / <b style="color:var(--good)">Good</b> / <b style="color:var(--miss)">Miss</b>
+      </p>
+      <button class="btn" id="btn-start">开 始 ▶ (Enter)</button>
+    </div>
+  </section>
+
+  <!-- 游戏屏 -->
+  <section class="screen" id="scr-game">
+    <div class="topbar">
+      <span id="roundLbl">第 1 / 4 组</span>
+      <span id="bpmLbl">BPM 90</span>
+    </div>
+    <div class="phase" id="phase">准备…</div>
+    <div class="combo" id="combo"></div>
+    <div class="creatureWrap">
+      <div id="judge"></div>
+      <!-- 涂鸦小生物 -->
+      <svg id="creature" viewBox="0 0 200 200">
+        <!-- 身体 -->
+        <path d="M40 150 Q30 80 100 62 Q172 78 160 150 Q150 178 100 176 Q52 180 40 150 Z"
+              fill="#ffd36b" stroke="#2b2b2b" stroke-width="5" stroke-linejoin="round"/>
+        <!-- 左脚 右脚 -->
+        <path d="M70 172 L64 192" stroke="#2b2b2b" stroke-width="6" stroke-linecap="round"/>
+        <path d="M128 172 L134 192" stroke="#2b2b2b" stroke-width="6" stroke-linecap="round"/>
+        <!-- 左手 挥舞 -->
+        <path id="arm" d="M45 120 Q18 118 12 96" fill="none" stroke="#2b2b2b" stroke-width="6" stroke-linecap="round"/>
+        <!-- 眼睛 -->
+        <circle cx="80" cy="105" r="9" fill="#fff" stroke="#2b2b2b" stroke-width="3"/>
+        <circle cx="122" cy="105" r="9" fill="#fff" stroke="#2b2b2b" stroke-width="3"/>
+        <circle id="eyeL" cx="82" cy="107" r="4" fill="#2b2b2b"/>
+        <circle id="eyeR" cx="120" cy="107" r="4" fill="#2b2b2b"/>
+        <!-- 嘴巴 张合 -->
+        <ellipse id="mouth" cx="101" cy="138" rx="16" ry="6" fill="#c0392b" stroke="#2b2b2b" stroke-width="3.5"/>
+        <!-- 腮红 -->
+        <circle cx="60" cy="128" r="7" fill="#ff9a9a" opacity=".8"/>
+        <circle cx="142" cy="128" r="7" fill="#ff9a9a" opacity=".8"/>
+      </svg>
+    </div>
+    <div class="track" id="track">
+      <div class="playhead" id="playhead"></div>
+    </div>
+    <div class="spaceHint" id="spaceHint"></div>
+  </section>
+
+  <!-- 结算屏 -->
+  <section class="screen" id="scr-end">
+    <div class="center">
+      <div class="grade" id="grade">A</div>
+      <div id="gradeMsg" style="font-size:22px;transform:rotate(-1.5deg);"></div>
+      <div class="stats">
+        <div class="stat sP">Perfect<b id="stP">0</b></div>
+        <div class="stat sG">Good<b id="stG">0</b></div>
+        <div class="stat sM">Miss<b id="stM">0</b></div>
+      </div>
+      <button class="btn" id="btn-retry">再来一次 ↻ (Enter)</button>
+    </div>
+  </section>
+</div>
+
+<script>
+"use strict";
+
+/* ============ 音频引擎 ============ */
+let AC = null;
+function ensureAudio(){
+  if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)();
+  if(AC.state==='suspended') AC.resume();
+  return AC;
+}
+function now(){ return AC.currentTime; }
+
+// 通用包络合成
+function tone(t, {freq=440, type='sine', dur=0.12, gain=0.3, sweep=0}={}){
+  const o=AC.createOscillator(), g=AC.createGain();
+  o.type=type; o.frequency.setValueAtTime(freq,t);
+  if(sweep) o.frequency.exponentialRampToValueAtTime(Math.max(30,freq*sweep),t+dur);
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(gain,t+0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g).connect(AC.destination);
+  o.start(t); o.stop(t+dur+0.02);
+}
+function noise(t,{dur=0.08,gain=0.25,hp=1200}={}){
+  const n=Math.floor(AC.sampleRate*dur);
+  const buf=AC.createBuffer(1,n,AC.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<n;i++) d[i]=(Math.random()*2-1);
+  const src=AC.createBufferSource(); src.buffer=buf;
+  const g=AC.createGain(), f=AC.createBiquadFilter();
+  f.type='highpass'; f.frequency.value=hp;
+  g.gain.setValueAtTime(gain,t);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  src.connect(f).connect(g).connect(AC.destination);
+  src.start(t); src.stop(t+dur);
+}
+const kick =t=>tone(t,{freq:140,type:'sine',dur:0.18,gain:0.5,sweep:0.25});
+const snare=t=>{noise(t,{dur:0.14,gain:0.35,hp:1400}); tone(t,{freq:190,type:'triangle',dur:0.1,gain:0.15,sweep:0.5});};
+const hat  =t=>noise(t,{dur:0.04,gain:0.12,hp:6000});
+const callBeep=t=>tone(t,{freq:660,type:'square',dur:0.14,gain:0.28,sweep:0.9});
+const sfxPerfect=t=>{tone(t,{freq:880,type:'square',dur:0.1,gain:0.3}); tone(t+0.06,{freq:1320,type:'square',dur:0.12,gain:0.25});};
+const sfxGood   =t=>tone(t,{freq:620,type:'triangle',dur:0.12,gain:0.28});
+const sfxMiss   =t=>tone(t,{freq:150,type:'sawtooth',dur:0.22,gain:0.25,sweep:0.5});
+
+/* ============ 关卡数据 ============ */
+// 每组：bpm 与节奏型(以“拍”为单位的击打时刻)。一小节4拍。
+const ROUNDS = [
+  { bpm:88,  pattern:[0,1,2,3] },                 // 基础四拍
+  { bpm:96,  pattern:[0,1,1.5,2,3] },             // 加一个切分
+  { bpm:104, pattern:[0,0.5,1.5,2,2.5,3.5] },     // 更密
+  { bpm:112, pattern:[0,0.75,1.5,2,2.5,3,3.75] }, // 挑战
+];
+const BEATS_PER_BAR = 4;
+const PERFECT_MS = 65;
+const GOOD_MS = 130;
+
+/* ============ 游戏状态 ============ */
+const $=id=>document.getElementById(id);
+const screens={start:$('scr-start'),game:$('scr-game'),end:$('scr-end')};
+function show(name){ for(const k in screens) screens[k].classList.toggle('active',k===name); }
+
+let state = null;
+
+function resetTotals(){ return {P:0,G:0,M:0}; }
+let totals = resetTotals();
+
+/* 涂鸦动画 */
+function bounce(strength=1){
+  const c=$('creature');
+  c.style.transform=`translateY(${-14*strength}px) scale(${1+0.06*strength},${1-0.05*strength})`;
+  clearTimeout(bounce._t);
+  bounce._t=setTimeout(()=>{c.style.transform='';},110);
+}
+function mouthOpen(on){
+  $('mouth').setAttribute('ry', on?11:6);
+}
+function armWave(on){
+  $('arm').setAttribute('d', on ? 'M45 120 Q14 95 30 68' : 'M45 120 Q18 118 12 96');
+}
+function showJudge(text,color){
+  const j=$('judge'); j.textContent=text; j.style.color=color;
+  j.classList.remove('show'); void j.offsetWidth; j.classList.add('show');
+}
+function flash(){ const f=$('flash'); f.style.transition='none'; f.style.opacity=.6;
+  requestAnimationFrame(()=>{f.style.transition='opacity .25s';f.style.opacity=0;}); }
+
+/* 在节拍条上布置圆点 */
+function layoutDots(pattern){
+  const track=$('track');
+  track.querySelectorAll('.beatDot').forEach(e=>e.remove());
+  const barLen=BEATS_PER_BAR; // 0..4
+  const padL=6, padR=6;
+  const W=track.clientWidth;
+  const dots=[];
+  pattern.forEach((b,i)=>{
+    const d=document.createElement('div');
+    d.className='beatDot';
+    const x=padL + (b/barLen)*(W-padL-padR);
+    d.style.left=x+'px';
+    track.appendChild(d);
+    dots.push(d);
+  });
+  return dots;
+}
+
+/* ============ 核心循环 ============ */
+function startGame(){
+  ensureAudio();
+  totals=resetTotals();
+  state={ roundIdx:0, combo:0 };
+  show('game');
+  runRound();
+}
+
+function runRound(){
+  const r=ROUNDS[state.roundIdx];
+  const spb=60/r.bpm;                 // 秒/拍
+  const times=r.pattern.map(b=>b*spb); // 相对拍时刻(秒)
+  const barTime=BEATS_PER_BAR*spb;
+
+  $('roundLbl').textContent=`第 ${state.roundIdx+1} / ${ROUNDS.length} 组`;
+  $('bpmLbl').textContent=`BPM ${r.bpm}`;
+  $('combo').textContent = state.combo>1?`连击 ${state.combo}!`:'';
+  const dots=layoutDots(r.pattern);
+
+  // 时间轴：countIn(1小节metronome) -> CALL(1小节) -> RESPONSE(1小节)
+  const t0=now()+0.35;
+  const callStart=t0+barTime;         // Call开始
+  const respStart=callStart+barTime;  // Response开始
+  state.respStart=respStart;
+  state.times=times;                  // 相对时刻
+  state.hits=new Array(times.length).fill(false);
+  state.dots=dots;
+  state.spb=spb;
+  state.acceptInput=false;
+
+  // 背景 groove：三小节 metronome(count-in/call/resp 都打底)
+  const totalBeats=BEATS_PER_BAR*3;
+  for(let i=0;i<totalBeats;i++){
+    const tb=t0+i*spb;
+    if(i%4===0) kick(tb); else if(i%2===0) snare(tb); 
+    hat(tb); hat(tb+spb/2);
+  }
+
+  // Count-in 视觉
+  setPhase('准备…','',0);
+  scheduleAt(t0, ()=>setPhase('准备…','',0));
+
+  // CALL：播放示范音 + 视觉
+  scheduleAt(callStart-0.05, ()=>{ setPhase('👂 听！','listen'); $('spaceHint').textContent='(仔细听节奏)'; });
+  times.forEach((rt,i)=>{
+    const at=callStart+rt;
+    scheduleAt(at, ()=>{
+      callBeep(at<now()?now():at); // 保底
+    });
+    // 视觉在同一时刻
+    scheduleVisual(at, ()=>{
+      bounce(1); mouthOpen(true); dots[i].classList.add('callOn');
+      setTimeout(()=>{mouthOpen(false); dots[i].classList.remove('callOn');},120);
+    });
+  });
+  // 精确音频排程（用 AudioContext 时间，独立于视觉）
+  times.forEach(rt=> callBeep(callStart+rt));
+
+  // RESPONSE：玩家模仿
+  scheduleAt(respStart-0.05, ()=>{
+    setPhase('🥁 跟我做！','play');
+    $('spaceHint').textContent='按 空格 敲击！';
+    state.acceptInput=true;
+    // 重置圆点视觉
+    dots.forEach(d=>d.className='beatDot');
+    startPlayhead(respStart, barTime);
+  });
+
+  // Response 结束 -> 结算漏敲 -> 下一组
+  scheduleAt(respStart+barTime+GOOD_MS/1000+0.05, ()=>{
+    finishRound();
+  });
+}
+
+function setPhase(txt,cls){
+  const p=$('phase'); p.textContent=txt; p.className='phase '+(cls||'');
+}
+
+/* 用 AudioContext 时间驱动的“逻辑事件”排程（更稳），fallback 到 setTimeout */
+function scheduleAt(t, fn){
+  const delay=Math.max(0,(t-now()))*1000;
+  setTimeout(fn, delay);
+}
+function scheduleVisual(t, fn){ scheduleAt(t, fn); }
+
+/* 播放头动画 */
+function startPlayhead(start, dur){
+  const ph=$('playhead'), track=$('track');
+  ph.style.opacity=1;
+  const W=track.clientWidth, padL=6, padR=6;
+  function frame(){
+    const el=now()-start;
+    if(el<0){ requestAnimationFrame(frame); return; }
+    if(!state||!state.acceptInput){ ph.style.opacity=0; return; }
+    const p=Math.min(1,el/dur);
+    ph.style.left=(padL+p*(W-padL-padR))+'px';
+    if(p<1) requestAnimationFrame(frame); else ph.style.opacity=0;
+  }
+  requestAnimationFrame(frame);
+}
+
+/* 玩家敲击判定 */
+function onTap(){
+  if(!state||!state.acceptInput) return;
+  const t=now()-state.respStart; // 相对Response起点秒
+  armWave(true); setTimeout(()=>armWave(false),90);
+  bounce(0.8);
+
+  // 找最近未命中的目标
+  let best=-1,bestErr=1e9;
+  for(let i=0;i<state.times.length;i++){
+    if(state.hits[i]) continue;
+    const err=Math.abs(t-state.times[i]);
+    if(err<bestErr){bestErr=err;best=i;}
+  }
+  if(best<0){ return; }
+  const errMs=bestErr*1000;
+  const dot=state.dots[best];
+  if(errMs<=GOOD_MS){
+    state.hits[best]=true;
+    if(errMs<=PERFECT_MS){
+      totals.P++; state.combo++;
+      dot.className='beatDot hitP';
+      showJudge('PERFECT!','#ffcf3f'); sfxPerfect(now()); flash();
+    }else{
+      totals.G++; state.combo++;
+      dot.className='beatDot hitG';
+      showJudge('GOOD','#3fb0ff'); sfxGood(now());
+    }
+  }else{
+    // 敲空了/离太远
+    totals.M++; state.combo=0;
+    showJudge('MISS','#8a8a8a'); sfxMiss(now());
+  }
+  $('combo').textContent = state.combo>1?`连击 ${state.combo}!`:'';
+}
+
+/* 一组结束：把没敲的目标记为 Miss */
+function finishRound(){
+  state.acceptInput=false;
+  let missAdded=false;
+  state.hits.forEach((h,i)=>{ if(!h){ totals.M++; state.dots[i].className='beatDot hitM'; missAdded=true; } });
+  if(missAdded) state.combo=0;
+
+  state.roundIdx++;
+  if(state.roundIdx>=ROUNDS.length){
+    setTimeout(endGame, 650);
+  }else{
+    setPhase('下一组…','');
+    setTimeout(runRound, 800);
+  }
+}
+
+/* ============ 结算 ============ */
+function endGame(){
+  const {P,G,M}=totals;
+  const total=P+G+M || 1;
+  const score=(P*1 + G*0.5)/total; // 0..1
+  let grade,msg,color;
+  if(score>=0.95){grade='S';msg='完美演出！🎉 天才鼓手！';color='#ffcf3f';}
+  else if(score>=0.8){grade='A';msg='高分通过！很有节奏感～';color='#3fb0ff';}
+  else if(score>=0.6){grade='B';msg='合格！继续练习会更棒。';color='#7ec86a';}
+  else if(score>=0.35){grade='C';msg='勉强跟上，再来一次？';color='#ff9a3f';}
+  else {grade='D';msg='节奏跑掉啦，别灰心！';color='#ff5d5d';}
+
+  $('stP').textContent=P; $('stG').textContent=G; $('stM').textContent=M;
+  const g=$('grade'); g.textContent=grade; g.style.color=color;
+  $('gradeMsg').textContent=msg;
+  show('end');
+  // 结算小音效
+  if(score>=0.8){[0,0.12,0.24].forEach((d,i)=>tone(now()+d,{freq:[660,880,1320][i],type:'square',dur:0.18,gain:0.28}));}
+}
+
+/* ============ 输入绑定 ============ */
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'){
+    e.preventDefault();
+    if(screens.game.classList.contains('active')) onTap();
+    else if(screens.start.classList.contains('active')) startGame();
+  }
+  if(e.code==='Enter'){
+    e.preventDefault();
+    if(screens.start.classList.contains('active')) startGame();
+    else if(screens.end.classList.contains('active')) startGame();
+  }
+});
+$('btn-start').addEventListener('click',startGame);
+$('btn-retry').addEventListener('click',startGame);
+// 防止空格滚动/触发按钮
+window.addEventListener('keydown',e=>{ if(e.code==='Space'&&e.target.tagName==='BUTTON') e.preventDefault(); });
+</script>
+</body>
+</html>

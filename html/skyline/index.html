@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>城市：天际线 — Web 版</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI', system-ui, sans-serif; }
+    #game-container { position: absolute; inset: 0; z-index: 1; }
+    canvas { display: block; }
+
+    #ui-layer {
+      position: absolute; inset: 0; z-index: 10; pointer-events: none;
+      display: flex; flex-direction: column; justify-content: space-between;
+    }
+    #top-bar, #bottom-bar, #tool-submenu, #info-panel, #budget-panel, #notification { pointer-events: auto; }
+
+    #top-bar {
+      display: flex; align-items: center; gap: 12px; padding: 8px 16px;
+      background: linear-gradient(180deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 100%);
+      color: #fff; font-size: 13px; min-height: 44px;
+    }
+    #top-bar .demand { display: flex; gap: 4px; margin-right: 12px; }
+    #top-bar .demand-item { display: flex; flex-direction: column; align-items: center; min-width: 40px; }
+    #top-bar .demand-item .label { font-size: 10px; opacity: 0.8; }
+    #top-bar .demand-item .bar { width: 36px; height: 5px; background: rgba(255,255,255,0.2); border-radius: 2px; overflow: hidden; }
+    #top-bar .demand-item .bar .fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+    #top-bar .demand-item .bar .fill.r { background: #4caf50; }
+    #top-bar .demand-item .bar .fill.c { background: #2196f3; }
+    #top-bar .demand-item .bar .fill.i { background: #ff9800; }
+    #top-bar .stat { display: flex; align-items: center; gap: 4px; }
+    #top-bar .stat .icon { font-size: 16px; }
+    #top-bar .stat .val { font-weight: 600; }
+
+    #bottom-bar {
+      display: flex; align-items: stretch; height: 56px;
+      background: linear-gradient(0deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 100%);
+      padding: 0 8px; gap: 2px;
+    }
+    #bottom-bar .tool-btn {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 4px 12px; min-width: 64px; border: none; background: transparent; color: #ccc;
+      cursor: pointer; font-size: 11px; border-radius: 4px; transition: all 0.15s;
+      font-family: inherit;
+    }
+    #bottom-bar .tool-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+    #bottom-bar .tool-btn.active { background: rgba(255,255,255,0.2); color: #fff; }
+    #bottom-bar .tool-btn .emoji { font-size: 22px; margin-bottom: 1px; }
+
+    #tool-submenu {
+      position: absolute; bottom: 62px; left: 8px;
+      background: rgba(20,20,20,0.95); border-radius: 6px; padding: 6px;
+      display: none; flex-direction: column; gap: 2px; min-width: 160px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    #tool-submenu.show { display: flex; }
+    #tool-submenu .sub-item {
+      padding: 8px 12px; border: none; background: transparent; color: #ddd; cursor: pointer;
+      font-size: 12px; text-align: left; border-radius: 3px; font-family: inherit;
+    }
+    #tool-submenu .sub-item:hover { background: rgba(255,255,255,0.1); }
+    #tool-submenu .sub-item.selected { background: rgba(255,255,255,0.15); color: #fff; }
+
+    #info-panel {
+      position: absolute; top: 56px; right: 12px; width: 240px;
+      background: rgba(20,20,20,0.93); border-radius: 8px; padding: 12px;
+      color: #ddd; font-size: 12px; display: none; border: 1px solid rgba(255,255,255,0.1);
+    }
+    #info-panel.show { display: block; }
+    #info-panel h3 { font-size: 14px; margin-bottom: 8px; color: #fff; }
+    #info-panel .row { display: flex; justify-content: space-between; padding: 3px 0; }
+    #info-panel .row .val { color: #fff; }
+
+    #budget-panel {
+      position: absolute; bottom: 66px; right: 12px; width: 300px;
+      background: rgba(20,20,20,0.93); border-radius: 8px; padding: 16px;
+      color: #ddd; font-size: 13px; display: none; border: 1px solid rgba(255,255,255,0.1);
+    }
+    #budget-panel.show { display: block; }
+    #budget-panel h3 { font-size: 16px; margin-bottom: 10px; color: #fff; }
+    #budget-panel .slider-row { margin: 8px 0; }
+    #budget-panel .slider-row label { display: block; margin-bottom: 2px; }
+    #budget-panel .slider-row input { width: 100%; cursor: pointer; }
+    #budget-panel .slider-row .range-info { display: flex; justify-content: space-between; font-size: 11px; color: #999; }
+
+    #notification {
+      position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.85); color: #ffcc00; padding: 8px 20px; border-radius: 6px;
+      font-size: 13px; opacity: 0; transition: opacity 0.5s;
+    }
+    #notification.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div id="game-container"></div>
+  <div id="ui-layer">
+    <div id="top-bar">
+      <div class="demand" id="demand-bars"></div>
+      <div class="stat"><span class="icon">👤</span><span class="val" id="stat-pop">0</span></div>
+      <div class="stat"><span class="icon">💰</span><span class="val" id="stat-money">70000</span></div>
+      <div class="stat"><span class="icon">📅</span><span class="val" id="stat-day">Day 1</span></div>
+    </div>
+    <div style="flex:1;pointer-events:none"></div>
+    <div id="bottom-bar"></div>
+    <div id="tool-submenu"></div>
+    <div id="info-panel"></div>
+    <div id="budget-panel"></div>
+    <div id="notification"></div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

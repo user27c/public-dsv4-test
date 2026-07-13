@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>塔防：星界守护者</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a0a12;font-family:'Segoe UI',system-ui,sans-serif;touch-action:none;-webkit-user-select:none;user-select:none}
+canvas{display:block;position:absolute;top:0;left:0;width:100%;height:100%}
+#ui{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10}
+#ui>*{pointer-events:auto}
+#top-bar{position:absolute;top:0;left:0;right:0;height:52px;display:flex;align-items:center;gap:8px;padding:6px 12px;background:linear-gradient(180deg,rgba(10,10,20,.95),rgba(10,10,20,.85));border-bottom:1px solid rgba(100,140,255,.2);flex-wrap:wrap}
+.stat{display:flex;align-items:center;gap:4px;color:#c8d6e5;font-size:13px;white-space:nowrap}
+.stat .lbl{opacity:.7;font-size:11px}
+.stat .val{font-weight:700;color:#fff;min-width:24px;text-align:center}
+.btn{background:rgba(60,90,160,.4);border:1px solid rgba(100,140,220,.4);color:#c8d6e5;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:12px;transition:all .15s;white-space:nowrap}
+.btn:hover{background:rgba(80,110,200,.6);border-color:rgba(120,160,255,.6);color:#fff}
+.btn:active{transform:scale(.96)}
+.btn.primary{background:rgba(40,150,80,.5);border-color:rgba(60,200,100,.5)}
+.btn.primary:hover{background:rgba(50,180,100,.6)}
+.btn.danger{background:rgba(180,40,40,.5);border-color:rgba(220,60,60,.5)}
+.btn.warn{background:rgba(180,140,20,.5);border-color:rgba(220,180,40,.5)}
+#bottom-panel{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(0deg,rgba(10,10,20,.95),rgba(10,10,20,.85));border-top:1px solid rgba(100,140,255,.2);padding:6px 10px}
+.tree-tabs{display:flex;gap:2px;margin-bottom:4px}
+.tree-tab{flex:1;max-width:120px;background:rgba(30,40,70,.6);border:1px solid rgba(60,80,140,.3);color:#8899bb;padding:4px 8px;text-align:center;border-radius:4px 4px 0 0;cursor:pointer;font-size:11px;transition:all .15s}
+.tree-tab.active{background:rgba(50,70,130,.7);border-color:rgba(100,140,255,.6);color:#fff}
+.tower-row{display:flex;gap:6px;flex-wrap:wrap}
+.tower-card{background:rgba(20,25,50,.8);border:1px solid rgba(60,80,140,.3);border-radius:6px;padding:6px 8px;cursor:pointer;text-align:center;transition:all .15s;min-width:56px;position:relative}
+.tower-card:hover{border-color:rgba(100,140,240,.6);background:rgba(30,40,80,.8)}
+.tower-card.selected{border-color:#4af;background:rgba(30,50,100,.8);box-shadow:0 0 12px rgba(68,170,255,.3)}
+.tower-card .ticon{font-size:20px;line-height:1}
+.tower-card .tname{font-size:10px;color:#aabbcc;margin-top:2px}
+.tower-card .tcost{font-size:10px;color:#ffcc44;font-weight:700}
+#tower-info{position:absolute;right:8px;top:60px;background:rgba(10,10,25,.92);border:1px solid rgba(100,140,255,.3);border-radius:8px;padding:12px;width:180px;display:none}
+#tower-info.visible{display:block}
+#tower-info h3{color:#fff;font-size:14px;margin-bottom:6px}
+#tower-info .stat-row{display:flex;justify-content:space-between;color:#aabbcc;font-size:11px;padding:2px 0}
+#tower-info .stat-row span:last-child{color:#fff}
+#tower-info .btn-row{display:flex;gap:6px;margin-top:8px}
+#tower-info .btn-row .btn{flex:1;text-align:center}
+#pause-overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+#pause-overlay.visible{display:flex}
+#pause-overlay h2{color:#fff;font-size:24px;margin-bottom:16px}
+#pause-overlay .btn{min-width:160px;text-align:center;font-size:14px;padding:10px 20px}
+#message{position:absolute;top:60px;left:50%;transform:translateX(-50%);color:#ffcc44;font-size:14px;font-weight:700;text-shadow:0 0 10px rgba(255,200,60,.5);pointer-events:none;opacity:0;transition:opacity .3s}
+#message.show{opacity:1}
+@media(max-width:768px){
+  #top-bar{height:40px;padding:4px 8px;gap:4px}
+  .stat{font-size:11px}.stat .lbl{font-size:9px}
+  .btn{font-size:10px;padding:3px 8px}
+  #bottom-panel{padding:4px 6px}
+  .tower-card{min-width:44px;padding:4px 6px}
+  .tower-card .ticon{font-size:16px}
+  .tower-card .tname{font-size:9px}
+  .tower-card .tcost{font-size:9px}
+  #tower-info{width:150px;right:4px;padding:8px}
+}
+@media(max-width:480px){
+  #top-bar{height:36px;padding:2px 6px;gap:2px}
+  .stat{font-size:10px}.btn{font-size:9px;padding:2px 6px}
+  .tower-card{min-width:38px;padding:3px 4px}
+  #tower-info{width:130px;font-size:10px}
+}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui">
+  <div id="top-bar">
+    <div class="stat"><span class="lbl">波次</span><span class="val" id="wave-num">1</span></div>
+    <div class="stat"><span class="lbl">❤️</span><span class="val" id="lives">20</span></div>
+    <div class="stat"><span class="lbl">🪙</span><span class="val" id="gold">250</span></div>
+    <button class="btn primary" id="btn-start">▶ 开始</button>
+    <button class="btn" id="btn-speed">⏩ x1</button>
+    <button class="btn" id="btn-pause">⏸</button>
+    <button class="btn warn" id="btn-save">💾</button>
+  </div>
+  <div id="message"></div>
+  <div id="tower-info">
+    <h3 id="ti-name">箭塔</h3>
+    <div class="stat-row"><span>伤害</span><span id="ti-dmg">15</span></div>
+    <div class="stat-row"><span>射程</span><span id="ti-range">150</span></div>
+    <div class="stat-row"><span>攻速</span><span id="ti-rate">0.8s</span></div>
+    <div class="stat-row"><span>等级</span><span id="ti-level">1</span></div>
+    <div class="btn-row">
+      <button class="btn primary" id="btn-upgrade">升级</button>
+      <button class="btn danger" id="btn-sell">出售</button>
+    </div>
+  </div>
+  <div id="bottom-panel">
+    <div class="tree-tabs" id="tree-tabs">
+      <button class="tree-tab active" data-tree="0">⚙️ 工程</button>
+      <button class="tree-tab" data-tree="1">🔥 元素</button>
+      <button class="tree-tab" data-tree="2">🌿 生物</button>
+    </div>
+    <div class="tower-row" id="tower-row"></div>
+  </div>
+  <div id="pause-overlay">
+    <h2>⏸ 暂停</h2>
+    <button class="btn primary" id="btn-resume">继续游戏</button>
+    <button class="btn warn" id="btn-quick-save">保存进度</button>
+    <button class="btn" id="btn-quick-load">读取进度</button>
+    <button class="btn danger" id="btn-restart">重新开始</button>
+  </div>
+</div>
+
+<script>
+// ==================== CONSTANTS ====================
+const TILE = 32;
+const MAP_W = 40, MAP_H = 30;
+const WORLD_W = MAP_W * TILE, WORLD_H = MAP_H * TILE;
+const TILE_PATH = 0, TILE_GRASS = 1, TILE_ROCK = 2, TILE_WATER = 3;
+
+const TREE_NAMES = ['工程系','元素系','生物系'];
+const TREE_ICONS = ['⚙️','🔥','🌿'];
+
+const TOWER_DEFS = [
+  // Engineering (tree 0)
+  {tree:0,level:1,name:'箭塔',icon:'🏹',cost:50,dmg:15,range:150,rate:0.8,color:'#88ccff',projColor:'#aaddff',projSpd:400,
+   desc:'快速射击，基础防御'},
+  {tree:0,level:2,name:'炮塔',icon:'💣',cost:120,dmg:45,range:130,rate:2.2,color:'#ff8844',projColor:'#ffaa66',projSpd:280,
+   splash:60,desc:'范围爆炸伤害'},
+  {tree:0,level:3,name:'磁轨炮',icon:'⚡',cost:300,dmg:200,range:200,rate:3.5,color:'#44aaff',projColor:'#88ddff',projSpd:600,
+   pierce:99,desc:'穿透直线，极高伤害'},
+  // Elemental (tree 1)
+  {tree:1,level:1,name:'火塔',icon:'🔥',cost:60,dmg:10,range:140,rate:1.0,color:'#ff4444',projColor:'#ff6644',projSpd:320,
+   burn:3,desc:'灼烧目标3秒'},
+  {tree:1,level:2,name:'冰塔',icon:'❄️',cost:140,dmg:18,range:150,rate:1.5,color:'#44ccff',projColor:'#aaddff',projSpd:300,
+   slow:0.5,slowDur:2,desc:'减速敌人50%'},
+  {tree:1,level:3,name:'雷塔',icon:'🌩️',cost:320,dmg:55,range:160,rate:2.0,color:'#cc44ff',projColor:'#ddaaff',projSpd:350,
+   chain:3,desc:'连锁闪电，弹射3个目标'},
+  // Biological (tree 2)
+  {tree:2,level:1,name:'毒藤',icon:'🌿',cost:55,dmg:8,range:160,rate:0.6,color:'#44cc44',projColor:'#88ff88',projSpd:300,
+   poison:5,desc:'持续毒素伤害'},
+  {tree:2,level:2,name:'缠绕',icon:'🪢',cost:130,dmg:25,range:140,rate:2.0,color:'#88aa44',projColor:'#bbdd88',projSpd:260,
+   root:1.5,desc:'定身敌人1.5秒'},
+  {tree:2,level:3,name:'治愈光环',icon:'💚',cost:280,dmg:0,range:120,rate:0,color:'#44ff88',projColor:'#aaffcc',projSpd:0,
+   healAura:0.3,desc:'周围塔攻速+30%'},
+];
+
+const ENEMY_DEFS = {
+  scout:{name:'侦察兵',hp:40,spd:2.8,reward:8,color:'#ff6666',size:10,dmg:1},
+  soldier:{name:'步兵',hp:100,spd:1.6,reward:15,color:'#ff9944',size:13,dmg:1},
+  tank:{name:'重装兵',hp:280,spd:0.8,reward:30,color:'#aa44ff',size:17,dmg:2},
+  healer:{name:'治疗者',hp:70,spd:1.3,reward:20,color:'#44ff88',size:12,dmg:1,heal:3,healRng:80},
+  boss:{name:'Boss',hp:1200,spd:0.5,reward:150,color:'#ff2244',size:24,dmg:5,boss:true},
+};
+
+// ==================== SIMPLEX NOISE ====================
+class SimplexNoise {
+  constructor(seed=0){
+    this.perm=new Uint8Array(512);
+    this.grad3=[[1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],[1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],[0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]];
+    let s=seed|0,p=new Uint8Array(256);
+    for(let i=0;i<256;i++)p[i]=i;
+    for(let i=255;i>0;i--){s=(s*16807+0)%2147483647;let j=s%i;let t=p[i];p[i]=p[j];p[j]=t}
+    for(let i=0;i<512;i++)this.perm[i]=p[i&255];
+  }
+  dot(g,x,y){return g[0]*x+g[1]*y}
+  noise2D(xin,yin){
+    let F2=0.5*(Math.sqrt(3)-1),G2=(3-Math.sqrt(3))/6;
+    let s=(xin+yin)*F2,i=Math.floor(xin+s),j=Math.floor(yin+s);
+    let t=(i+j)*G2,X0=i-t,Y0=j-t,x0=xin-X0,y0=yin-Y0;
+    let i1,j1;
+    if(x0>y0){i1=1;j1=0}else{i1=0;j1=1}
+    let x1=x0-i1+G2,y1=y0-j1+G2,x2=x0-1+2*G2,y2=y0-1+2*G2;
+    let ii=i&255,jj=j&255;
+    let gi0=this.perm[ii+this.perm[jj]]%12,gi1=this.perm[ii+i1+this.perm[jj+j1]]%12,gi2=this.perm[ii+1+this.perm[jj+1]]%12;
+    let n0=0,n1=0,n2=0;
+    let t0=0.5-x0*x0-y0*y0;if(t0>0){t0*=t0;n0=t0*t0*this.dot(this.grad3[gi0],x0,y0)}
+    let t1=0.5-x1*x1-y1*y1;if(t1>0){t1*=t1;n1=t1*t1*this.dot(this.grad3[gi1],x1,y1)}
+    let t2=0.5-x2*x2-y2*y2;if(t2>0){t2*=t2;n2=t2*t2*this.dot(this.grad3[gi2],x2,y2)}
+    return 70*(n0+n1+n2);
+  }
+}
+
+// ==================== GAME STATE ====================
+const G = {
+  map:[], path:[], towers:[], enemies:[], projectiles:[], particles:[],
+  gold:250, lives:20, wave:1, waveActive:false, waveEnemiesLeft:0,
+  selectedTree:0, selectedTowerIdx:-1, selectedPlacedTower:null,
+  cameraX:0, cameraY:0, zoom:1, targetZoom:1,
+  dragging:false, dragX:0, dragY:0, dragCX:0, dragCY:0,
+  speed:1, paused:false, gameOver:false, seed:0,
+  spawnTimer:0, spawnQueue:[], spawnInterval:0.8,
+  msgText:'', msgTimer:0,
+  mouseWX:0, mouseWY:0,
+  audioCtx:null, audioOn:true,
+  spawnPoint:{x:0,y:0}, basePoint:{x:MAP_W-2,y:Math.floor(MAP_H/2)},
+};
+
+// ==================== MAP GENERATION ====================
+function generateMap(seed){
+  G.seed=seed;
+  const noise=new SimplexNoise(seed);
+  G.map=new Uint8Array(MAP_W*MAP_H);
+  // Generate terrain from noise
+  for(let y=0;y<MAP_H;y++){
+    for(let x=0;x<MAP_W;x++){
+      let v=noise.noise2D(x*0.12,y*0.12)+0.3*noise.noise2D(x*0.06+100,y*0.06+100);
+      let idx=y*MAP_W+x;
+      if(v<-0.15)G.map[idx]=TILE_WATER;
+      else if(v<0.15)G.map[idx]=TILE_ROCK;
+      else G.map[idx]=TILE_GRASS;
+    }
+  }
+  // Place spawn and base areas
+  let sx=1,sy=Math.floor(MAP_H/2)+Math.floor((Math.random()-0.5)*6);
+  let bx=MAP_W-2,by=Math.floor(MAP_H/2)+Math.floor((Math.random()-0.5)*6);
+  sy=Math.max(2,Math.min(MAP_H-3,sy));
+  by=Math.max(2,Math.min(MAP_H-3,by));
+  G.spawnPoint={x:sx*TILE+TILE/2,y:sy*TILE+TILE/2};
+  G.basePoint={x:bx*TILE+TILE/2,y:by*TILE+TILE/2};
+  // Clear spawn and base areas
+  for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
+    let tx=sx+dx,ty=sy+dy;
+    if(tx>=0&&tx<MAP_W&&ty>=0&&ty<MAP_H)G.map[ty*MAP_W+tx]=TILE_GRASS;
+    tx=bx+dx;ty=by+dy;
+    if(tx>=0&&tx<MAP_W&&ty>=0&&ty<MAP_H)G.map[ty*MAP_W+tx]=TILE_GRASS;
+  }
+  // Mark spawn and base tiles
+  G.map[sy*MAP_W+sx]=TILE_GRASS;
+  G.map[by*MAP_W+bx]=TILE_GRASS;
+  // Carve path with fallback
+  let path=aStar({x:sx,y:sy},{x:bx,y:by});
+  if(!path){
+    for(let y=0;y<MAP_H;y++)for(let x=0;x<MAP_W;x++)
+      if(G.map[y*MAP_W+x]===TILE_WATER)G.map[y*MAP_W+x]=TILE_GRASS;
+    path=aStar({x:sx,y:sy},{x:bx,y:by});
+  }
+  G.path=path||[{x:sx,y:sy}];
+  for(let p of path){
+    let idx=p.y*MAP_W+p.x;
+    G.map[idx]=TILE_PATH;
+    // Widen path slightly
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+      let tx=p.x+dx,ty=p.y+dy;
+      if(tx>=0&&tx<MAP_W&&ty>=0&&ty<MAP_H&&G.map[ty*MAP_W+tx]===TILE_GRASS&&Math.random()<0.3){
+        G.map[ty*MAP_W+tx]=TILE_PATH;
+      }
+    }
+  }
+}
+
+function isBuildable(tx,ty){
+  if(tx<0||tx>=MAP_W||ty<0||ty>=MAP_H)return false;
+  let idx=ty*MAP_W+tx;
+  if(G.map[idx]!==TILE_GRASS)return false;
+  // Check no tower exists here
+  for(let t of G.towers)if(t.tx===tx&&t.ty===ty)return false;
+  // Check path still exists if we place here (don't block path)
+  let orig=G.map[idx];
+  G.map[idx]=TILE_ROCK;
+  let newPath=aStar(
+    {x:Math.floor(G.spawnPoint.x/TILE),y:Math.floor(G.spawnPoint.y/TILE)},
+    {x:Math.floor(G.basePoint.x/TILE),y:Math.floor(G.basePoint.y/TILE)}
+  );
+  G.map[idx]=orig;
+  return newPath!==null;
+}
+
+// ==================== A* PATHFINDING ====================
+function aStar(start,end){
+  const W=MAP_W,H=MAP_H;
+  const dirs=[[0,-1],[0,1],[-1,0],[1,0],[-1,-1],[-1,1],[1,-1],[1,1]];
+  const INF=1e9;
+  let open=new Float64Array(W*H);
+  let gScore=new Float64Array(W*H);
+  let cameFrom=new Int32Array(W*H);
+  gScore.fill(INF);
+  let h=(x,y)=>Math.hypot(x-end.x,y-end.y);
+  let idx=(x,y)=>y*W+x;
+  let sidx=idx(start.x,start.y);
+  open.fill(0);
+  gScore[sidx]=0;
+  let openSet=[{x:start.x,y:start.y,f:h(start.x,start.y)}];
+  let push=(x,y,f)=>{openSet.push({x,y,f});let i=openSet.length-1;while(i>0){let p=(i-1)>>1;if(openSet[p].f<=f)break;openSet[i]=openSet[p];i=p}openSet[i]={x,y,f}};
+  let pop=()=>{
+    let r=openSet[0],last=openSet.pop();
+    if(openSet.length>0){let i=0;while(1){let l=2*i+1,r=2*i+2,small=i;if(l<openSet.length&&openSet[l].f<openSet[small].f)small=l;if(r<openSet.length&&openSet[r].f<openSet[small].f)small=r;if(small===i)break;openSet[i]=openSet[small];i=small}openSet[i]=last}
+    return r;
+  };
+  while(openSet.length>0){
+    let cur=pop();
+    let cidx=idx(cur.x,cur.y);
+    if(cur.x===end.x&&cur.y===end.y){
+      let path=[];
+      let cx=end.x,cy=end.y;
+      while(cx!==start.x||cy!==start.y){
+        path.push({x:cx,y:cy});
+        let n=cameFrom[idx(cx,cy)];
+        cx=n%W;cy=Math.floor(n/W);
+      }
+      path.push({x:start.x,y:start.y});
+      path.reverse();
+      return path;
+    }
+    for(let[d,dy]of dirs.entries()){
+      let nx=cur.x+dy[0],ny=cur.y+dy[1];
+      if(nx<0||nx>=W||ny<0||ny>=H)continue;
+      let nidx=idx(nx,ny);
+      if(G.map[nidx]===TILE_WATER||G.map[nidx]===TILE_ROCK)continue;
+      let cost=d<4?1:1.414;
+      let tg=gScore[cidx]+cost;
+      if(tg<gScore[nidx]){
+        gScore[nidx]=tg;
+        cameFrom[nidx]=cidx;
+        push(nx,ny,tg+h(nx,ny));
+      }
+    }
+  }
+  return null;
+}
+
+// ==================== TOWERS ====================
+function getTowerDef(tree,level){
+  return TOWER_DEFS.find(t=>t.tree===tree&&t.level===level);
+}
+
+function placeTower(tx,ty,tree){
+  let def=getTowerDef(tree,1);
+  if(!def)return false;
+  if(G.gold<def.cost)return false;
+  if(!isBuildable(tx,ty))return false;
+  G.gold-=def.cost;
+  let t={tx,ty,worldX:tx*TILE+TILE/2,worldY:ty*TILE+TILE/2,tree,level:1,cooldown:0,def};
+  t.range=def.range; t.dmg=def.dmg; t.rate=def.rate;
+  G.towers.push(t);
+  // Block tile
+  G.map[ty*MAP_W+tx]=TILE_ROCK;
+  G._ghostTX=-1;
+  playSfx('place');
+  return true;
+}
+
+function upgradeTower(tower){
+  if(tower.level>=3)return false;
+  let ndef=getTowerDef(tower.tree,tower.level+1);
+  if(!ndef)return false;
+  if(G.gold<ndef.cost)return false;
+  G.gold-=ndef.cost;
+  tower.level++;
+  tower.def=ndef;
+  tower.range=ndef.range;
+  tower.dmg=ndef.dmg;
+  tower.rate=ndef.rate;
+  playSfx('upgrade');
+  return true;
+}
+
+function sellTower(tower){
+  let totalCost=0;
+  for(let lv=1;lv<=tower.level;lv++){
+    let d=getTowerDef(tower.tree,lv);
+    if(d)totalCost+=d.cost;
+  }
+  let refund=Math.floor(totalCost*0.6);
+  G.gold+=refund;
+  // Remove tower
+  let idx=G.towers.indexOf(tower);
+  if(idx>=0)G.towers.splice(idx,1);
+  // Unblock tile
+  G.map[tower.ty*MAP_W+tower.tx]=TILE_GRASS;
+  if(G.selectedPlacedTower===tower)G.selectedPlacedTower=null;
+  G._ghostTX=-1;
+  updateTowerInfo();
+  playSfx('sell');
+}
+
+function findTowerAt(tx,ty){
+  return G.towers.find(t=>t.tx===tx&&t.ty===ty);
+}
+
+function updateTowers(dt){
+  for(let t of G.towers){
+    let rateMult=1+(t._healBuff||0);
+    t._healBuff=Math.max(0,(t._healBuff||0)-dt*0.2);
+    if(t.def.healAura){
+      for(let ot of G.towers){
+        if(ot===t)continue;
+        let d=Math.hypot(t.worldX-ot.worldX,t.worldY-ot.worldY);
+        if(d<=t.range)ot._healBuff=Math.max(ot._healBuff||0,t.def.healAura);
+      }
+      if(Math.random()<dt*3){
+        let a=Math.random()*Math.PI*2;
+        G.particles.push({x:t.worldX+Math.cos(a)*18,y:t.worldY+Math.sin(a)*18,vx:Math.cos(a)*12,vy:Math.sin(a)*12,life:0.7,maxLife:0.7,size:2+Math.random()*3,color:'#44ff88',alpha:0.6});
+      }
+      continue;
+    }
+    t.cooldown-=dt*G.speed*rateMult;
+    if(t.cooldown<=0){
+      let target=null,bestProgress=-1;
+      for(let e of G.enemies){
+        if(!e.alive)continue;
+        let dist=Math.hypot(t.worldX-e.x,t.worldY-e.y);
+        if(dist<=t.range){
+          let progress=e.pathIndex+e.pathT/TILE;
+          if(progress>bestProgress||(progress===bestProgress&&dist<(target?Math.hypot(t.worldX-target.x,t.worldY-target.y):Infinity))){
+            bestProgress=progress;
+            target=e;
+          }
+        }
+      }
+      if(target){
+        let def=t.def;
+        G.projectiles.push({
+          x:t.worldX,y:t.worldY,target,damage:t.dmg,speed:def.projSpd||350,
+          color:def.projColor||'#fff',splash:def.splash||0,pierce:def.pierce||0,
+          burn:def.burn||0,slow:def.slow||0,slowDur:def.slowDur||0,
+          poison:def.poison||0,root:def.root||0,chain:def.chain||0,
+          tower:t,
+        });
+        playSfx('shoot');
+        t.cooldown=t.rate;
+      }
+    }
+  }
+}
+
+// ==================== ENEMIES ====================
+function spawnEnemy(type){
+  let def=ENEMY_DEFS[type];
+  let hpMult=1+G.wave*0.08;
+  if(def.boss)hpMult=1+G.wave*0.25;
+  let e={
+    type,x:G.spawnPoint.x,y:G.spawnPoint.y,
+    hp:Math.floor(def.hp*hpMult),maxHp:Math.floor(def.hp*hpMult),
+    speed:def.spd,reward:def.reward,color:def.color,size:def.size,
+    damage:def.dmg,heal:def.heal||0,healRng:def.healRng||0,
+    boss:def.boss||false,
+    pathIndex:0,pathT:0,
+    statuses:{}, // burn, slow, poison, root
+    statusTimers:{},
+  };
+  e.alive=true;
+  G.enemies.push(e);
+}
+
+function updateEnemies(dt){
+  dt*=G.speed;
+  let path=G.path;
+  for(let e of G.enemies){
+    if(!e.alive)continue;
+    // Update statuses
+    for(let key in e.statusTimers){
+      e.statusTimers[key]-=dt;
+      if(e.statusTimers[key]<=0){
+        delete e.statuses[key];
+        delete e.statusTimers[key];
+      }
+    }
+    // Burn/poison damage
+    if(e.statuses.burn)e.hp-=(8+3*G.wave)*dt;
+    if(e.statuses.poison)e.hp-=(4+2*G.wave)*dt;
+    if(e.hp<=0){killEnemy(e);continue;}
+    // Movement (if not rooted)
+    if(!e.statuses.root){
+      let spd=e.speed*TILE;
+      if(e.statuses.slow)spd*=e.statuses.slow;
+      e.pathT+=spd*dt;
+      // Advance path segments
+      while(e.pathT>=TILE&&e.pathIndex<path.length-1){
+        e.pathT-=TILE;
+        e.pathIndex++;
+      }
+      if(e.pathIndex>=path.length-1){
+        // Reached end
+        e.alive=false;
+        G.lives-=e.damage;
+        playSfx('leak');
+        spawnParticles(e.x,e.y,8,e.color);
+        if(G.lives<=0){G.lives=0;G.gameOver=true}
+        continue;
+      }
+      let p1=path[e.pathIndex],p2=path[Math.min(e.pathIndex+1,path.length-1)];
+      let t=e.pathT/TILE;
+      e.x=p1.x*TILE+TILE/2+(p2.x-p1.x)*TILE*t;
+      e.y=p1.y*TILE+TILE/2+(p2.y-p1.y)*TILE*t;
+    }
+    // Healer AI
+    if(e.heal>0&&e.healRng>0){
+      let toHeal=G.enemies.find(oe=>oe!==e&&oe.alive&&Math.hypot(e.x-oe.x,e.y-oe.y)<=e.healRng&&oe.hp<oe.maxHp);
+      if(toHeal){toHeal.hp=Math.min(toHeal.maxHp,toHeal.hp+e.heal*dt*30)}
+    }
+  }
+  // Cleanup dead
+  G.enemies=G.enemies.filter(e=>e.alive);
+  if(G.gameOver)return;
+  // Check wave complete
+  if(G.waveActive&&G.spawnQueue.length===0&&G.enemies.length===0){
+    endWave();
+  }
+}
+
+function killEnemy(e){
+  if(!e.alive)return;
+  e.alive=false;
+  G.gold+=e.reward;
+  G.waveEnemiesLeft--;
+  spawnParticles(e.x,e.y,e.boss?20:6,e.color);
+  playSfx(e.boss?'bossDeath':'kill');
+  if(e.boss)showMessage('Boss 被击败！');
+}
+
+function spawnParticles(x,y,count,color){
+  for(let i=0;i<count;i++){
+    let ang=Math.random()*Math.PI*2,spd=40+Math.random()*120;
+    G.particles.push({x,y,vx:Math.cos(ang)*spd,vy:Math.sin(ang)*spd,life:0.4+Math.random()*0.4,maxLife:0.6,size:2+Math.random()*4,color,alpha:1});
+  }
+}
+
+// ==================== PROJECTILES ====================
+function updateProjectiles(dt){
+  dt*=G.speed;
+  for(let i=G.projectiles.length-1;i>=0;i--){
+    let p=G.projectiles[i];
+    if(!p.target||!p.target.alive){
+      G.projectiles.splice(i,1);
+      continue;
+    }
+    let dx=p.target.x-p.x,dy=p.target.y-p.y,dist=Math.hypot(dx,dy);
+    if(dist<8){
+      // Hit
+      applyProjectileHit(p,i);
+      continue;
+    }
+    let move=p.speed*dt;
+    if(move>=dist){
+      p.x=p.target.x;p.y=p.target.y;
+      applyProjectileHit(p,i);
+    }else{
+      p.x+=dx/dist*move;p.y+=dy/dist*move;
+      // Trail particle
+      if(Math.random()<0.5)G.particles.push({x:p.x,y:p.y,vx:0,vy:0,life:0.15,maxLife:0.15,size:2,color:p.color,alpha:0.5});
+    }
+  }
+}
+
+function applyProjectileHit(p,idx){
+  G.projectiles.splice(idx,1);
+  let target=p.target;
+  if(!target||!target.alive)return;
+  // Direct damage
+  target.hp-=p.damage;
+  // Status effects
+  if(p.burn){target.statuses.burn=true;target.statusTimers.burn=p.burn}
+  if(p.slow){target.statuses.slow=p.slow;target.statusTimers.slow=p.slowDur}
+  if(p.poison){target.statuses.poison=true;target.statusTimers.poison=p.poison}
+  if(p.root){target.statuses.root=true;target.statusTimers.root=p.root}
+  // Splash
+  if(p.splash>0){
+    for(let e of G.enemies){
+      if(e===target||!e.alive)continue;
+      if(Math.hypot(target.x-e.x,target.y-e.y)<=p.splash){
+        e.hp-=p.damage*0.5;
+        if(e.hp<=0)killEnemy(e);
+      }
+    }
+    spawnParticles(target.x,target.y,12,'#ffaa44');
+  }
+  // Pierce
+  if(p.pierce>0){
+    p.pierce--;
+    // Find next enemy in line
+    let dx=target.x-p.tower.worldX,dy=target.y-p.tower.worldY;
+    let best=null,bestDist=Infinity;
+    for(let e of G.enemies){
+      if(e===target||!e.alive)continue;
+      let ex=e.x-p.tower.worldX,ey=e.y-p.tower.worldY;
+      // Check if roughly in same direction
+      let dot=dx*ex+dy*ey;
+      let cross=dx*ey-dy*ex;
+      if(dot>0&&Math.abs(cross)<TILE*2){
+        let d=Math.hypot(ex,ey);
+        if(d<bestDist&&d>Math.hypot(dx,dy)){bestDist=d;best=e}
+      }
+    }
+    if(best){
+      p.target=best;
+      p.x=target.x;p.y=target.y;
+      G.projectiles.push(p);
+    }
+  }
+  // Chain lightning
+  if(p.chain>0){
+    let chained=[target];
+    let curTarget=target;
+    for(let c=0;c<p.chain;c++){
+      let best=null,bestDist=Infinity;
+      for(let e of G.enemies){
+        if(!e.alive||chained.includes(e))continue;
+        let d=Math.hypot(curTarget.x-e.x,curTarget.y-e.y);
+        if(d<TILE*4&&d<bestDist){bestDist=d;best=e}
+      }
+      if(best){chained.push(best);best.hp-=p.damage*0.6;curTarget=best;
+        G.particles.push({x:best.x,y:best.y,vx:0,vy:0,life:0.2,maxLife:0.2,size:8,color:'#ddaaff',alpha:0.8});
+        if(best.hp<=0)killEnemy(best);
+      }else break;
+    }
+    spawnParticles(target.x,target.y,6,'#cc44ff');
+  }
+  // Check kill
+  if(target.hp<=0)killEnemy(target);
+  else spawnParticles(target.x,target.y,3,p.color);
+}
+
+// ==================== WAVE SYSTEM ====================
+function startWave(){
+  if(G.waveActive||G.gameOver)return;
+  G.waveActive=true;
+  G.spawnQueue=[];
+  G.spawnTimer=0;
+  let w=G.wave;
+  let count=4+Math.floor(w*1.5);
+  let types=['scout'];
+  if(w>=3)types.push('soldier');
+  if(w>=6)types.push('tank');
+  if(w>=8)types.push('healer');
+  // Build spawn queue
+  for(let i=0;i<count;i++){
+    let type=types[Math.floor(Math.random()*types.length)];
+    let delay=i*G.spawnInterval;
+    G.spawnQueue.push({type,delay});
+  }
+  // Boss every 5 waves
+  if(w%5===0){
+    G.spawnQueue.push({type:'boss',delay:count*G.spawnInterval+1.5});
+    showMessage('⚠️ Boss 来袭！');
+    playSfx('bossWarning');
+  }
+  G.waveEnemiesLeft=G.spawnQueue.length;
+  G.spawnInterval=Math.max(0.3,0.8-w*0.02);
+  document.getElementById('btn-start').textContent='进行中...';
+  playSfx('waveStart');
+}
+
+function endWave(){
+  G.waveActive=false;
+  let completedWave=G.wave;
+  G.wave++;
+  let bonus=20+completedWave*5;
+  G.gold+=bonus;
+  G.spawnQueue=[];
+  G.enemies=[];
+  G.projectiles=[];
+  document.getElementById('btn-start').textContent='▶ 开始';
+  showMessage(`波次 ${completedWave} 完成！奖励 +${bonus} 金币`);
+  playSfx('waveEnd');
+}
+
+function updateWave(dt){
+  if(!G.waveActive)return;
+  dt*=G.speed;
+  G.spawnTimer+=dt;
+  for(let i=G.spawnQueue.length-1;i>=0;i--){
+    if(G.spawnTimer>=G.spawnQueue[i].delay){
+      spawnEnemy(G.spawnQueue[i].type);
+      G.spawnQueue.splice(i,1);
+    }
+  }
+}
+
+// ==================== SAVE/LOAD ====================
+function saveGame(){
+  let data={
+    wave:G.wave,gold:G.gold,lives:G.lives,seed:G.seed,
+    towers:G.towers.map(t=>({tx:t.tx,ty:t.ty,tree:t.tree,level:t.level})),
+  };
+  localStorage.setItem('td_save',JSON.stringify(data));
+  showMessage('游戏已保存');
+}
+
+function loadGame(){
+  let raw=localStorage.getItem('td_save');
+  if(!raw){showMessage('没有存档');return false}
+  try{
+    let data=JSON.parse(raw);
+    G.wave=data.wave;G.gold=data.gold;G.lives=data.lives;
+    G.seed=data.seed;
+    G.towers=[];
+    G.enemies=[];
+    G.projectiles=[];
+    G.particles=[];
+    G.waveActive=false;
+    G.spawnQueue=[];
+    G.gameOver=false;
+    G.selectedPlacedTower=null;
+    generateMap(G.seed);
+    for(let td of data.towers){
+      let def=getTowerDef(td.tree,td.level);
+      if(!def)continue;
+      let t={tx:td.tx,ty:td.ty,worldX:td.tx*TILE+TILE/2,worldY:td.ty*TILE+TILE/2,tree:td.tree,level:td.level,cooldown:0,def};
+      t.range=def.range;t.dmg=def.dmg;t.rate=def.rate;
+      G.towers.push(t);
+      G.map[td.ty*MAP_W+td.tx]=TILE_ROCK;
+    }
+    showMessage('存档已读取');
+    updateUI();
+    return true;
+  }catch(e){showMessage('存档损坏');return false}
+}
+
+// ==================== AUDIO ====================
+function initAudio(){
+  if(G.audioCtx)return;
+  try{G.audioCtx=new(window.AudioContext||window.webkitAudioContext)()}catch(e){G.audioOn=false}
+}
+
+function playSfx(type){
+  if(!G.audioOn||!G.audioCtx)return;
+  let ctx=G.audioCtx;
+  if(ctx.state==='suspended')ctx.resume();
+  let now=ctx.currentTime;
+  let g=ctx.createGain();
+  g.connect(ctx.destination);
+  g.gain.setValueAtTime(0.12,now);
+  switch(type){
+    case'shoot':{
+      let o=ctx.createOscillator();
+      o.type='square';o.frequency.setValueAtTime(800,now);o.frequency.linearRampToValueAtTime(200,now+0.08);
+      o.connect(g);g.gain.linearRampToValueAtTime(0,now+0.08);
+      o.start(now);o.stop(now+0.08);
+      break}
+    case'place':{
+      let o=ctx.createOscillator();
+      o.type='sine';o.frequency.setValueAtTime(500,now);o.frequency.linearRampToValueAtTime(700,now+0.1);
+      o.connect(g);g.gain.linearRampToValueAtTime(0,now+0.12);
+      o.start(now);o.stop(now+0.12);
+      break}
+    case'upgrade':{
+      let o=ctx.createOscillator();
+      o.type='sine';o.frequency.setValueAtTime(400,now);o.frequency.linearRampToValueAtTime(800,now+0.15);o.frequency.linearRampToValueAtTime(1200,now+0.25);
+      o.connect(g);g.gain.linearRampToValueAtTime(0,now+0.3);
+      o.start(now);o.stop(now+0.3);
+      break}
+    case'sell':{
+      let o=ctx.createOscillator();
+      o.type='triangle';o.frequency.setValueAtTime(600,now);o.frequency.linearRampToValueAtTime(300,now+0.15);
+      o.connect(g);g.gain.linearRampToValueAtTime(0,now+0.2);
+      o.start(now);o.stop(now+0.2);
+      break}
+    case'kill':{
+      let buf=ctx.createBuffer(1,ctx.sampleRate*0.1,ctx.sampleRate);
+      let d=buf.getChannelData(0);
+      for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/d.length*8);
+      let s=ctx.createBufferSource();s.buffer=buf;
+      let f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.setValueAtTime(800,now);f.Q.value=0.5;
+      s.connect(f);f.connect(g);g.gain.linearRampToValueAtTime(0,now+0.1);
+      s.start(now);s.stop(now+0.1);
+      break}
+    case'bossDeath':{
+      let o=ctx.createOscillator();
+      o.type='sawtooth';o.frequency.setValueAtTime(150,now);o.frequency.linearRampToValueAtTime(50,now+0.6);
+      o.connect(g);g.gain.setValueAtTime(0.2,now);g.gain.linearRampToValueAtTime(0,now+0.7);
+      o.start(now);o.stop(now+0.7);
+      break}
+    case'bossWarning':{
+      let o=ctx.createOscillator();
+      o.type='sawtooth';o.frequency.setValueAtTime(100,now);o.frequency.linearRampToValueAtTime(200,now+0.3);o.frequency.linearRampToValueAtTime(100,now+0.6);
+      o.connect(g);g.gain.setValueAtTime(0.15,now);g.gain.linearRampToValueAtTime(0,now+0.8);
+      o.start(now);o.stop(now+0.8);
+      break}
+    case'waveStart':{
+      let o=ctx.createOscillator();
+      o.type='triangle';o.frequency.setValueAtTime(300,now);o.frequency.linearRampToValueAtTime(500,now+0.2);o.frequency.linearRampToValueAtTime(400,now+0.4);
+      o.connect(g);g.gain.linearRampToValueAtTime(0,now+0.5);
+      o.start(now);o.stop(now+0.5);
+      break}
+    case'waveEnd':{
+      let o=ctx.createOscillator();
+      o.type='sine';o.frequency.setValueAtTime(500,now);o.frequency.setValueAtTime(600,now+0.1);o.frequency.setValueAtTime(800,now+0.25);o.frequency.setValueAtTime(1000,now+0.4);
+      o.connect(g);g.gain.linearRampToValueAtTime(0,now+0.5);
+      o.start(now);o.stop(now+0.5);
+      break}
+    case'leak':{
+      let o=ctx.createOscillator();
+      o.type='square';o.frequency.setValueAtTime(200,now);o.frequency.linearRampToValueAtTime(100,now+0.2);
+      o.connect(g);g.gain.linearRampToValueAtTime(0,now+0.25);
+      o.start(now);o.stop(now+0.25);
+      break}
+    case'click':{
+      let o=ctx.createOscillator();
+      o.type='sine';o.frequency.setValueAtTime(1000,now);
+      o.connect(g);g.gain.setValueAtTime(0.05,now);g.gain.linearRampToValueAtTime(0,now+0.05);
+      o.start(now);o.stop(now+0.05);
+      break}
+  }
+}
+
+// ==================== MESSAGES ====================
+function showMessage(text){
+  G.msgText=text;G.msgTimer=2.5;
+  let el=document.getElementById('message');
+  el.textContent=text;el.classList.add('show');
+}
+
+// ==================== UI ====================
+function updateUI(){
+  document.getElementById('wave-num').textContent=G.wave;
+  document.getElementById('lives').textContent=G.lives;
+  document.getElementById('gold').textContent=G.gold;
+  document.getElementById('btn-speed').textContent=G.speed===1?'⏩ x1':G.speed===2?'⏩ x2':'⏩ x4';
+  updateTowerCards();
+  updateTowerInfo();
+  document.getElementById('tower-info').classList.toggle('visible',G.selectedPlacedTower!==null);
+  document.getElementById('pause-overlay').classList.toggle('visible',G.paused);
+}
+
+
+
+function updateTowerCards(){
+  let row=document.getElementById('tower-row');
+  let cards=row.children;
+  for(let c of cards){
+    let treeIdx=parseInt(c.dataset.tree||'-1');
+    let idx=parseInt(c.dataset.idx||'-1');
+    c.classList.toggle('selected',G.selectedTowerIdx===idx&&G.selectedPlacedTower===null);
+  }
+}
+
+function updateTowerInfo(){
+  let panel=document.getElementById('tower-info');
+  let t=G.selectedPlacedTower;
+  if(t){
+    document.getElementById('ti-name').textContent=`${t.def.icon} ${t.def.name} Lv.${t.level}`;
+    document.getElementById('ti-dmg').textContent=t.dmg;
+    document.getElementById('ti-range').textContent=t.range;
+    document.getElementById('ti-rate').textContent=t.def.healAura?'持续':t.rate.toFixed(1)+'s';
+    document.getElementById('ti-level').textContent=t.level;
+    let upBtn=document.getElementById('btn-upgrade');
+    if(t.level>=3){upBtn.textContent='已满级';upBtn.disabled=true}
+    else{
+      let ndef=getTowerDef(t.tree,t.level+1);
+      upBtn.textContent=`升级 🪙${ndef?ndef.cost:'--'}`;
+      upBtn.disabled=!ndef||G.gold<(ndef?ndef.cost:Infinity);
+    }
+    panel.classList.add('visible');
+  }else{
+    panel.classList.remove('visible');
+  }
+}
+
+// Build initial cards with dataset attributes
+function buildTowerCardsFull(){
+  let row=document.getElementById('tower-row');
+  row.innerHTML='';
+  for(let d of TOWER_DEFS){
+    if(d.tree!==G.selectedTree)continue;
+    let idx=TOWER_DEFS.indexOf(d);
+    let card=document.createElement('div');
+    card.className='tower-card';
+    card.dataset.tree=d.tree;
+    card.dataset.idx=idx;
+    if(G.selectedTowerIdx===idx)card.classList.add('selected');
+    card.innerHTML=`<div class="ticon">${d.icon}</div><div class="tname">${d.name}</div><div class="tcost">🪙${d.cost}</div>`;
+    card.addEventListener('click',()=>{
+      initAudio();
+      if(G.selectedTowerIdx===idx){G.selectedTowerIdx=-1;G.selectedPlacedTower=null}
+      else{G.selectedTowerIdx=idx;G.selectedPlacedTower=null}
+      updateTowerInfo();
+      updateTowerCards();
+      playSfx('click');
+    });
+    row.appendChild(card);
+  }
+}
+
+// ==================== INPUT ====================
+function initInput(){
+  let canvas=document.getElementById('game');
+  let ui=document.getElementById('ui');
+  
+  canvas.addEventListener('wheel',e=>{
+    e.preventDefault();
+    let z=G.zoom*(e.deltaY>0?0.9:1.1);
+    G.targetZoom=Math.max(0.4,Math.min(3,z));
+  },{passive:false});
+  
+  canvas.addEventListener('mousedown',e=>{
+    initAudio();
+    if(e.button===2||e.button===1){
+      G.dragging=true;
+      G.dragX=e.clientX;G.dragY=e.clientY;
+      G.dragCX=G.cameraX;G.dragCY=G.cameraY;
+      return;
+    }
+    if(e.button===0)handleClick(e);
+  });
+  canvas.addEventListener('contextmenu',e=>e.preventDefault());
+  
+  canvas.addEventListener('mousemove',e=>{
+    let rect=canvas.getBoundingClientRect();
+    G.mouseWX=(e.clientX-rect.left)/G.zoom+G.cameraX;
+    G.mouseWY=(e.clientY-rect.top)/G.zoom+G.cameraY;
+    if(G.dragging){
+      G.cameraX=G.dragCX-(e.clientX-G.dragX)/G.zoom;
+      G.cameraY=G.dragCY-(e.clientY-G.dragY)/G.zoom;
+    }
+  });
+  
+  canvas.addEventListener('mouseup',e=>{G.dragging=false});
+  canvas.addEventListener('mouseleave',e=>{G.dragging=false});
+  
+  // Touch support
+  canvas.addEventListener('touchstart',e=>{
+    initAudio();
+    if(e.touches.length===1){
+      let t=e.touches[0];
+      G.dragX=t.clientX;G.dragY=t.clientY;
+      G.dragCX=G.cameraX;G.dragCY=G.cameraY;
+      G._touchStartX=t.clientX;G._touchStartY=t.clientY;G._touchMoved=false;
+      G.dragging=true;
+    }
+    if(e.touches.length===2){
+      G.dragging=false;
+      G._pinchStart=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+      G._pinchZoom=G.zoom;
+    }
+  },{passive:false});
+  
+  canvas.addEventListener('touchmove',e=>{
+    e.preventDefault();
+    if(e.touches.length===1&&G.dragging){
+      let t=e.touches[0];
+      if(Math.hypot(t.clientX-G._touchStartX,t.clientY-G._touchStartY)>5)G._touchMoved=true;
+      G.cameraX=G.dragCX-(t.clientX-G.dragX)/G.zoom;
+      G.cameraY=G.dragCY-(t.clientY-G.dragY)/G.zoom;
+    }
+    if(e.touches.length===2){
+      let d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+      if(G._pinchStart)G.targetZoom=Math.max(0.4,Math.min(3,G._pinchZoom*d/G._pinchStart));
+    }
+  },{passive:false});
+  
+  canvas.addEventListener('touchend',e=>{
+    if(!G._touchMoved&&e.changedTouches.length===1){
+      let t=e.changedTouches[0];
+      let rect=canvas.getBoundingClientRect();
+      G.mouseWX=(t.clientX-rect.left)/G.zoom+G.cameraX;
+      G.mouseWY=(t.clientY-rect.top)/G.zoom+G.cameraY;
+      handleClick({clientX:t.clientX,clientY:t.clientY});
+    }
+    G.dragging=false;
+  });
+  
+  // Keyboard
+  window.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){togglePause();return}
+    if(e.key===' '){e.preventDefault();if(!G.waveActive)startWave();return}
+    if(e.key==='1'){G.selectedTree=0;G.selectedTowerIdx=-1;buildTowerCardsFull();updateUI()}
+    if(e.key==='2'){G.selectedTree=1;G.selectedTowerIdx=-1;buildTowerCardsFull();updateUI()}
+    if(e.key==='3'){G.selectedTree=2;G.selectedTowerIdx=-1;buildTowerCardsFull();updateUI()}
+  });
+}
+
+function handleClick(e){
+  if(G.gameOver||G.paused)return;
+  let tx=Math.floor(G.mouseWX/TILE);
+  let ty=Math.floor(G.mouseWY/TILE);
+  if(tx<0||tx>=MAP_W||ty<0||ty>=MAP_H)return;
+  
+  let existing=findTowerAt(tx,ty);
+  if(existing){
+    G.selectedPlacedTower=existing;
+    G.selectedTowerIdx=-1;
+    updateTowerInfo();
+    updateTowerCards();
+    return;
+  }
+  
+  if(G.selectedTowerIdx>=0&&!existing){
+    let def=TOWER_DEFS[G.selectedTowerIdx];
+    if(def&&isBuildable(tx,ty)){
+      if(G.gold>=def.cost){
+        placeTower(tx,ty,def.tree);
+        G.selectedTowerIdx=-1;
+        updateUI();
+        G.selectedPlacedTower=null;
+        updateTowerInfo();
+      }else{
+        showMessage('金币不足！');
+      }
+    }else if(!isBuildable(tx,ty)){
+      showMessage('此处无法建造');
+    }
+    return;
+  }
+  
+  // Click on empty - deselect
+  G.selectedPlacedTower=null;
+  updateTowerInfo();
+}
+
+function togglePause(){
+  G.paused=!G.paused;
+  updateUI();
+}
+
+// ==================== RENDER ====================
+function renderGame(canvas){
+  let ctx=canvas.getContext('2d');
+  let dpr=window.devicePixelRatio||1;
+  let W=canvas.width/dpr,H=canvas.height/dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,W,H);
+  
+  // Smooth zoom
+  G.zoom+=(G.targetZoom-G.zoom)*0.15;
+  let z=G.zoom;
+  
+  // Clamp camera
+  G.cameraX=Math.max(0,Math.min(WORLD_W-W/z,G.cameraX));
+  G.cameraY=Math.max(0,Math.min(WORLD_H-H/z,G.cameraY));
+  
+  ctx.save();
+  ctx.translate(-G.cameraX*z,-G.cameraY*z);
+  ctx.scale(z,z);
+  
+  // Draw tiles
+  let startTX=Math.floor(G.cameraX/TILE)-1;
+  let startTY=Math.floor(G.cameraY/TILE)-1;
+  let endTX=Math.ceil((G.cameraX+W/z)/TILE)+1;
+  let endTY=Math.ceil((G.cameraY+H/z)/TILE)+1;
+  startTX=Math.max(0,startTX);startTY=Math.max(0,startTY);
+  endTX=Math.min(MAP_W,endTX);endTY=Math.min(MAP_H,endTY);
+  
+  for(let ty=startTY;ty<endTY;ty++){
+    for(let tx=startTX;tx<endTX;tx++){
+      let tile=G.map[ty*MAP_W+tx];
+      let x=tx*TILE,y=ty*TILE;
+      switch(tile){
+        case TILE_GRASS:ctx.fillStyle='#2d5a1e';break;
+        case TILE_PATH:ctx.fillStyle='#6b5a3a';break;
+        case TILE_ROCK:ctx.fillStyle='#555566';break;
+        case TILE_WATER:ctx.fillStyle='#1a3366';break;
+      }
+      ctx.fillRect(x,y,TILE,TILE);
+      // Tile grid
+      ctx.strokeStyle='rgba(255,255,255,0.04)';
+      ctx.strokeRect(x,y,TILE,TILE);
+    }
+  }
+  
+  // Draw water animation
+  for(let ty=startTY;ty<endTY;ty++){
+    for(let tx=startTX;tx<endTX;tx++){
+      if(G.map[ty*MAP_W+tx]!==TILE_WATER)continue;
+      ctx.fillStyle=`rgba(50,100,200,${0.1+0.05*Math.sin(Date.now()*0.003+tx*0.5+ty*0.5)})`;
+      ctx.fillRect(tx*TILE,ty*TILE,TILE,TILE);
+    }
+  }
+  
+  // Draw path markers
+  let path=G.path;
+  if(path.length>0){
+    // Spawn marker
+    let sp=path[0];
+    ctx.fillStyle='rgba(0,200,100,0.3)';
+    ctx.beginPath();ctx.arc(sp.x*TILE+TILE/2,sp.y*TILE+TILE/2,18,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#00cc66';ctx.font='bold 10px sans-serif';ctx.textAlign='center';
+    ctx.fillText('起点',sp.x*TILE+TILE/2,sp.y*TILE+TILE/2+4);
+    // Base marker
+    let bp=path[path.length-1];
+    ctx.fillStyle='rgba(255,50,50,0.3)';
+    ctx.beginPath();ctx.arc(bp.x*TILE+TILE/2,bp.y*TILE+TILE/2,18,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#ff3344';ctx.fillText('基地',bp.x*TILE+TILE/2,bp.y*TILE+TILE/2+4);
+  }
+  
+  // Draw towers
+  for(let t of G.towers){
+    let tx=t.tx*TILE,ty=t.ty*TILE;
+    // Range indicator (if selected)
+    if(t===G.selectedPlacedTower){
+      ctx.strokeStyle='rgba(255,255,255,0.3)';
+      ctx.lineWidth=1;
+      ctx.beginPath();ctx.arc(tx+TILE/2,ty+TILE/2,t.range,0,Math.PI*2);ctx.stroke();
+      ctx.fillStyle='rgba(255,255,255,0.06)';
+      ctx.beginPath();ctx.arc(tx+TILE/2,ty+TILE/2,t.range,0,Math.PI*2);ctx.fill();
+    }
+    // Tower body
+    let colors={'🟦':'#4488cc','🟧':'#cc6633','🟨':'#ffcc00','🟥':'#cc4444','🟩':'#44aa44'};
+    let bodyColor=t.def.color||'#888888';
+    ctx.fillStyle=bodyColor;
+    ctx.fillRect(tx+4,ty+4,TILE-8,TILE-8);
+    // Level indicator
+    ctx.fillStyle='#000';
+    ctx.fillRect(tx+6,ty+6,TILE-12,TILE-12);
+    let lc=t.tree===0?'#88ccff':t.tree===1?'#ff6644':'#88ff88';
+    ctx.fillStyle=lc;
+    ctx.fillRect(tx+8,ty+8,TILE-16,TILE-16);
+    // Tree icon
+    ctx.fillStyle='#fff';ctx.font='14px sans-serif';ctx.textAlign='center';
+    ctx.fillText(TREE_ICONS[t.tree],tx+TILE/2,ty+TILE/2+5);
+    // Level dots
+    for(let i=0;i<t.level;i++){
+      ctx.fillStyle='#fff';
+      ctx.beginPath();ctx.arc(tx+6+i*8,ty+TILE-6,2.5,0,Math.PI*2);ctx.fill();
+    }
+    // Heal aura visual
+    if(t.def.healAura){
+      ctx.strokeStyle='rgba(68,255,136,0.25)';ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(tx+TILE/2,ty+TILE/2,t.range,0,Math.PI*2);ctx.stroke();
+      ctx.fillStyle='rgba(68,255,136,0.04)';
+      ctx.beginPath();ctx.arc(tx+TILE/2,ty+TILE/2,t.range,0,Math.PI*2);ctx.fill();
+    }
+  }
+  
+  // Draw enemies
+  for(let e of G.enemies){
+    if(!e.alive)continue;
+    // Boss aura
+    if(e.boss){
+      ctx.strokeStyle='rgba(255,40,60,0.3+0.15*Math.sin(Date.now()*0.005))';ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(e.x,e.y,e.size+10,0,Math.PI*2);ctx.stroke();
+    }
+    // Body
+    ctx.fillStyle=e.color;
+    ctx.beginPath();ctx.arc(e.x,e.y,e.size,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,0.5)';ctx.lineWidth=1;
+    ctx.stroke();
+    // HP bar
+    if(e.hp<e.maxHp){
+      let bw=e.size*2,bh=4;
+      ctx.fillStyle='rgba(0,0,0,0.6)';
+      ctx.fillRect(e.x-bw/2,e.y-e.size-8,bw,bh);
+      ctx.fillStyle=e.hp/e.maxHp>0.5?'#44ff44':e.hp/e.maxHp>0.25?'#ffaa00':'#ff4444';
+      ctx.fillRect(e.x-bw/2,e.y-e.size-8,bw*e.hp/e.maxHp,bh);
+    }
+    // Status icons
+    if(e.statuses.burn){ctx.fillStyle='#ff4400';ctx.beginPath();ctx.arc(e.x+e.size*0.7,e.y-e.size*0.7,3,0,Math.PI*2);ctx.fill()}
+    if(e.statuses.slow){ctx.fillStyle='#44ccff';ctx.beginPath();ctx.arc(e.x-e.size*0.7,e.y-e.size*0.7,3,0,Math.PI*2);ctx.fill()}
+    if(e.statuses.poison){ctx.fillStyle='#44ff44';ctx.beginPath();ctx.arc(e.x+e.size*0.7,e.y+e.size*0.7,3,0,Math.PI*2);ctx.fill()}
+    if(e.statuses.root){ctx.fillStyle='#88aa44';ctx.beginPath();ctx.arc(e.x-e.size*0.7,e.y+e.size*0.7,3,0,Math.PI*2);ctx.fill()}
+  }
+  
+  // Draw projectiles
+  for(let p of G.projectiles){
+    ctx.fillStyle=p.color;ctx.shadowColor=p.color;ctx.shadowBlur=6;
+    ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fill();
+    ctx.shadowBlur=0;
+  }
+  
+  // Draw particles
+  for(let p of G.particles){
+    ctx.fillStyle=p.color;ctx.globalAlpha=p.alpha*(p.life/p.maxLife);
+    ctx.beginPath();ctx.arc(p.x,p.y,p.size*(p.life/p.maxLife),0,Math.PI*2);ctx.fill();
+  }
+  ctx.globalAlpha=1;
+  
+  // Ghost placement
+  if(G.selectedTowerIdx>=0&&!G.paused&&G.mouseWX>=0&&G.mouseWY>=0){
+    let tx=Math.floor(G.mouseWX/TILE),ty=Math.floor(G.mouseWY/TILE);
+    if(G._ghostTX!==tx||G._ghostTY!==ty){
+      G._ghostTX=tx;G._ghostTY=ty;
+      G._ghostBuildable=(tx>=0&&tx<MAP_W&&ty>=0&&ty<MAP_H)?isBuildable(tx,ty):false;
+    }
+    let canPlace=G._ghostBuildable;
+    if(canPlace!==undefined){
+      let def=TOWER_DEFS[G.selectedTowerIdx];
+      let x=tx*TILE,y=ty*TILE;
+      ctx.fillStyle=canPlace?'rgba(100,255,100,0.3)':'rgba(255,100,100,0.3)';
+      ctx.fillRect(x,y,TILE,TILE);
+      ctx.strokeStyle=canPlace?'#44ff44':'#ff4444';ctx.lineWidth=2;
+      ctx.strokeRect(x,y,TILE,TILE);
+      if(def&&canPlace){
+        ctx.strokeStyle='rgba(255,255,255,0.2)';ctx.lineWidth=1;
+        ctx.beginPath();ctx.arc(x+TILE/2,y+TILE/2,def.range,0,Math.PI*2);ctx.stroke();
+      }
+    }
+  }
+  
+  // Game over overlay
+  if(G.gameOver){
+    ctx.fillStyle='rgba(0,0,0,0.6)';
+    ctx.fillRect(G.cameraX,G.cameraY,W/z,H/z);
+    ctx.fillStyle='#ff4444';ctx.font='bold 40px sans-serif';ctx.textAlign='center';
+    ctx.fillText('游戏结束',G.cameraX+W/z/2,G.cameraY+H/z/2-20);
+    ctx.fillStyle='#fff';ctx.font='16px sans-serif';
+    ctx.fillText(`坚持到第 ${G.wave} 波`,G.cameraX+W/z/2,G.cameraY+H/z/2+20);
+    ctx.fillText('点击暂停菜单重新开始',G.cameraX+W/z/2,G.cameraY+H/z/2+44);
+  }
+  
+  ctx.restore();
+}
+
+// ==================== UPDATE ====================
+function updateGame(dt){
+  if(G.paused||G.gameOver)return;
+  let cappedDt=Math.min(dt,0.1);
+  
+  // Message timer
+  if(G.msgTimer>0){G.msgTimer-=cappedDt;if(G.msgTimer<=0)document.getElementById('message').classList.remove('show')}
+  
+  updateWave(cappedDt);
+  updateTowers(cappedDt);
+  updateEnemies(cappedDt);
+  updateProjectiles(cappedDt);
+  
+  // Update particles
+  for(let i=G.particles.length-1;i>=0;i--){
+    let p=G.particles[i];
+    p.life-=cappedDt;if(p.life<=0){G.particles.splice(i,1);continue}
+    p.x+=p.vx*cappedDt;p.y+=p.vy*cappedDt;
+  }
+  
+  // Update UI periodically
+  G._uiTimer=(G._uiTimer||0)+cappedDt;
+  if(G._uiTimer>0.5){G._uiTimer=0;updateUI()}
+}
+
+// ==================== MAIN LOOP ====================
+function gameLoop(){
+  let canvas=document.getElementById('game');
+  let now=performance.now()/1000;
+  if(!G._lastTime)G._lastTime=now;
+  let dt=now-G._lastTime;
+  G._lastTime=now;
+  
+  // Resize canvas
+  let dpr=window.devicePixelRatio||1;
+  let w=window.innerWidth,h=window.innerHeight;
+  if(canvas.width!==w*dpr||canvas.height!==h*dpr){
+    canvas.width=w*dpr;canvas.height=h*dpr;
+    canvas.style.width=w+'px';canvas.style.height=h+'px';
+  }
+  
+  updateGame(dt);
+  renderGame(canvas);
+  requestAnimationFrame(gameLoop);
+}
+
+// ==================== INIT ====================
+function newGame(seed){
+  G.seed=seed||Math.floor(Math.random()*100000);
+  G.gold=250;G.lives=20;G.wave=1;
+  G.towers=[];G.enemies=[];G.projectiles=[];G.particles=[];
+  G.waveActive=false;G.spawnQueue=[];G.gameOver=false;G.paused=false;
+  G.speed=1;G.selectedTowerIdx=-1;G.selectedPlacedTower=null;
+  G.selectedTree=0;
+  G.cameraX=0;G.cameraY=0;G.zoom=1;G.targetZoom=1;
+  G._lastTime=0;
+  generateMap(G.seed);
+  buildTowerCardsFull();
+  updateUI();
+  showMessage('放置防御塔，点击"开始"迎敌！');
+}
+
+function init(){
+  let canvas=document.getElementById('game');
+  let ctx=canvas.getContext('2d');
+  
+  initInput();
+  
+  // UI buttons
+  document.getElementById('btn-start').addEventListener('click',()=>{initAudio();startWave();updateUI()});
+  document.getElementById('btn-pause').addEventListener('click',()=>{initAudio();togglePause()});
+  document.getElementById('btn-speed').addEventListener('click',()=>{initAudio();G.speed=G.speed===1?2:G.speed===2?4:1;updateUI()});
+  document.getElementById('btn-save').addEventListener('click',()=>{initAudio();saveGame()});
+  document.getElementById('btn-resume').addEventListener('click',()=>{G.paused=false;updateUI()});
+  document.getElementById('btn-quick-save').addEventListener('click',()=>{saveGame();G.paused=false;updateUI()});
+  document.getElementById('btn-quick-load').addEventListener('click',()=>{loadGame();G.paused=false;updateUI()});
+  document.getElementById('btn-restart').addEventListener('click',()=>{G.paused=false;newGame();updateUI()});
+  document.getElementById('btn-upgrade').addEventListener('click',()=>{if(G.selectedPlacedTower)upgradeTower(G.selectedPlacedTower);updateUI()});
+  document.getElementById('btn-sell').addEventListener('click',()=>{if(G.selectedPlacedTower)sellTower(G.selectedPlacedTower);updateUI()});
+  
+  // Tree tabs
+  document.querySelectorAll('.tree-tab').forEach(tab=>{
+    tab.addEventListener('click',()=>{
+      initAudio();
+      document.querySelectorAll('.tree-tab').forEach(t=>t.classList.remove('active'));
+      tab.classList.add('active');
+      G.selectedTree=parseInt(tab.dataset.tree);
+      G.selectedTowerIdx=-1;
+      buildTowerCardsFull();
+      updateUI();
+    });
+  });
+  
+  // Auto-save on wave completion attempt
+  // Start new game
+  newGame(Math.floor(Math.random()*100000));
+  
+  // Fit initial view
+  setTimeout(()=>{
+    let zx=canvas.clientWidth/WORLD_W,zy=canvas.clientHeight/WORLD_H;
+    let fitZoom=Math.min(zx,zy)*0.85;
+    G.zoom=fitZoom;G.targetZoom=fitZoom;
+    G.cameraX=(WORLD_W-canvas.clientWidth/fitZoom)/2;
+    G.cameraY=(WORLD_H-canvas.clientHeight/fitZoom)/2;
+  },100);
+  
+  requestAnimationFrame(gameLoop);
+}
+
+window.addEventListener('load',init);
+</script>
+</body>
+</html>

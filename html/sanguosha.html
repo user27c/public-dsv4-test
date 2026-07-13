@@ -1,0 +1,3526 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>三国杀 · 身份局</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700;900&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap');
+
+  :root {
+    --bg: #0d0b08;
+    --bg2: #14110c;
+    --felt: #1a2b22;
+    --felt2: #16231c;
+    --wood: #3a2a1a;
+    --wood2: #2a1e12;
+    --gold: #d4af5f;
+    --gold2: #f0d896;
+    --gold-dim: #8a7038;
+    --ink: #1c1712;
+    --paper: #ece2cc;
+    --paper2: #dccbaa;
+    --red: #b03a2e;
+    --red2: #e05a48;
+    --blue: #2e5b8a;
+    --green: #3a7a4a;
+    --text: #ece2cc;
+    --text2: #b8a982;
+    --text3: #7a6f58;
+    --spade: #1c1712;
+    --heart: #c0392b;
+    --club: #1c1712;
+    --diamond: #c0392b;
+    --hp-full: #4caf50;
+    --hp-mid: #f0b429;
+    --hp-low: #e05a48;
+    --shu: #c0392b;
+    --wei: #2e5b8a;
+    --wu: #3a7a4a;
+    --qun: #8a7038;
+    --shadow: 0 6px 22px rgba(0,0,0,.55);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: 'Noto Sans SC', system-ui, sans-serif;
+    background:
+      radial-gradient(ellipse at 50% 0%, #241d14 0%, var(--bg) 60%, #050403 100%);
+    color: var(--text);
+    overflow: hidden;
+    user-select: none;
+    line-height: 1.5;
+  }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: rgba(0,0,0,.3); }
+  ::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 4px; }
+
+  .serif { font-family: 'Noto Serif SC', serif; }
+
+  /* ============ App layout ============ */
+  #app { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+
+  /* ============ Start / Setup screen ============ */
+  #setup {
+    position: absolute; inset: 0; z-index: 100;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background:
+      radial-gradient(ellipse at 50% 30%, #2a2015 0%, #0d0b08 70%);
+    gap: 26px; padding: 30px; text-align: center;
+  }
+  #setup h1 {
+    font-family: 'Noto Serif SC', serif; font-weight: 900;
+    font-size: clamp(48px, 12vw, 120px); letter-spacing: .15em;
+    color: var(--gold2);
+    text-shadow: 0 0 30px rgba(212,175,95,.35), 0 4px 12px rgba(0,0,0,.6);
+    background: linear-gradient(180deg, #f5e4b0, #cfa348 60%, #9a7a30);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  #setup .sub { color: var(--text2); letter-spacing: .4em; font-size: 15px; margin-top: -14px; }
+  #setup .blurb { color: var(--text3); max-width: 560px; font-size: 14px; }
+  .btn {
+    font-family: 'Noto Serif SC', serif; cursor: pointer; border: none;
+    background: linear-gradient(180deg, var(--gold2), var(--gold), var(--gold-dim));
+    color: #2a1e0a; font-weight: 700; font-size: 20px; letter-spacing: .2em;
+    padding: 14px 44px; border-radius: 8px; box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.4);
+    transition: transform .12s, filter .12s;
+  }
+  .btn:hover { transform: translateY(-2px); filter: brightness(1.08); }
+  .btn:active { transform: translateY(0); }
+  .btn.sm { font-size: 14px; padding: 8px 20px; letter-spacing: .1em; }
+  .btn.ghost {
+    background: transparent; color: var(--gold2);
+    border: 1px solid var(--gold-dim); box-shadow: none;
+  }
+  .btn.ghost:hover { background: rgba(212,175,95,.1); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; filter: grayscale(.5); transform: none; }
+
+  /* ============ Table ============ */
+  #table {
+    position: absolute; inset: 0; display: none;
+  }
+  #table.active { display: block; }
+
+  #seats { position: absolute; inset: 0; }
+
+  /* ---- Player seat ---- */
+  .seat {
+    position: absolute; width: 148px;
+    transform: translate(-50%, -50%);
+    transition: filter .3s;
+  }
+  .seat .card-frame {
+    position: relative;
+    background: linear-gradient(160deg, #2a2118, #1a140d);
+    border: 2px solid var(--gold-dim); border-radius: 10px;
+    padding: 6px 8px; box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .seat.current .card-frame {
+    border-color: var(--gold2);
+    box-shadow: 0 0 0 2px var(--gold2), 0 0 22px rgba(240,216,150,.6);
+  }
+  .seat.targetable .card-frame { cursor: pointer; border-color: var(--red2); box-shadow: 0 0 0 2px var(--red2), 0 0 20px rgba(224,90,72,.7); }
+  .seat.targetable:hover .card-frame { background: linear-gradient(160deg,#3a2a1a,#241a10); }
+  .seat.selected-target .card-frame { border-color: var(--red2); box-shadow: 0 0 0 3px var(--red2), 0 0 26px rgba(224,90,72,.9); }
+  .seat.dead { filter: grayscale(1) brightness(.5); }
+  .seat.flipped .card-frame { transform: rotate(180deg); }
+
+  .seat .topline { display: flex; justify-content: space-between; align-items: center; gap: 4px; }
+  .seat .gname { font-family: 'Noto Serif SC', serif; font-weight: 700; font-size: 15px; color: var(--gold2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .seat .kingdom {
+    font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 700; color: #fff; flex-shrink: 0;
+  }
+  .k-shu { background: var(--shu); } .k-wei { background: var(--wei); }
+  .k-wu { background: var(--wu); } .k-qun { background: var(--qun); }
+
+  .seat .role-badge {
+    font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 700;
+    letter-spacing: .1em; flex-shrink: 0;
+  }
+  .role-主公 { background: linear-gradient(180deg,#f0d896,#b8860b); color:#3a2a0a; }
+  .role-忠臣 { background: var(--red); color:#fff; }
+  .role-反贼 { background: var(--ink); color: var(--gold2); border:1px solid var(--gold-dim); }
+  .role-内奸 { background: #5a3a6a; color:#fff; }
+  .role-hidden { background: #2a2118; color: var(--text3); border:1px solid var(--gold-dim); }
+
+  .seat .midline { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+  .seat .avatar {
+    width: 40px; height: 46px; border-radius: 6px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Noto Serif SC', serif; font-weight: 900; font-size: 24px;
+    background: linear-gradient(160deg, #4a3520, #241a10); color: var(--gold2);
+    border: 1px solid var(--gold-dim); position: relative;
+  }
+  .seat .stat { flex: 1; min-width: 0; }
+  .hp-bar { display: flex; gap: 2px; flex-wrap: wrap; }
+  .hp-pip { width: 9px; height: 14px; border-radius: 2px; background: #3a2a1a; border: 1px solid rgba(0,0,0,.4); }
+  .hp-pip.on { box-shadow: inset 0 0 3px rgba(255,255,255,.4); }
+  .hp-pip.hp-full { background: var(--hp-full); }
+  .hp-pip.hp-mid { background: var(--hp-mid); }
+  .hp-pip.hp-low { background: var(--hp-low); }
+  .seat .infoline { display: flex; justify-content: space-between; font-size: 11px; color: var(--text2); margin-top: 3px; }
+  .seat .handcount::before { content: "🀫 "; }
+
+  .seat .equips { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; }
+  .equip-slot {
+    font-size: 10px; padding: 1px 4px; border-radius: 3px; background: rgba(0,0,0,.35);
+    border-left: 3px solid var(--gold-dim); color: var(--paper2);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; gap: 3px;
+  }
+  .equip-slot .suit-r { color: var(--heart); } .equip-slot .suit-b { color: #d8cba8; }
+
+  .seat .judge-zone { margin-top: 3px; display: flex; gap: 2px; flex-wrap: wrap; }
+  .judge-tag { font-size: 9px; padding: 1px 4px; border-radius: 3px; background: #4a2a2a; color: #f0c0b0; border:1px solid #6a3a3a; }
+  .judge-tag.ld { background: #2a3a5a; color: #b0d0f0; border-color:#3a5a7a; }
+
+  .seat .flag {
+    position: absolute; top: -10px; right: -8px; font-size: 11px; padding: 2px 7px;
+    border-radius: 10px; font-weight: 700; z-index: 3; box-shadow: var(--shadow);
+    animation: pop .3s ease;
+  }
+  .flag.dying { background: var(--red2); color:#fff; }
+  @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
+
+  .seat .think {
+    position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%);
+    background: var(--ink); border: 1px solid var(--gold-dim); color: var(--gold2);
+    font-size: 11px; padding: 2px 10px; border-radius: 10px; white-space: nowrap;
+    box-shadow: var(--shadow); z-index: 4; opacity: 0; transition: opacity .2s;
+  }
+  .seat .think.show { opacity: 1; }
+
+  /* skill flash over a seat */
+  .skill-flash {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%) scale(.6);
+    font-family: 'Noto Serif SC', serif; font-weight: 900; font-size: 30px;
+    color: var(--gold2); text-shadow: 0 0 14px rgba(0,0,0,.9), 0 0 24px var(--gold);
+    z-index: 60; pointer-events: none; opacity: 0;
+  }
+  .skill-flash.play { animation: skillflash 1.1s ease forwards; }
+  @keyframes skillflash {
+    0% { opacity: 0; transform: translate(-50%,-50%) scale(.4); }
+    20% { opacity: 1; transform: translate(-50%,-50%) scale(1.1); }
+    75% { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%,-90%) scale(1); }
+  }
+
+  /* ---- Center: deck, discard, turn ---- */
+  #center {
+    position: absolute; left: 50%; top: 46%; transform: translate(-50%,-50%);
+    display: flex; align-items: center; gap: 24px; z-index: 2;
+  }
+  #deck-pile {
+    width: 60px; height: 84px; border-radius: 8px; position: relative;
+    background: linear-gradient(160deg, #3a2a1a, #1a120a);
+    border: 2px solid var(--gold-dim); box-shadow: var(--shadow);
+    display: flex; align-items: center; justify-content: center; flex-direction: column;
+    font-family: 'Noto Serif SC', serif; color: var(--gold2);
+  }
+  #deck-pile .cnt { font-size: 20px; font-weight: 900; }
+  #deck-pile .lbl { font-size: 10px; color: var(--text3); }
+  #deck-pile::before, #deck-pile::after {
+    content:""; position:absolute; inset:0; border-radius:8px;
+    border:2px solid var(--gold-dim); background: linear-gradient(160deg,#3a2a1a,#1a120a);
+    z-index:-1;
+  }
+  #deck-pile::before { transform: translate(3px,3px); }
+  #deck-pile::after { transform: translate(6px,6px); }
+
+  #discard-pile {
+    min-width: 66px; height: 92px; display: flex; align-items: center; justify-content: center;
+  }
+
+  #turn-info {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, 60px);
+    text-align: center; color: var(--text2); font-size: 13px; white-space: nowrap;
+  }
+  #turn-info .phase { font-family:'Noto Serif SC',serif; color: var(--gold2); font-size: 16px; font-weight:700; }
+
+  /* played card animation */
+  .fly-card { position: absolute; z-index: 55; transition: all .45s cubic-bezier(.4,0,.2,1); }
+
+  /* ============ Playing card visual ============ */
+  .pcard {
+    width: 62px; height: 90px; border-radius: 7px; position: relative; flex-shrink: 0;
+    background: linear-gradient(155deg, #f3ead2, #dccbaa);
+    border: 1px solid #b8a06a; box-shadow: 0 2px 6px rgba(0,0,0,.4);
+    color: var(--ink); font-family: 'Noto Serif SC', serif; overflow: hidden;
+  }
+  .pcard .corner { position: absolute; top: 3px; left: 4px; text-align: center; line-height: 1; }
+  .pcard .corner .num { font-size: 14px; font-weight: 700; }
+  .pcard .corner .suit { font-size: 13px; }
+  .pcard .suit-r { color: var(--heart); }
+  .pcard .suit-b { color: var(--spade); }
+  .pcard .cname {
+    position: absolute; left: 0; right: 0; top: 30px; text-align: center;
+    font-size: 15px; font-weight: 700; letter-spacing: .02em;
+  }
+  .pcard .ctype {
+    position: absolute; left: 0; right: 0; bottom: 6px; text-align: center;
+    font-size: 9px; color: var(--text3); letter-spacing: .1em;
+  }
+  .pcard .big-suit {
+    position: absolute; right: 4px; bottom: 16px; font-size: 20px; opacity: .5;
+  }
+  .pcard.type-basic { background: linear-gradient(155deg, #f5ecd0, #e6d4ab); }
+  .pcard.type-trick { background: linear-gradient(155deg, #e8e0f0, #d0c4e0); }
+  .pcard.type-equip { background: linear-gradient(155deg, #e0ecec, #c0d8d4); }
+  .pcard.mini { width: 46px; height: 66px; }
+  .pcard.mini .cname { font-size: 12px; top: 22px; }
+  .pcard.mini .corner .num { font-size: 11px; } .pcard.mini .corner .suit { font-size: 10px; }
+  .pcard.mini .ctype { display: none; } .pcard.mini .big-suit { font-size: 14px; }
+
+  /* ============ Your hand ============ */
+  #hand-area {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 20;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding-bottom: 8px; pointer-events: none;
+  }
+  #hand-bar {
+    display: flex; justify-content: center; align-items: flex-end; gap: 0;
+    min-height: 96px; pointer-events: auto;
+  }
+  #hand-bar .pcard {
+    cursor: pointer; margin-left: -14px; transition: transform .14s, margin .14s, box-shadow .14s;
+    box-shadow: 0 3px 10px rgba(0,0,0,.5);
+  }
+  #hand-bar .pcard:first-child { margin-left: 0; }
+  #hand-bar .pcard:hover { transform: translateY(-16px); z-index: 10; box-shadow: 0 8px 20px rgba(0,0,0,.6); }
+  #hand-bar .pcard.selected { transform: translateY(-22px); box-shadow: 0 0 0 2px var(--gold2), 0 8px 20px rgba(0,0,0,.7); z-index: 11; }
+  #hand-bar .pcard.unusable { filter: grayscale(.7) brightness(.7); cursor: not-allowed; }
+  #hand-bar .pcard.unusable:hover { transform: none; }
+
+  /* your seat control panel */
+  #self-panel {
+    position: absolute; left: 12px; bottom: 108px; z-index: 21; pointer-events: auto;
+    display: flex; align-items: flex-end; gap: 10px;
+  }
+
+  /* ============ Action bar (confirm / cancel / skills) ============ */
+  #action-bar {
+    position: absolute; right: 14px; bottom: 116px; z-index: 30;
+    display: flex; flex-direction: column; gap: 8px; align-items: flex-end; pointer-events: auto;
+  }
+  #prompt-text {
+    background: var(--ink); border: 1px solid var(--gold-dim); border-radius: 8px;
+    padding: 8px 14px; color: var(--gold2); font-size: 14px; max-width: 320px;
+    box-shadow: var(--shadow); font-family:'Noto Serif SC',serif; text-align: right;
+  }
+  #action-buttons { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .skill-btn {
+    font-family:'Noto Serif SC',serif; cursor: pointer; font-size: 14px; font-weight:700;
+    padding: 8px 16px; border-radius: 8px; letter-spacing: .1em;
+    background: linear-gradient(180deg, #6a4a8a, #4a2a6a); color: #f0e0ff;
+    border: 1px solid #8a6aaa; box-shadow: var(--shadow);
+    transition: transform .1s, filter .1s;
+  }
+  .skill-btn:hover { transform: translateY(-2px); filter: brightness(1.12); }
+  .skill-btn.locked { opacity: .5; cursor: not-allowed; transform: none; }
+
+  /* ============ Log ============ */
+  #log {
+    position: absolute; left: 12px; top: 12px; z-index: 15; width: 268px;
+    max-height: 34vh; overflow-y: auto; pointer-events: auto;
+    background: rgba(10,8,5,.72); border: 1px solid var(--gold-dim); border-radius: 8px;
+    padding: 8px 10px; font-size: 12.5px; color: var(--text2); backdrop-filter: blur(3px);
+  }
+  #log .entry { padding: 2px 0; border-bottom: 1px dashed rgba(212,175,95,.12); line-height: 1.45; }
+  #log .entry:last-child { border-bottom: none; }
+  #log .n-shu { color: #e58a7a; } #log .n-wei { color: #7aa8d8; }
+  #log .n-wu { color: #7ac88a; } #log .n-qun { color: var(--gold2); }
+  #log .dmg { color: var(--red2); font-weight: 700; }
+  #log .heal { color: var(--hp-full); font-weight: 700; }
+  #log .sk { color: var(--gold2); font-weight: 700; }
+  #log .die { color: #ff6a5a; font-weight:700; }
+
+  #log-head { display:flex; justify-content: space-between; align-items:center; margin-bottom: 4px; }
+  #log-head .t { font-family:'Noto Serif SC',serif; color: var(--gold2); font-weight:700; }
+
+  /* ============ Modal (choices) ============ */
+  #modal-layer {
+    position: absolute; inset: 0; z-index: 80; display: none;
+    align-items: center; justify-content: center; background: rgba(0,0,0,.55);
+    backdrop-filter: blur(2px);
+  }
+  #modal-layer.active { display: flex; }
+  .modal {
+    background: linear-gradient(160deg, #241d14, #14100a);
+    border: 2px solid var(--gold-dim); border-radius: 14px; padding: 20px 24px;
+    box-shadow: var(--shadow); max-width: 90vw; max-height: 86vh; overflow: auto;
+    display: flex; flex-direction: column; gap: 14px; align-items: center;
+  }
+  .modal h3 { font-family:'Noto Serif SC',serif; color: var(--gold2); font-size: 20px; font-weight:700; letter-spacing:.1em; }
+  .modal .desc { color: var(--text2); font-size: 13px; text-align:center; max-width: 480px; }
+  .modal .choice-cards { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; max-width: 640px; }
+  .modal .choice-cards .pcard { cursor: pointer; transition: transform .1s, box-shadow .1s; }
+  .modal .choice-cards .pcard:hover { transform: translateY(-8px); }
+  .modal .choice-cards .pcard.selected { box-shadow: 0 0 0 2px var(--gold2), 0 6px 16px rgba(0,0,0,.6); transform: translateY(-8px); }
+  .modal .grid-choices { display:flex; gap:10px; flex-wrap: wrap; justify-content:center; }
+  .modal .opt {
+    cursor: pointer; padding: 10px 18px; border-radius: 8px; font-family:'Noto Serif SC',serif;
+    background: linear-gradient(180deg,#3a2a1a,#241a10); border:1px solid var(--gold-dim);
+    color: var(--gold2); font-size: 15px; font-weight:600; transition: transform .1s, filter .1s;
+  }
+  .modal .opt:hover { transform: translateY(-2px); filter: brightness(1.15); }
+  .modal .opt.wei { border-color: var(--wei); } .modal .opt.shu { border-color: var(--shu); }
+  .modal .opt.wu { border-color: var(--wu); } .modal .opt.qun { border-color: var(--qun); }
+  .modal .btn-row { display: flex; gap: 12px; }
+
+  /* general choice cards */
+  .gen-card {
+    width: 150px; cursor: pointer; border-radius: 10px; padding: 10px;
+    background: linear-gradient(160deg,#2a2118,#16110a); border: 2px solid var(--gold-dim);
+    transition: transform .12s, box-shadow .12s; text-align: center; position: relative;
+  }
+  .gen-card:hover { transform: translateY(-4px); box-shadow: 0 0 18px rgba(240,216,150,.4); }
+  .gen-card.selected { border-color: var(--gold2); box-shadow: 0 0 0 2px var(--gold2), 0 0 20px rgba(240,216,150,.5); }
+  .gen-card .gc-name { font-family:'Noto Serif SC',serif; font-size: 20px; font-weight:700; color: var(--gold2); }
+  .gen-card .gc-sub { font-size: 11px; color: var(--text3); margin: 2px 0 6px; }
+  .gen-card .gc-hp { color: var(--hp-low); font-size: 12px; margin-bottom: 6px; }
+  .gen-card .gc-skill { font-size: 11px; color: var(--text2); text-align:left; margin-top:4px; }
+  .gen-card .gc-skill b { color: var(--gold2); }
+
+  /* ============ End screen ============ */
+  #end-screen {
+    position: absolute; inset: 0; z-index: 90; display: none;
+    flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+    background: radial-gradient(ellipse at 50% 40%, rgba(30,22,12,.9), rgba(5,4,3,.96));
+    text-align:center; padding: 30px;
+  }
+  #end-screen.active { display: flex; }
+  #end-screen h2 { font-family:'Noto Serif SC',serif; font-size: clamp(40px,9vw,90px); font-weight:900; letter-spacing:.1em; }
+  #end-screen h2.win { color: var(--gold2); text-shadow: 0 0 30px rgba(240,216,150,.5); }
+  #end-screen h2.lose { color: var(--red2); text-shadow: 0 0 30px rgba(224,90,72,.4); }
+  #end-screen .roles-reveal { display:flex; gap: 10px; flex-wrap: wrap; justify-content:center; max-width: 900px; }
+  #end-screen .rr {
+    padding: 8px 12px; border-radius: 8px; background: rgba(0,0,0,.4);
+    border:1px solid var(--gold-dim); font-size: 13px; min-width: 96px;
+  }
+  #end-screen .rr .rn { font-family:'Noto Serif SC',serif; color: var(--gold2); font-weight:700; }
+
+  /* ============ Top-right controls ============ */
+  #top-controls { position: absolute; right: 12px; top: 12px; z-index: 40; display: flex; gap: 8px; }
+
+  /* ============ Rules overlay ============ */
+  #rules-overlay {
+    position:absolute; inset:0; z-index: 95; display:none; align-items:center; justify-content:center;
+    background: rgba(0,0,0,.6); backdrop-filter: blur(3px);
+  }
+  #rules-overlay.active { display:flex; }
+  #rules-box {
+    background: linear-gradient(160deg,#241d14,#14100a); border:2px solid var(--gold-dim);
+    border-radius: 14px; padding: 24px 28px; max-width: 720px; max-height: 82vh; overflow:auto;
+    box-shadow: var(--shadow);
+  }
+  #rules-box h2 { font-family:'Noto Serif SC',serif; color: var(--gold2); margin-bottom: 12px; }
+  #rules-box h4 { font-family:'Noto Serif SC',serif; color: var(--gold2); margin: 14px 0 4px; }
+  #rules-box p, #rules-box li { color: var(--text2); font-size: 13.5px; margin: 3px 0; }
+  #rules-box ul { padding-left: 20px; }
+
+  .hidden { display: none !important; }
+
+  @media (max-width: 900px) {
+    .seat { width: 116px; }
+    .seat .avatar { width: 32px; height: 38px; font-size: 18px; }
+    #log { width: 200px; font-size: 11px; }
+    .pcard { width: 52px; height: 76px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Setup screen -->
+  <div id="setup">
+    <h1 class="serif">三国杀</h1>
+    <div class="sub">身 份 局 · 标 准 版</div>
+    <div class="blurb">
+      八人身份局：一主公、二忠臣、四反贼、一内奸。你将扮演其中一人，其余由 AI 操控。
+      主忠护主、反贼弑君、内奸独存——运筹帷幄，决胜千里。
+    </div>
+    <div class="btn-row" style="display:flex; gap:14px;">
+      <button class="btn" id="btn-start">开 始 游 戏</button>
+      <button class="btn ghost" id="btn-rules">游 戏 规 则</button>
+    </div>
+    <div style="color:var(--text3); font-size:12px; margin-top:10px;">纯网页实现 · 无需安装 · 纯文字牌面</div>
+  </div>
+
+  <!-- Game table -->
+  <div id="table">
+    <div id="seats"></div>
+    <div id="center">
+      <div id="deck-pile"><div class="cnt" id="deck-count">0</div><div class="lbl">牌堆</div></div>
+      <div id="discard-pile"></div>
+    </div>
+    <div id="turn-info"></div>
+
+    <div id="log">
+      <div id="log-head"><span class="t">战 报</span></div>
+      <div id="log-body"></div>
+    </div>
+
+    <div id="top-controls">
+      <button class="btn ghost sm" id="btn-rules2">规则</button>
+      <button class="btn ghost sm" id="btn-restart">重开</button>
+    </div>
+
+    <div id="action-bar">
+      <div id="prompt-text" class="hidden"></div>
+      <div id="action-buttons"></div>
+    </div>
+
+    <div id="hand-area">
+      <div id="hand-bar"></div>
+    </div>
+  </div>
+
+  <!-- Modal layer -->
+  <div id="modal-layer"><div class="modal" id="modal"></div></div>
+
+  <!-- Rules overlay -->
+  <div id="rules-overlay">
+    <div id="rules-box">
+      <h2 class="serif">三国杀 · 规则速览</h2>
+      <h4>身份与胜负</h4>
+      <ul>
+        <li><b>主公</b>：消灭所有反贼与内奸。</li>
+        <li><b>忠臣</b>：保护主公，与主公同胜。</li>
+        <li><b>反贼</b>：杀死主公即胜（除非只剩主公与一名内奸时主公阵亡）。</li>
+        <li><b>内奸</b>：坚持到最后，在杀光其他所有人后亲手/见证主公最后阵亡。</li>
+      </ul>
+      <h4>回合流程</h4>
+      <ul>
+        <li>准备 → 判定 → 摸牌(2张) → 出牌 → 弃牌(手牌数≤体力值) → 结束。</li>
+        <li>出牌阶段每回合限出一张【杀】（诸葛连弩/咆哮等除外），需在攻击范围内。</li>
+      </ul>
+      <h4>基本牌</h4>
+      <ul>
+        <li><b>杀</b>：对攻击范围内一名角色造成1点伤害，对方可用【闪】抵消。</li>
+        <li><b>闪</b>：抵消一张【杀】。</li>
+        <li><b>桃</b>：回复1点体力，或救助濒死角色。</li>
+      </ul>
+      <h4>锦囊 / 装备</h4>
+      <ul>
+        <li>过河拆桥、顺手牵羊、无中生有、决斗、借刀杀人、五谷丰登、桃园结义、南蛮入侵、万箭齐发、无懈可击、乐不思蜀、闪电。</li>
+        <li>武器（改变攻击范围/附带效果）、防具（八卦阵/仁王盾）、坐骑（+1/-1马，改变距离）。</li>
+        <li>延时锦囊【乐不思蜀】【闪电】置于判定区，回合开始判定生效。</li>
+      </ul>
+      <div class="btn-row" style="margin-top:16px; text-align:center;">
+        <button class="btn sm" id="btn-close-rules">关 闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- End screen -->
+  <div id="end-screen">
+    <h2 id="end-title"></h2>
+    <div id="end-sub" style="color:var(--text2); font-size:16px;"></div>
+    <div class="roles-reveal" id="end-roles"></div>
+    <button class="btn" id="btn-again">再 来 一 局</button>
+  </div>
+</div>
+
+<script>
+/* =====================================================================================
+   三国杀 · 身份局  (单文件实现)
+   数据层 → 状态层 → 规则引擎 → 技能系统 → AI → UI
+   ===================================================================================== */
+"use strict";
+
+/* ============================ 常量 & 工具 ============================ */
+const SUITS = { spade:'♠', heart:'♥', club:'♣', diamond:'♦' };
+const SUIT_CN = { spade:'黑桃', heart:'红桃', club:'梅花', diamond:'方块' };
+const isRed = s => s === 'heart' || s === 'diamond';
+const isBlack = s => s === 'spade' || s === 'club';
+const NUM_LABEL = n => ({1:'A',11:'J',12:'Q',13:'K'}[n] || String(n));
+
+const KINGDOM_CN = { wei:'魏', shu:'蜀', wu:'吴', qun:'群' };
+const KINGDOM_CLASS = { wei:'k-wei', shu:'k-shu', wu:'k-wu', qun:'k-qun' };
+
+let _uid = 0;
+const uid = () => ++_uid;
+const rnd = n => Math.floor(Math.random()*n);
+const shuffle = a => { for(let i=a.length-1;i>0;i--){ const j=rnd(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+const sleep = ms => new Promise(r=>setTimeout(r, ms));
+const clone = o => JSON.parse(JSON.stringify(o));
+
+/* speed control for AI pacing */
+let SPEED = 1;
+const pace = ms => sleep(ms / SPEED);
+
+/* ============================ 数据层：108 张牌 ============================
+   标准版牌堆构成（游卡标准版）。每张牌带 花色 suit + 点数 num。
+   type: basic(基本) / trick(锦囊) / equip(装备)
+   sub:  杀/闪/桃 | 具体锦囊名 | weapon/armor/+1/-1
+   ========================================================================= */
+const CARD_DEFS = [
+  /* ---- 基本牌：杀 x30（含黑桃/梅花/红桃/方块） ---- */
+  { name:'杀', type:'basic', sub:'杀', suit:'spade',   num:7 },
+  { name:'杀', type:'basic', sub:'杀', suit:'spade',   num:8 },
+  { name:'杀', type:'basic', sub:'杀', suit:'spade',   num:8 },
+  { name:'杀', type:'basic', sub:'杀', suit:'spade',   num:9 },
+  { name:'杀', type:'basic', sub:'杀', suit:'spade',   num:9 },
+  { name:'杀', type:'basic', sub:'杀', suit:'spade',   num:10 },
+  { name:'杀', type:'basic', sub:'杀', suit:'spade',   num:10 },
+  { name:'杀', type:'basic', sub:'杀', suit:'club',    num:2 },
+  { name:'杀', type:'basic', sub:'杀', suit:'club',    num:3 },
+  { name:'杀', type:'basic', sub:'杀', suit:'club',    num:4 },
+  { name:'杀', type:'basic', sub:'杀', suit:'club',    num:5 },
+  { name:'杀', type:'basic', sub:'杀', suit:'club',    num:6 },
+  { name:'杀', type:'basic', sub:'杀', suit:'club',    num:7 },
+  { name:'杀', type:'basic', sub:'杀', suit:'club',    num:8 },
+  { name:'杀', type:'basic', sub:'杀', suit:'club',    num:8 },
+  { name:'杀', type:'basic', sub:'杀', suit:'club',    num:9 },
+  { name:'杀', type:'basic', sub:'杀', suit:'club',    num:9 },
+  { name:'杀', type:'basic', sub:'杀', suit:'club',    num:10 },
+  { name:'杀', type:'basic', sub:'杀', suit:'club',    num:10 },
+  { name:'杀', type:'basic', sub:'杀', suit:'club',    num:11 },
+  { name:'杀', type:'basic', sub:'杀', suit:'heart',   num:10 },
+  { name:'杀', type:'basic', sub:'杀', suit:'heart',   num:10 },
+  { name:'杀', type:'basic', sub:'杀', suit:'heart',   num:11 },
+  { name:'杀', type:'basic', sub:'杀', suit:'diamond', num:6 },
+  { name:'杀', type:'basic', sub:'杀', suit:'diamond', num:7 },
+  { name:'杀', type:'basic', sub:'杀', suit:'diamond', num:8 },
+  { name:'杀', type:'basic', sub:'杀', suit:'diamond', num:9 },
+  { name:'杀', type:'basic', sub:'杀', suit:'diamond', num:10 },
+  { name:'杀', type:'basic', sub:'杀', suit:'diamond', num:11 },
+  { name:'杀', type:'basic', sub:'杀', suit:'diamond', num:13 },
+  /* ---- 闪 x15 ---- */
+  { name:'闪', type:'basic', sub:'闪', suit:'diamond', num:2 },
+  { name:'闪', type:'basic', sub:'闪', suit:'diamond', num:2 },
+  { name:'闪', type:'basic', sub:'闪', suit:'diamond', num:3 },
+  { name:'闪', type:'basic', sub:'闪', suit:'diamond', num:4 },
+  { name:'闪', type:'basic', sub:'闪', suit:'diamond', num:5 },
+  { name:'闪', type:'basic', sub:'闪', suit:'diamond', num:6 },
+  { name:'闪', type:'basic', sub:'闪', suit:'diamond', num:7 },
+  { name:'闪', type:'basic', sub:'闪', suit:'diamond', num:8 },
+  { name:'闪', type:'basic', sub:'闪', suit:'diamond', num:9 },
+  { name:'闪', type:'basic', sub:'闪', suit:'diamond', num:10 },
+  { name:'闪', type:'basic', sub:'闪', suit:'diamond', num:11 },
+  { name:'闪', type:'basic', sub:'闪', suit:'heart',   num:2 },
+  { name:'闪', type:'basic', sub:'闪', suit:'heart',   num:2 },
+  { name:'闪', type:'basic', sub:'闪', suit:'heart',   num:13 },
+  { name:'闪', type:'basic', sub:'闪', suit:'heart',   num:13 },
+  /* ---- 桃 x8 ---- */
+  { name:'桃', type:'basic', sub:'桃', suit:'heart',   num:3 },
+  { name:'桃', type:'basic', sub:'桃', suit:'heart',   num:4 },
+  { name:'桃', type:'basic', sub:'桃', suit:'heart',   num:6 },
+  { name:'桃', type:'basic', sub:'桃', suit:'heart',   num:7 },
+  { name:'桃', type:'basic', sub:'桃', suit:'heart',   num:8 },
+  { name:'桃', type:'basic', sub:'桃', suit:'heart',   num:9 },
+  { name:'桃', type:'basic', sub:'桃', suit:'heart',   num:12 },
+  { name:'桃', type:'basic', sub:'桃', suit:'diamond', num:12 },
+
+  /* ---- 锦囊牌 ---- */
+  /* 无中生有 x4 */
+  { name:'无中生有', type:'trick', sub:'wuzhong', cat:'instant', suit:'heart', num:7 },
+  { name:'无中生有', type:'trick', sub:'wuzhong', cat:'instant', suit:'heart', num:8 },
+  { name:'无中生有', type:'trick', sub:'wuzhong', cat:'instant', suit:'heart', num:9 },
+  { name:'无中生有', type:'trick', sub:'wuzhong', cat:'instant', suit:'heart', num:11 },
+  /* 决斗 x3 */
+  { name:'决斗', type:'trick', sub:'juedou', cat:'instant', target:'single', suit:'spade',   num:1 },
+  { name:'决斗', type:'trick', sub:'juedou', cat:'instant', target:'single', suit:'club',    num:1 },
+  { name:'决斗', type:'trick', sub:'juedou', cat:'instant', target:'single', suit:'diamond', num:1 },
+  /* 过河拆桥 x6 */
+  { name:'过河拆桥', type:'trick', sub:'chaiqiao', cat:'instant', target:'single', suit:'spade',   num:3 },
+  { name:'过河拆桥', type:'trick', sub:'chaiqiao', cat:'instant', target:'single', suit:'spade',   num:4 },
+  { name:'过河拆桥', type:'trick', sub:'chaiqiao', cat:'instant', target:'single', suit:'spade',   num:12 },
+  { name:'过河拆桥', type:'trick', sub:'chaiqiao', cat:'instant', target:'single', suit:'club',    num:3 },
+  { name:'过河拆桥', type:'trick', sub:'chaiqiao', cat:'instant', target:'single', suit:'club',    num:4 },
+  { name:'过河拆桥', type:'trick', sub:'chaiqiao', cat:'instant', target:'single', suit:'heart',   num:12 },
+  /* 顺手牵羊 x5 */
+  { name:'顺手牵羊', type:'trick', sub:'shunshou', cat:'instant', target:'single', suit:'spade',   num:3 },
+  { name:'顺手牵羊', type:'trick', sub:'shunshou', cat:'instant', target:'single', suit:'spade',   num:4 },
+  { name:'顺手牵羊', type:'trick', sub:'shunshou', cat:'instant', target:'single', suit:'spade',   num:11 },
+  { name:'顺手牵羊', type:'trick', sub:'shunshou', cat:'instant', target:'single', suit:'diamond', num:3 },
+  { name:'顺手牵羊', type:'trick', sub:'shunshou', cat:'instant', target:'single', suit:'diamond', num:4 },
+  /* 借刀杀人 x2 */
+  { name:'借刀杀人', type:'trick', sub:'jiedao', cat:'instant', target:'single', suit:'club', num:1 },
+  { name:'借刀杀人', type:'trick', sub:'jiedao', cat:'instant', target:'single', suit:'club', num:13 },
+  /* 五谷丰登 x2 */
+  { name:'五谷丰登', type:'trick', sub:'wugu', cat:'instant', target:'all', suit:'heart', num:3 },
+  { name:'五谷丰登', type:'trick', sub:'wugu', cat:'instant', target:'all', suit:'heart', num:4 },
+  /* 桃园结义 x1 */
+  { name:'桃园结义', type:'trick', sub:'taoyuan', cat:'instant', target:'all', suit:'heart', num:1 },
+  /* 南蛮入侵 x3 */
+  { name:'南蛮入侵', type:'trick', sub:'nanman', cat:'instant', target:'others', suit:'spade', num:7 },
+  { name:'南蛮入侵', type:'trick', sub:'nanman', cat:'instant', target:'others', suit:'spade', num:13 },
+  { name:'南蛮入侵', type:'trick', sub:'nanman', cat:'instant', target:'others', suit:'club', num:7 },
+  /* 万箭齐发 x1 */
+  { name:'万箭齐发', type:'trick', sub:'wanjian', cat:'instant', target:'others', suit:'heart', num:1 },
+  /* 无懈可击 x4 */
+  { name:'无懈可击', type:'trick', sub:'wuxie', cat:'instant', suit:'spade', num:11 },
+  { name:'无懈可击', type:'trick', sub:'wuxie', cat:'instant', suit:'club', num:12 },
+  { name:'无懈可击', type:'trick', sub:'wuxie', cat:'instant', suit:'diamond', num:12 },
+  { name:'无懈可击', type:'trick', sub:'wuxie', cat:'instant', suit:'heart', num:10 },
+  /* 乐不思蜀 x3（延时） */
+  { name:'乐不思蜀', type:'trick', sub:'lebu', cat:'delay', target:'single', suit:'club', num:6 },
+  { name:'乐不思蜀', type:'trick', sub:'lebu', cat:'delay', target:'single', suit:'heart', num:6 },
+  { name:'乐不思蜀', type:'trick', sub:'lebu', cat:'delay', target:'single', suit:'spade', num:6 },
+  /* 闪电 x3（延时） */
+  { name:'闪电', type:'trick', sub:'shandian', cat:'delay', target:'self', suit:'spade', num:1 },
+  { name:'闪电', type:'trick', sub:'shandian', cat:'delay', target:'self', suit:'heart', num:12 },
+  { name:'闪电', type:'trick', sub:'shandian', cat:'delay', target:'self', suit:'spade', num:9 },
+
+  /* ---- 装备牌 ---- */
+  /* 武器 */
+  { name:'诸葛连弩', type:'equip', sub:'weapon', wname:'crossbow', range:1, suit:'club',    num:1 },
+  { name:'诸葛连弩', type:'equip', sub:'weapon', wname:'crossbow', range:1, suit:'diamond', num:1 },
+  { name:'雌雄双股剑', type:'equip', sub:'weapon', wname:'cixiong', range:2, suit:'spade', num:2 },
+  { name:'青釭剑', type:'equip', sub:'weapon', wname:'qinggang', range:2, suit:'spade', num:6 },
+  { name:'青龙偃月刀', type:'equip', sub:'weapon', wname:'qinglong', range:3, suit:'spade', num:5 },
+  { name:'丈八蛇矛', type:'equip', sub:'weapon', wname:'zhangba', range:3, suit:'spade', num:12 },
+  { name:'贯石斧', type:'equip', sub:'weapon', wname:'guanshi', range:3, suit:'diamond', num:5 },
+  { name:'方天画戟', type:'equip', sub:'weapon', wname:'fangtian', range:4, suit:'diamond', num:12 },
+  { name:'麒麟弓', type:'equip', sub:'weapon', wname:'qilin', range:5, suit:'heart', num:5 },
+  /* 防具 */
+  { name:'八卦阵', type:'equip', sub:'armor', aname:'bagua', suit:'spade', num:2 },
+  { name:'八卦阵', type:'equip', sub:'armor', aname:'bagua', suit:'club', num:2 },
+  { name:'仁王盾', type:'equip', sub:'armor', aname:'renwang', suit:'club', num:2 },
+  /* +1 马（防御马） */
+  { name:'的卢', type:'equip', sub:'+1', suit:'club', num:5 },
+  { name:'绝影', type:'equip', sub:'+1', suit:'spade', num:5 },
+  { name:'爪黄飞电', type:'equip', sub:'+1', suit:'heart', num:13 },
+  /* -1 马（进攻马） */
+  { name:'赤兔', type:'equip', sub:'-1', suit:'heart', num:5 },
+  { name:'大宛', type:'equip', sub:'-1', suit:'spade', num:13 },
+  { name:'紫骍', type:'equip', sub:'-1', suit:'diamond', num:13 },
+];
+
+/* 武器攻击范围 & 中文名 */
+const WEAPON_INFO = {
+  crossbow: { range:1, cn:'诸葛连弩' },
+  cixiong:  { range:2, cn:'雌雄双股剑' },
+  qinggang: { range:2, cn:'青釭剑' },
+  qinglong: { range:3, cn:'青龙偃月刀' },
+  zhangba:  { range:3, cn:'丈八蛇矛' },
+  guanshi:  { range:3, cn:'贯石斧' },
+  fangtian: { range:4, cn:'方天画戟' },
+  qilin:    { range:5, cn:'麒麟弓' },
+};
+const ARMOR_INFO = { bagua:{cn:'八卦阵'}, renwang:{cn:'仁王盾'} };
+
+function buildDeck() {
+  return CARD_DEFS.map(d => ({ ...d, id: uid() }));
+}
+
+/* ============================ 数据层：25 武将 ============================
+   标准版：魏7 / 蜀7 / 吴8 / 群3。
+   skills: 技能列表，每个 {id, name, desc, lord? }。lord=true 为主公技。
+   ======================================================================== */
+const GENERALS = [
+  /* ===== 魏 ===== */
+  { id:'caocao', name:'曹操', kingdom:'wei', gender:'male', hp:4, title:'魏武帝',
+    skills:[
+      {id:'jianxiong', name:'奸雄', desc:'当你受到伤害后，你可以获得对你造成伤害的牌。'},
+      {id:'hujia', name:'护驾', lord:true, desc:'主公技，当你需要使用或打出【闪】时，你可以令其他魏势力角色选择是否打出一张【闪】（视为由你使用/打出）。'}
+    ]},
+  { id:'simayi', name:'司马懿', kingdom:'wei', gender:'male', hp:3, title:'狼顾之鬼',
+    skills:[
+      {id:'fankui', name:'反馈', desc:'当你受到伤害后，你可以获得伤害来源的一张牌。'},
+      {id:'guicai', name:'鬼才', desc:'当一名角色的判定牌生效前，你可以打出一张手牌代替之。'}
+    ]},
+  { id:'xiahoudun', name:'夏侯惇', kingdom:'wei', gender:'male', hp:4, title:'独眼刚烈',
+    skills:[
+      {id:'ganglie', name:'刚烈', desc:'当你受到伤害后，你可以进行判定：若不为红桃，伤害来源选择弃两张手牌或受到你造成的1点伤害。'}
+    ]},
+  { id:'zhangliao', name:'张辽', kingdom:'wei', gender:'male', hp:4, title:'威震逍遥津',
+    skills:[
+      {id:'tuxi', name:'突袭', desc:'摸牌阶段，你可以放弃摸牌，改为获得至多两名其他角色各一张手牌。'}
+    ]},
+  { id:'xuchu', name:'许褚', kingdom:'wei', gender:'male', hp:4, title:'虎痴',
+    skills:[
+      {id:'luoyi', name:'裸衣', desc:'摸牌阶段，你可以少摸一张牌，若如此做，本回合你使用【杀】或【决斗】造成的伤害+1。'}
+    ]},
+  { id:'guojia', name:'郭嘉', kingdom:'wei', gender:'male', hp:3, title:'鬼才',
+    skills:[
+      {id:'tiandu', name:'天妒', desc:'当你的判定牌生效后，你可以获得此牌。'},
+      {id:'yiji', name:'遗计', desc:'当你受到1点伤害后，你可以摸两张牌，然后将这些牌交给一至两名角色。'}
+    ]},
+  { id:'zhenji', name:'甄姬', kingdom:'wei', gender:'female', hp:3, title:'洛神',
+    skills:[
+      {id:'luoshen', name:'洛神', desc:'准备阶段，你可以进行判定：若为黑色，判定牌生效后你获得之，可重复此流程直到出现红色。'},
+      {id:'qingguo', name:'倾国', desc:'你可以将一张黑色手牌当【闪】使用或打出。'}
+    ]},
+
+  /* ===== 蜀 ===== */
+  { id:'liubei', name:'刘备', kingdom:'shu', gender:'male', hp:4, title:'乱世枭雄',
+    skills:[
+      {id:'rende', name:'仁德', desc:'出牌阶段，你可以将任意张手牌交给其他角色；当你于本阶段给出的牌达到两张时，你回复1点体力（每阶段一次）。'},
+      {id:'jijiang', name:'激将', lord:true, desc:'主公技，当你需要使用或打出【杀】时，你可以令其他蜀势力角色选择是否打出一张【杀】（视为由你使用/打出）。'}
+    ]},
+  { id:'guanyu', name:'关羽', kingdom:'shu', gender:'male', hp:4, title:'武圣',
+    skills:[
+      {id:'wusheng', name:'武圣', desc:'你可以将一张红色牌当【杀】使用或打出。'}
+    ]},
+  { id:'zhangfei', name:'张飞', kingdom:'shu', gender:'male', hp:4, title:'万夫不当',
+    skills:[
+      {id:'paoxiao', name:'咆哮', desc:'锁定技，你使用【杀】无次数限制。'}
+    ]},
+  { id:'zhugeliang', name:'诸葛亮', kingdom:'shu', gender:'male', hp:3, title:'卧龙',
+    skills:[
+      {id:'guanxing', name:'观星', desc:'准备阶段，你可以观看牌堆顶的若干张牌（存活人数与5中的较小值），然后以任意顺序放回牌堆顶或牌堆底。'},
+      {id:'kongcheng', name:'空城', desc:'锁定技，若你没有手牌，你不能成为【杀】或【决斗】的目标。'}
+    ]},
+  { id:'zhaoyun', name:'赵云', kingdom:'shu', gender:'male', hp:4, title:'龙威',
+    skills:[
+      {id:'longdan', name:'龙胆', desc:'你可以将【杀】当【闪】、【闪】当【杀】使用或打出。'}
+    ]},
+  { id:'machao', name:'马超', kingdom:'shu', gender:'male', hp:4, title:'一骑当千',
+    skills:[
+      {id:'mashu', name:'马术', desc:'锁定技，你计算与其他角色的距离-1。'},
+      {id:'tieji', name:'铁骑', desc:'当你使用【杀】指定目标后，你可以进行判定：若为红色，此【杀】不可被【闪】抵消。'}
+    ]},
+  { id:'huangyueying', name:'黄月英', kingdom:'shu', gender:'female', hp:3, title:'智绝',
+    skills:[
+      {id:'jizhi', name:'集智', desc:'当你使用普通锦囊牌时，你可以摸一张牌。'},
+      {id:'qicai', name:'奇才', desc:'锁定技，你使用锦囊牌无距离限制。'}
+    ]},
+
+  /* ===== 吴 ===== */
+  { id:'sunquan', name:'孙权', kingdom:'wu', gender:'male', hp:4, title:'制衡',
+    skills:[
+      {id:'zhiheng', name:'制衡', desc:'出牌阶段限一次，你可以弃置任意张牌，然后摸等量的牌。'},
+      {id:'jiuyuan', name:'救援', lord:true, desc:'主公技，其他吴势力角色对你使用【桃】时，其可以多回复1点体力（若你已受伤）。'}
+    ]},
+  { id:'ganning', name:'甘宁', kingdom:'wu', gender:'male', hp:4, title:'锦帆游侠',
+    skills:[
+      {id:'qixi', name:'奇袭', desc:'你可以将一张黑色牌当【过河拆桥】使用。'}
+    ]},
+  { id:'lvmeng', name:'吕蒙', kingdom:'wu', gender:'male', hp:4, title:'白衣渡江',
+    skills:[
+      {id:'keji', name:'克己', desc:'若你于出牌阶段未使用或打出【杀】，你可以跳过弃牌阶段。'}
+    ]},
+  { id:'huanggai', name:'黄盖', kingdom:'wu', gender:'male', hp:4, title:'苦肉计',
+    skills:[
+      {id:'kurou', name:'苦肉', desc:'出牌阶段，你可以失去1点体力，然后摸两张牌。'}
+    ]},
+  { id:'zhouyu', name:'周瑜', kingdom:'wu', gender:'male', hp:3, title:'大都督',
+    skills:[
+      {id:'yingzi', name:'英姿', desc:'摸牌阶段，你可以多摸一张牌。'},
+      {id:'fanjian', name:'反间', desc:'出牌阶段限一次，你可以令一名其他角色选择一种花色，然后其获得你的一张手牌并展示，若花色不同则该角色受到你造成的1点伤害。'}
+    ]},
+  { id:'daqiao', name:'大乔', kingdom:'wu', gender:'female', hp:3, title:'国色天香',
+    skills:[
+      {id:'guose', name:'国色', desc:'你可以将一张方块牌当【乐不思蜀】使用。'},
+      {id:'liuli', name:'流离', desc:'当你成为【杀】的目标时，你可以弃一张牌，将此【杀】转移给你攻击范围内的另一名角色（不能是【杀】的使用者）。'}
+    ]},
+  { id:'luxun', name:'陆逊', kingdom:'wu', gender:'male', hp:3, title:'儒生',
+    skills:[
+      {id:'qianxun', name:'谦逊', desc:'锁定技，你不能成为【顺手牵羊】与【乐不思蜀】的目标。'},
+      {id:'lianying', name:'连营', desc:'当你失去最后的手牌后，你可以摸一张牌。'}
+    ]},
+  { id:'sunshangxiang', name:'孙尚香', kingdom:'wu', gender:'female', hp:3, title:'弓腰姬',
+    skills:[
+      {id:'jieyin', name:'结姻', desc:'出牌阶段限一次，你可以弃两张手牌，令你和一名已受伤的男性角色各回复1点体力。'},
+      {id:'xiaoji', name:'枭姬', desc:'当你失去装备区里的一张牌后，你可以摸两张牌。'}
+    ]},
+
+  /* ===== 群 ===== */
+  { id:'huatuo', name:'华佗', kingdom:'qun', gender:'male', hp:3, title:'神医',
+    skills:[
+      {id:'jijiu', name:'急救', desc:'你可以在濒死状态下将一张红色牌当【桃】使用（任何时机，回合外亦可）。'},
+      {id:'qingnang', name:'青囊', desc:'出牌阶段限一次，你可以弃一张手牌，令一名角色回复1点体力。'}
+    ]},
+  { id:'lvbu', name:'吕布', kingdom:'qun', gender:'male', hp:4, title:'战神',
+    skills:[
+      {id:'wushuang', name:'无双', desc:'锁定技，你使用【杀】需两张【闪】才能抵消；你【决斗】时对方需打出两张【杀】。'}
+    ]},
+  { id:'diaochan', name:'貂蝉', kingdom:'qun', gender:'female', hp:3, title:'离间计',
+    skills:[
+      {id:'lijian', name:'离间', desc:'出牌阶段限一次，你可以弃一张牌，令两名男性角色进行【决斗】。'},
+      {id:'biyue', name:'闭月', desc:'结束阶段，你可以摸一张牌。'}
+    ]},
+];
+const GEN_BY_ID = Object.fromEntries(GENERALS.map(g=>[g.id,g]));
+
+/* ============================ 状态层 ============================ */
+const N = 8;
+const ROLE_SETUP = ['主公','忠臣','忠臣','反贼','反贼','反贼','反贼','内奸']; // 8人局
+
+let GS = null; // 全局游戏状态
+
+function makePlayer(seat) {
+  return {
+    seat, isHuman:false, name:'', role:null, general:null,
+    hp:0, maxHp:0, gender:'male', kingdom:'qun',
+    hand:[], equips:{ weapon:null, armor:null, '+1':null, '-1':null },
+    judge:[],           // 判定区（延时锦囊）
+    alive:true, flipped:false, dying:false,
+    skillUsed:{},       // 每回合/每阶段限次技能记录
+    marks:{},           // 杂项标记
+    revealed:false,     // 身份是否已公开（死亡后公开）
+  };
+}
+
+function newGame(humanSeat) {
+  _uid = 0;
+  const players = Array.from({length:N}, (_,i)=>makePlayer(i));
+  // 分配身份：主公固定 seat0，其余打乱
+  const roles = ['主公', ...shuffle(ROLE_SETUP.slice(1))];
+  players.forEach((p,i)=>{ p.role = roles[i]; });
+  players.forEach((p,i)=> p.isHuman = (i===humanSeat));
+  players[humanSeat].revealed = false;
+  // 主公身份公开
+  players[0].revealed = true;
+
+  GS = {
+    players, deck: [], discard: [],
+    turn: 0, current: 0, phase: null,
+    finished: false, humanSeat,
+    ui: null, // 当前人类交互请求
+    ctx: {},  // 当前结算上下文
+  };
+  return GS;
+}
+
+const alivePlayers = () => GS.players.filter(p=>p.alive);
+const P = seat => GS.players[seat];
+const human = () => GS.players[GS.humanSeat];
+
+/* 座位距离（顺/逆时针取小）+ 坐骑修正 */
+function seatDistance(a, b) {
+  if (a === b) return 0;
+  const aliveSeats = GS.players.filter(p=>p.alive).map(p=>p.seat);
+  const ia = aliveSeats.indexOf(a), ib = aliveSeats.indexOf(b);
+  const n = aliveSeats.length;
+  const raw = Math.min((ia-ib+n)%n, (ib-ia+n)%n);
+  return raw;
+}
+function distance(from, to) {
+  let d = seatDistance(from.seat, to.seat);
+  // 逃跑者(+1马)增加距离；进攻者(-1马)减少
+  if (from.equips['-1']) d -= 1;
+  if (to.equips['+1']) d += 1;
+  // 马术
+  if (hasSkill(from,'mashu')) d -= 1;
+  return Math.max(1, d);
+}
+function attackRange(p) {
+  let r = 1;
+  if (p.equips.weapon) r = WEAPON_INFO[p.equips.weapon.wname].range;
+  return r;
+}
+function inAttackRange(from, to) { return distance(from, to) <= attackRange(from); }
+
+/* 技能判定 */
+function hasSkill(p, sid) {
+  if (!p.general) return false;
+  const s = p.general.skills.find(s=>s.id===sid);
+  if (!s) return false;
+  if (s.lord && p.role !== '主公') return false;
+  return true;
+}
+
+/* ============================ 日志 ============================ */
+const logBody = () => document.getElementById('log-body');
+function nameSpan(p) {
+  const k = p.kingdom || 'qun';
+  return `<span class="n-${k}">${p.general?p.general.name:('玩家'+ (p.seat+1))}${p.isHuman?'(你)':''}</span>`;
+}
+function log(html) {
+  const b = logBody();
+  const d = document.createElement('div');
+  d.className = 'entry';
+  d.innerHTML = html;
+  b.appendChild(d);
+  b.parentElement.scrollTop = b.parentElement.scrollHeight;
+  while (b.children.length > 200) b.removeChild(b.firstChild);
+}
+
+/* ============================ 卡牌视觉 ============================ */
+function cardSuitHtml(card, mini) {
+  const sym = SUITS[card.suit];
+  const cls = isRed(card.suit) ? 'suit-r' : 'suit-b';
+  return `<span class="${cls}">${sym}</span>`;
+}
+function cardHtml(card, opts={}) {
+  const mini = opts.mini ? ' mini' : '';
+  const typeCls = ' type-'+card.type;
+  const sym = SUITS[card.suit];
+  const scls = isRed(card.suit) ? 'suit-r' : 'suit-b';
+  const typeCn = card.type==='basic'?'基本':(card.type==='trick'?'锦囊':'装备');
+  return `<div class="pcard${mini}${typeCls}" data-cid="${card.id}">
+    <div class="corner"><div class="num ${scls}">${NUM_LABEL(card.num)}</div><div class="suit ${scls}">${sym}</div></div>
+    <div class="cname">${card.name}</div>
+    <div class="big-suit ${scls}">${sym}</div>
+    <div class="ctype">${typeCn}</div>
+  </div>`;
+}
+
+/* ============================ 座位布局与渲染 ============================ */
+function seatPosition(seat) {
+  // 人类固定底部；其余按出牌顺序绕椭圆分布
+  const h = GS.humanSeat;
+  const k = ((seat - h) + N) % N; // 0 = 人类
+  const cx = 50, cy = 43, rx = 43, ry = 40;
+  const theta = (90 + k * (360/N)) * Math.PI/180;
+  const x = cx + rx * Math.cos(theta);
+  const y = cy + ry * Math.sin(theta);
+  return { x, y };
+}
+
+function renderSeats() {
+  const wrap = document.getElementById('seats');
+  wrap.innerHTML = '';
+  GS.players.forEach(p => {
+    const pos = seatPosition(p.seat);
+    const el = document.createElement('div');
+    el.className = 'seat';
+    el.id = 'seat-'+p.seat;
+    el.style.left = pos.x+'%';
+    el.style.top = pos.y+'%';
+    el.dataset.seat = p.seat;
+    wrap.appendChild(el);
+  });
+  updateAllSeats();
+}
+
+function roleDisplay(p) {
+  // 人类始终看到自己身份；主公公开；其他人死亡后公开
+  if (p.isHuman) return p.role;
+  if (p.role === '主公') return '主公';
+  if (p.revealed) return p.role;
+  return '？';
+}
+
+function updateSeat(p) {
+  const el = document.getElementById('seat-'+p.seat);
+  if (!el) return;
+  const g = p.general;
+  const rd = roleDisplay(p);
+  const roleCls = rd==='？' ? 'role-hidden' : ('role-'+rd);
+  el.className = 'seat' + (p.alive?'':' dead') + (p.flipped?' flipped':'') +
+    (GS.current===p.seat && GS.phase?' current':'');
+
+  const hpPips = [];
+  for (let i=0;i<p.maxHp;i++){
+    const on = i < p.hp;
+    let hpc = '';
+    if (on) hpc = p.hp<=1?'hp-low':(p.hp<=2?'hp-mid':'hp-full');
+    hpPips.push(`<div class="hp-pip ${on?'on '+hpc:''}"></div>`);
+  }
+
+  const equips = [];
+  const eqRow = (c, tag) => {
+    if (!c) return;
+    const scls = isRed(c.suit)?'suit-r':'suit-b';
+    equips.push(`<div class="equip-slot"><span>${tag}</span><span>${c.name}</span><span class="${scls}">${SUITS[c.suit]}${NUM_LABEL(c.num)}</span></div>`);
+  };
+  eqRow(p.equips.weapon,'武'); eqRow(p.equips.armor,'防');
+  eqRow(p.equips['-1'],'攻'); eqRow(p.equips['+1'],'防骑');
+
+  const judges = p.judge.map(c=>{
+    const ld = c.sub==='shandian';
+    return `<span class="judge-tag ${ld?'':'ld'}">${c.name}</span>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="card-frame">
+      <div class="topline">
+        <span class="gname">${g?g.name:'—'}</span>
+        ${g?`<span class="kingdom ${KINGDOM_CLASS[p.kingdom]}">${KINGDOM_CN[p.kingdom]}</span>`:''}
+      </div>
+      <div class="midline">
+        <div class="avatar">${g?g.name[0]:'?'}</div>
+        <div class="stat">
+          <div class="hp-bar">${hpPips.join('')}</div>
+          <div class="infoline">
+            <span class="role-badge ${roleCls}">${rd}</span>
+            <span class="handcount">${p.hand.length}</span>
+          </div>
+        </div>
+      </div>
+      ${equips.length?`<div class="equips">${equips.join('')}</div>`:''}
+      ${judges?`<div class="judge-zone">${judges}</div>`:''}
+      ${p.dying?'<div class="flag dying">濒死</div>':''}
+    </div>
+    <div class="think" id="think-${p.seat}"></div>
+  `;
+  // 重新挂交互态
+  applySeatSelectable(el, p);
+}
+
+function updateAllSeats(){ GS.players.forEach(updateSeat); }
+
+function updateCenter() {
+  document.getElementById('deck-count').textContent = GS.deck.length;
+  const dp = document.getElementById('discard-pile');
+  const top = GS.discard[GS.discard.length-1];
+  dp.innerHTML = top ? cardHtml(top) : '';
+  const ti = document.getElementById('turn-info');
+  if (GS.phase) {
+    const cur = P(GS.current);
+    ti.innerHTML = `第 <b>${GS.turn}</b> 回合 · ${nameSpan(cur)} 的<span class="phase"> ${GS.phase} </span>`;
+  } else ti.innerHTML = '';
+}
+
+/* ============================ 人类交互：选择控制器 ============================
+   uiSelect(opts) -> Promise<{cards:[card], targets:[player], btn:value} | null(取消)>
+   opts:
+     prompt: string
+     cardOK(card, selCards): bool   可否选择该手牌（未定义=不可选牌）
+     targetOK(player, selCards, selTargets): bool  可否选择该目标
+     canConfirm(selCards, selTargets): bool
+     buttons: [{label, value, cls?}]  额外按钮（如技能、点取消）
+     autoAfterCard: 选满即...（不用）
+   ============================================================== */
+let SEL = null;
+function uiSelect(opts) {
+  return new Promise(resolve => {
+    SEL = { opts, cards:new Set(), targets:new Set(), resolve };
+    renderPrompt(opts.prompt);
+    renderButtons();
+    rerenderSelectable();
+  });
+}
+function clearSelection(){
+  SEL = null;
+  document.getElementById('prompt-text').classList.add('hidden');
+  document.getElementById('action-buttons').innerHTML='';
+  rerenderSelectable();
+}
+function renderPrompt(text){
+  const el = document.getElementById('prompt-text');
+  el.innerHTML = text || '';
+  el.classList.toggle('hidden', !text);
+}
+function renderButtons(){
+  const bar = document.getElementById('action-buttons');
+  bar.innerHTML='';
+  if (!SEL) return;
+  const { opts } = SEL;
+  // 确认键（若可选牌/目标）
+  const needsConfirm = opts.canConfirm !== undefined;
+  if (needsConfirm) {
+    const ok = opts.canConfirm(selCardArr(), selTargetArr());
+    const b = document.createElement('button');
+    b.className = 'skill-btn' + (ok?'':' locked');
+    b.style.background = 'linear-gradient(180deg,#d4af5f,#8a7038)';
+    b.style.color = '#2a1e0a';
+    b.textContent = opts.confirmLabel || '确定';
+    b.onclick = () => { if (ok) finishSelect('confirm'); };
+    bar.appendChild(b);
+  }
+  (opts.buttons||[]).forEach(bt=>{
+    const b=document.createElement('button');
+    b.className='skill-btn '+(bt.cls||'');
+    if (bt.disabled) b.classList.add('locked');
+    b.textContent=bt.label;
+    b.onclick=()=>{ if(!bt.disabled) finishSelect(bt.value); };
+    bar.appendChild(b);
+  });
+}
+function selCardArr(){ return SEL?[...SEL.cards].map(id=>findCardById(id)):[]; }
+function selTargetArr(){ return SEL?[...SEL.targets].map(s=>P(s)):[]; }
+function finishSelect(btn){
+  const res = { cards: selCardArr(), targets: selTargetArr(), btn };
+  const resolve = SEL.resolve;
+  clearSelection();
+  resolve(btn==='cancel' ? null : res);
+}
+
+function findCardById(id){
+  for (const p of GS.players){
+    const c = p.hand.find(c=>c.id===id); if(c) return c;
+    for (const k in p.equips){ if(p.equips[k] && p.equips[k].id===id) return p.equips[k]; }
+  }
+  const d = GS.deck.find(c=>c.id===id) || GS.discard.find(c=>c.id===id);
+  return d || null;
+}
+
+/* 手牌点击 */
+function onHandCardClick(cid){
+  if (!SEL || !SEL.opts.cardOK) return;
+  const card = findCardById(cid);
+  if (SEL.cards.has(cid)) { SEL.cards.delete(cid); }
+  else {
+    if (!SEL.opts.cardOK(card, selCardArr())) return;
+    SEL.cards.add(cid);
+  }
+  renderButtons(); rerenderSelectable();
+}
+/* 座位点击 */
+function onSeatClick(seat){
+  if (!SEL || !SEL.opts.targetOK) return;
+  const p = P(seat);
+  if (SEL.targets.has(seat)) SEL.targets.delete(seat);
+  else {
+    if (!SEL.opts.targetOK(p, selCardArr(), selTargetArr())) return;
+    SEL.targets.add(seat);
+  }
+  renderButtons(); rerenderSelectable();
+}
+
+function rerenderSelectable(){
+  // 手牌
+  document.querySelectorAll('#hand-bar .pcard').forEach(el=>{
+    const cid = +el.dataset.cid;
+    el.classList.remove('selected','unusable');
+    if (!SEL || !SEL.opts.cardOK){ return; }
+    const card = findCardById(cid);
+    const sel = SEL.cards.has(cid);
+    if (sel) el.classList.add('selected');
+    else if (!SEL.opts.cardOK(card, selCardArr())) el.classList.add('unusable');
+  });
+  // 座位
+  GS.players.forEach(p=>{
+    const el = document.getElementById('seat-'+p.seat);
+    if (!el) return;
+    applySeatSelectable(el, p);
+  });
+}
+function applySeatSelectable(el, p){
+  el.classList.remove('targetable','selected-target');
+  if (!SEL || !SEL.opts.targetOK) return;
+  if (SEL.targets.has(p.seat)) { el.classList.add('selected-target'); return; }
+  if (SEL.opts.targetOK(p, selCardArr(), selTargetArr())) el.classList.add('targetable');
+}
+
+/* 事件委托 */
+document.addEventListener('click', e=>{
+  const hc = e.target.closest('#hand-bar .pcard');
+  if (hc){ onHandCardClick(+hc.dataset.cid); return; }
+  const st = e.target.closest('.seat');
+  if (st && st.dataset.seat!==undefined){ onSeatClick(+st.dataset.seat); return; }
+});
+
+/* 渲染人类手牌 */
+function renderHand(){
+  const bar = document.getElementById('hand-bar');
+  const h = human();
+  bar.innerHTML = h.hand.map(c=>cardHtml(c)).join('');
+  rerenderSelectable();
+}
+
+/* 技能高亮闪现 */
+function skillFlash(p, text){
+  const el = document.getElementById('seat-'+p.seat);
+  if (!el) return;
+  const f = document.createElement('div');
+  f.className='skill-flash play';
+  f.textContent=text;
+  el.appendChild(f);
+  setTimeout(()=>f.remove(), 1200);
+}
+/* AI 气泡 */
+async function bubble(p, text, ms=650){
+  const el = document.getElementById('think-'+p.seat);
+  if (!el) return;
+  el.textContent = text; el.classList.add('show');
+  await pace(ms);
+  el.classList.remove('show');
+}
+
+/* ============================ 通用弹窗 ============================ */
+const modalLayer = () => document.getElementById('modal-layer');
+function showModal(html){
+  const m = document.getElementById('modal');
+  m.innerHTML = html;
+  modalLayer().classList.add('active');
+  return m;
+}
+function hideModal(){ modalLayer().classList.remove('active'); }
+
+/* 选项弹窗：返回所选 value */
+function chooseOption(title, desc, options){ // options:[{label,value,cls?}]
+  return new Promise(resolve=>{
+    const m = showModal(`<h3>${title}</h3>${desc?`<div class="desc">${desc}</div>`:''}
+      <div class="grid-choices" id="opts"></div>`);
+    const box = m.querySelector('#opts');
+    options.forEach(o=>{
+      const b=document.createElement('div');
+      b.className='opt '+(o.cls||'');
+      b.textContent=o.label;
+      b.onclick=()=>{ hideModal(); resolve(o.value); };
+      box.appendChild(b);
+    });
+  });
+}
+
+/* 从若干张牌里选 n 张（用于观星/五谷/弃牌等的通用可视化选择器可另写） */
+
+/* ============================ 开局：选将 & 发牌 ============================ */
+async function chooseGeneralHuman() {
+  // 人类从 3 个随机候选中选 1 个
+  const pool = shuffle(GENERALS.slice());
+  const cand = pool.slice(0, 3);
+  return new Promise(resolve=>{
+    const m = showModal(`<h3>选择你的武将</h3>
+      <div class="desc">你是 <b style="color:var(--gold2)">${human().role}</b>。从下列武将中择一登场。</div>
+      <div class="choice-cards" id="gens"></div>
+      <div class="btn-row"><button class="btn sm locked" id="gen-ok" disabled>确 定</button></div>`);
+    const box = m.querySelector('#gens');
+    let sel = null;
+    cand.forEach(g=>{
+      const c = document.createElement('div');
+      c.className='gen-card';
+      c.innerHTML = `<div class="gc-name">${g.name}</div>
+        <div class="gc-sub">${KINGDOM_CN[g.kingdom]} · ${g.title} · ${g.gender==='male'?'♂':'♀'}</div>
+        <div class="gc-hp">${'❤'.repeat(g.hp)} (${g.hp}血)</div>
+        ${g.skills.map(s=>`<div class="gc-skill"><b>${s.name}</b>：${s.desc}</div>`).join('')}`;
+      c.onclick=()=>{
+        box.querySelectorAll('.gen-card').forEach(x=>x.classList.remove('selected'));
+        c.classList.add('selected'); sel=g;
+        const ok=m.querySelector('#gen-ok'); ok.classList.remove('locked'); ok.disabled=false;
+      };
+      box.appendChild(c);
+    });
+    m.querySelector('#gen-ok').onclick=()=>{ if(sel){ hideModal(); resolve(sel); } };
+  });
+}
+
+function assignGeneral(p, g) {
+  p.general = g;
+  p.kingdom = g.kingdom;
+  p.gender = g.gender;
+  p.maxHp = g.hp + (p.role==='主公' ? 1 : 0); // 主公+1体力
+  p.hp = p.maxHp;
+}
+
+async function setupGame() {
+  document.getElementById('setup').style.display='none';
+  document.getElementById('table').classList.add('active');
+  document.getElementById('end-screen').classList.remove('active');
+
+  const humanSeat = 0; // 人类坐主公位左侧不合适——让人类随机身份：随机分配座位
+  // 人类随机坐一个非主公也可能是主公的位置：这里让人类可能是任意身份 → 随机 human seat
+  const hSeat = rnd(N);
+  newGame(hSeat);
+
+  // 选将：人类先选，AI 各自随机独立候选
+  const usedGenerals = new Set();
+  const h = human();
+  const hg = await chooseGeneralHuman();
+  assignGeneral(h, hg); usedGenerals.add(hg.id);
+
+  // AI 选将（每人从剩余中随机，主公略偏防御）
+  const remain = shuffle(GENERALS.filter(g=>!usedGenerals.has(g.id)));
+  let ri = 0;
+  for (const p of GS.players){
+    if (p.isHuman) continue;
+    const g = remain[ri++];
+    assignGeneral(p, g); usedGenerals.add(g.id);
+  }
+
+  // 建立牌堆
+  GS.deck = shuffle(buildDeck());
+  GS.discard = [];
+
+  // 起始手牌 4 张
+  for (const p of GS.players){ p.hand = drawCards(p, 4, true); }
+
+  renderSeats();
+  renderHand();
+  updateCenter();
+
+  log(`<span class="sk">⚔ 游戏开始</span> · 八人身份局`);
+  log(`你的身份：<b class="sk">${h.role}</b>，武将：${nameSpan(h)}`);
+  log(`主公为 ${nameSpan(P(0))}。`);
+
+  await pace(400);
+  runGameLoop();
+}
+
+/* 摸牌（silent=不记录日志、不动画） */
+function drawCards(p, n, silent) {
+  const out = [];
+  for (let i=0;i<n;i++){
+    if (GS.deck.length===0) reshuffle();
+    if (GS.deck.length===0) break;
+    const c = GS.deck.shift();
+    p.hand.push(c); out.push(c);
+  }
+  if (!silent){ updateSeat(p); if(p.isHuman) renderHand(); updateCenter(); }
+  return out;
+}
+function reshuffle(){
+  if (GS.discard.length===0) return;
+  const top = GS.discard.pop(); // 保留最上作展示
+  GS.deck = shuffle(GS.discard);
+  GS.discard = top?[top]:[];
+  log(`<span class="sk">弃牌堆重洗入牌堆</span>`);
+}
+
+/* 弃牌到弃牌堆 */
+function toDiscard(cards){
+  cards.forEach(c=>{ delete c._virtual; GS.discard.push(c); });
+  updateCenter();
+}
+
+/* ============================ 卡牌移动原语 ============================ */
+/* 从某人区域移除一张牌（手牌或装备/判定区） */
+function removeCardFrom(p, card){
+  let i = p.hand.findIndex(c=>c.id===card.id);
+  if (i>=0){ p.hand.splice(i,1); return {zone:'hand'}; }
+  for (const k in p.equips){ if(p.equips[k] && p.equips[k].id===card.id){ const c=p.equips[k]; p.equips[k]=null; return {zone:'equip',slot:k}; } }
+  i = p.judge.findIndex(c=>c.id===card.id);
+  if (i>=0){ p.judge.splice(i,1); return {zone:'judge'}; }
+  return null;
+}
+/* 找出一张牌当前所在的玩家 */
+function ownerOf(card){
+  for (const p of GS.players){
+    if (p.hand.some(c=>c.id===card.id)) return {p, zone:'hand'};
+    for (const k in p.equips){ if(p.equips[k] && p.equips[k].id===card.id) return {p, zone:'equip', slot:k}; }
+    if (p.judge.some(c=>c.id===card.id)) return {p, zone:'judge'};
+  }
+  return null;
+}
+
+/* 获得牌到手牌（用于反馈/奸雄/顺手等） */
+function gainCard(to, card, fromP){
+  if (fromP){ removeCardFrom(fromP, card); }
+  else {
+    const i = GS.discard.findIndex(c=>c.id===card.id); if(i>=0) GS.discard.splice(i,1);
+  }
+  delete card._virtual;
+  to.hand.push(card);
+  updateSeat(to); if (fromP) updateSeat(fromP);
+  if (to.isHuman || (fromP&&fromP.isHuman)) renderHand();
+  updateCenter();
+}
+
+/* 装备一张装备牌 */
+function equipCard(p, card){
+  const slot = card.sub==='weapon' ? 'weapon' : card.sub==='armor' ? 'armor' : card.sub;
+  const old = p.equips[slot];
+  removeCardFrom(p, card);
+  p.equips[slot] = card;
+  if (old) toDiscard([old]);
+  updateSeat(p);
+}
+
+/* ============================ 濒死 & 伤害 & 回复 ============================ */
+/* 造成伤害。source 可为 null（如闪电） */
+async function dealDamage(source, target, amount, opts={}) {
+  if (!target.alive || amount<=0) return;
+  // 声望更新：谁对谁造成伤害（用于身份推理）
+  if (source && source!==target) noteHostileAct(source, target);
+  target.hp -= amount;
+  const nature = opts.nature ? `（${opts.nature}）` : '';
+  log(`${source?nameSpan(source):'系统'} 对 ${nameSpan(target)} 造成 <span class="dmg">${amount} 点${nature}伤害</span>（${target.hp}/${target.maxHp}）`);
+  updateSeat(target);
+  await pace(300);
+  // 受伤后技能钩子
+  await triggerDamaged(source, target, amount, opts);
+  if (target.hp <= 0) await enterDying(target, source);
+}
+
+async function loseHp(target, amount, reason){
+  if (!target.alive) return;
+  target.hp -= amount;
+  log(`${nameSpan(target)} 失去 <span class="dmg">${amount} 点体力</span>${reason?'（'+reason+'）':''}（${target.hp}/${target.maxHp}）`);
+  updateSeat(target);
+  await pace(200);
+  if (target.hp <= 0) await enterDying(target, null);
+}
+
+function healHp(target, amount){
+  if (!target.alive) return;
+  const before = target.hp;
+  target.hp = Math.min(target.maxHp, target.hp + amount);
+  const gained = target.hp - before;
+  if (gained>0) log(`${nameSpan(target)} 回复 <span class="heal">${gained} 点体力</span>（${target.hp}/${target.maxHp}）`);
+  updateSeat(target);
+}
+
+/* 濒死求桃流程 */
+async function enterDying(target, source){
+  target.dying = true; updateSeat(target);
+  log(`<span class="die">${target.general.name} 进入濒死！</span>`);
+  await pace(300);
+  // 从当前角色开始，所有角色依次可出桃（濒死者本人最先）
+  const order = playerOrderFrom(target.seat);
+  while (target.hp <= 0 && target.alive) {
+    let saved = false;
+    for (const rescuer of order){
+      if (!rescuer.alive) continue;
+      if (target.hp > 0) break;
+      const need = 1 - target.hp; // 需要几个桃才 >0 也是每次问一张
+      // 请求出桃（急救：华佗回合外红牌当桃）
+      const tao = await askForPeach(rescuer, target);
+      if (tao){
+        useTaoToSave(rescuer, target, tao);
+        healHp(target, 1);
+        saved = true;
+        if (target.hp > 0) break;
+      }
+    }
+    if (!saved) break; // 无人再出桃
+  }
+  if (target.hp > 0){
+    target.dying=false; updateSeat(target);
+    log(`${nameSpan(target)} 转危为安。`);
+  } else {
+    await killPlayer(target, source);
+  }
+}
+
+function playerOrderFrom(seat){
+  const alive = GS.players.filter(p=>p.alive);
+  const order=[];
+  const startIdx = GS.players.findIndex(p=>p.seat===seat);
+  for (let i=0;i<N;i++){
+    const p = GS.players[(seat+i)%N];
+    order.push(p);
+  }
+  return order;
+}
+
+/* 死亡结算 */
+async function killPlayer(target, source){
+  target.alive=false; target.dying=false; target.revealed=true;
+  log(`<span class="die">☠ ${target.general.name}（${target.role}）阵亡！</span>`);
+  // 弃置所有牌
+  const all = [...target.hand]; target.hand=[];
+  for (const k in target.equips){ if(target.equips[k]){ all.push(target.equips[k]); target.equips[k]=null; } }
+  all.push(...target.judge); target.judge=[];
+  if (all.length) toDiscard(all);
+  updateSeat(target);
+  await pace(300);
+
+  // 奖惩：杀反贼摸3；主公杀忠臣弃所有牌
+  if (source && source.alive && source!==target){
+    if (target.role==='反贼'){
+      log(`${nameSpan(source)} 击杀反贼，摸三张牌。`);
+      drawCards(source, 3);
+    } else if (target.role==='忠臣' && source.role==='主公'){
+      log(`${nameSpan(source)} 主公误杀忠臣，弃置所有手牌与装备！`);
+      const s=[...source.hand]; source.hand=[];
+      for(const k in source.equips){ if(source.equips[k]){ s.push(source.equips[k]); source.equips[k]=null; } }
+      if(s.length) toDiscard(s);
+      updateSeat(source); if(source.isHuman) renderHand();
+    }
+  }
+  checkVictory();
+}
+
+/* ============================ 胜负判定 ============================ */
+function checkVictory(){
+  if (GS.finished) return true;
+  const alive = alivePlayers();
+  const lord = GS.players.find(p=>p.role==='主公');
+  const rebelsAlive = alive.filter(p=>p.role==='反贼').length;
+  const spiesAlive = alive.filter(p=>p.role==='内奸').length;
+  const loyalAlive = alive.filter(p=>p.role==='忠臣').length;
+
+  if (!lord.alive){
+    // 主公死。若仅剩内奸1人存活 → 内奸胜；否则反贼胜
+    if (alive.length===1 && alive[0].role==='内奸'){
+      endGame('内奸', '内奸') ; return true;
+    }
+    // 反贼阵营胜
+    endGame('反贼', '反贼'); return true;
+  }
+  // 主公存活：若反贼与内奸全灭 → 主忠胜
+  if (rebelsAlive===0 && spiesAlive===0){
+    endGame('主忠', '主公'); return true;
+  }
+  return false;
+}
+
+function endGame(winSide, winnerRoleGroup){
+  GS.finished = true;
+  const h = human();
+  let humanWin=false;
+  if (winSide==='主忠') humanWin = (h.role==='主公'||h.role==='忠臣');
+  else if (winSide==='反贼') humanWin = (h.role==='反贼');
+  else if (winSide==='内奸') humanWin = (h.role==='内奸');
+
+  const titleMap = { '主忠':'主公势力 胜利', '反贼':'反贼 胜利', '内奸':'内奸 独存 · 胜利' };
+  setTimeout(()=>showEndScreen(titleMap[winSide], humanWin), 700);
+}
+
+function showEndScreen(subtitle, humanWin){
+  const es = document.getElementById('end-screen');
+  const t = document.getElementById('end-title');
+  t.textContent = humanWin ? '胜 利' : '败 北';
+  t.className = humanWin ? 'win' : 'lose';
+  document.getElementById('end-sub').textContent = subtitle;
+  const rr = document.getElementById('end-roles');
+  rr.innerHTML = GS.players.map(p=>`
+    <div class="rr">
+      <div class="rn">${p.general.name}${p.isHuman?'(你)':''}</div>
+      <div>${p.role} · ${p.alive?'存活':'阵亡'}</div>
+    </div>`).join('');
+  es.classList.add('active');
+}
+
+/* ============================ 主循环 & 回合阶段 ============================ */
+async function runGameLoop(){
+  GS.current = 0;
+  while (!GS.finished){
+    const p = P(GS.current);
+    if (p.alive){
+      GS.turn++;
+      await runTurn(p);
+    }
+    if (GS.finished) break;
+    GS.current = (GS.current+1)%N;
+    // 安全阈值
+    if (GS.turn > 500) break;
+  }
+}
+
+async function runTurn(p){
+  resetTurnFlags(p);
+  updateAllSeats(); updateCenter();
+  // 1 准备阶段
+  GS.phase='准备阶段'; updateCenter();
+  await triggerPhase('prepare', p);
+  if (!p.alive || GS.finished) return;
+
+  // 翻面：若已翻面则本回合跳过并翻回
+  if (p.flipped){
+    p.flipped=false; updateSeat(p);
+    log(`${nameSpan(p)} 处于翻面状态，跳过此回合并翻回。`);
+    return;
+  }
+
+  // 2 判定阶段
+  GS.phase='判定阶段'; updateCenter();
+  await judgePhase(p);
+  if (!p.alive || GS.finished) return;
+
+  // 3 摸牌阶段
+  GS.phase='摸牌阶段'; updateCenter();
+  await drawPhase(p);
+  if (!p.alive || GS.finished) return;
+
+  // 4 出牌阶段
+  GS.phase='出牌阶段'; updateCenter();
+  await playPhase(p);
+  if (!p.alive || GS.finished) return;
+
+  // 5 弃牌阶段
+  GS.phase='弃牌阶段'; updateCenter();
+  await discardPhase(p);
+  if (!p.alive || GS.finished) return;
+
+  // 6 结束阶段
+  GS.phase='结束阶段'; updateCenter();
+  await triggerPhase('end', p);
+
+  GS.phase=null;
+}
+
+function resetTurnFlags(p){
+  p.skillUsed = {};
+  p.marks.usedSlash = 0;
+  p.marks.luoyi = false;
+  p.marks.rendeGiven = 0; p.marks.rendeHealed=false;
+}
+
+/* ---------- 判定阶段：处理判定区延时锦囊 ---------- */
+async function judgePhase(p){
+  // 判定区从最后放置的开始（后进先出）
+  while (p.judge.length){
+    const card = p.judge[p.judge.length-1];
+    // 可被无懈：延时锦囊
+    // 询问无懈（对判定牌“作用于自己”这一效果取消）
+    if (card.sub==='lebu'){
+      const cancelled = await askWuxieChain(card, p, `【乐不思蜀】对 ${p.general.name} 生效`);
+      p.judge.pop();
+      if (cancelled){ toDiscard([card]); log(`${nameSpan(p)} 的【乐不思蜀】被无懈化解。`); continue; }
+      const jc = await doJudge(p, '乐不思蜀');
+      toDiscard([card]);
+      if (jc.suit!=='heart'){ log(`${nameSpan(p)} 判定非红桃，跳过出牌阶段。`); p.marks.skipPlay=true; }
+      else log(`${nameSpan(p)} 判定为红桃，摆脱乐不思蜀。`);
+    } else if (card.sub==='shandian'){
+      const cancelled = await askWuxieChain(card, p, `【闪电】对 ${p.general.name} 判定`);
+      if (cancelled){ p.judge.pop(); toDiscard([card]); log(`${nameSpan(p)} 的【闪电】被无懈化解。`); continue; }
+      const jc = await doJudge(p, '闪电');
+      if (jc.suit==='spade' && jc.num>=2 && jc.num<=9){
+        p.judge.pop(); toDiscard([card]);
+        log(`<span class="dmg">⚡ 闪电命中 ${p.general.name}！</span>`);
+        await dealDamage(null, p, 3, {nature:'雷电'});
+        if (!p.alive || GS.finished) return;
+      } else {
+        // 移动到下家判定区
+        p.judge.pop();
+        const next = nextAlive(p.seat);
+        next.judge.push(card);
+        log(`${nameSpan(p)} 未触发闪电，移交给 ${nameSpan(next)}。`);
+        updateSeat(p); updateSeat(next);
+      }
+    } else { p.judge.pop(); toDiscard([card]); }
+    await pace(300);
+  }
+}
+
+function nextAlive(seat){
+  for (let i=1;i<=N;i++){ const p=GS.players[(seat+i)%N]; if(p.alive) return p; }
+  return P(seat);
+}
+
+/* 判定：翻开牌堆顶。支持改判（鬼才/洛神在钩子里处理） */
+async function doJudge(p, label){
+  if (GS.deck.length===0) reshuffle();
+  let card = GS.deck.shift();
+  log(`${nameSpan(p)} 判定【${label}】：翻出 ${cardMini(card)}`);
+  updateCenter();
+  await pace(400);
+  // 改判钩子（鬼才：司马懿可用手牌替换）
+  card = await triggerRetrial(p, card, label);
+  // 判定结果展示
+  GS.ctx.lastJudge = card;
+  // 天妒：郭嘉判定后获得判定牌
+  const finalCard = card;
+  await pace(200);
+  // 判定牌进入弃牌堆（除非被天妒/洛神获得，在钩子里处理并标记 _taken）
+  const taken = await triggerJudgeResult(p, finalCard, label);
+  if (!taken){ toDiscard([finalCard]); }
+  return finalCard;
+}
+function cardMini(c){
+  const scls=isRed(c.suit)?'suit-r':'suit-b';
+  return `<b>${c.name}</b> <span class="${scls}">${SUITS[c.suit]}${NUM_LABEL(c.num)}</span>`;
+}
+
+/* ---------- 摸牌阶段 ---------- */
+async function drawPhase(p){
+  let n = 2;
+  // 技能：英姿+1；裸衣-1（许褚选择）；突袭（张辽换为拿牌）
+  const mod = await triggerDrawPhase(p);
+  if (mod && mod.skip) { return; } // 突袭已处理
+  n += (mod && mod.delta) ? mod.delta : 0;
+  if (n>0) { drawCards(p, n); log(`${nameSpan(p)} 摸 ${n} 张牌。`); }
+}
+
+/* ---------- 弃牌阶段 ---------- */
+async function discardPhase(p){
+  // 克己：吕蒙若本回合未出杀可跳过
+  if (hasSkill(p,'keji') && !p.marks.usedSlashOrDodge){
+    skillFlash(p,'克己');
+    log(`<span class="sk">克己</span>：${nameSpan(p)} 跳过弃牌阶段。`);
+    return;
+  }
+  const limit = Math.max(0, p.hp);
+  let over = p.hand.length - limit;
+  if (over<=0) return;
+  if (p.isHuman){
+    await humanDiscard(p, over);
+  } else {
+    const toss = aiChooseDiscard(p, over);
+    toDiscard(toss.map(c=>{ removeCardFrom(p,c); return c; }));
+    log(`${nameSpan(p)} 弃置 ${over} 张牌。`);
+    updateSeat(p);
+  }
+}
+
+async function humanDiscard(p, count){
+  const res = await uiSelect({
+    prompt:`弃牌阶段：请弃置 ${count} 张手牌`,
+    cardOK:(card, sel)=> p.hand.some(c=>c.id===card.id) && sel.length<count || sel.some(s=>s.id===card.id),
+    canConfirm:(sel)=> sel.length===count,
+    confirmLabel:'弃牌',
+  });
+  if (res){
+    toDiscard(res.cards.map(c=>{ removeCardFrom(p,c); return c; }));
+    log(`${nameSpan(p)} 弃置 ${count} 张牌。`);
+    updateSeat(p); renderHand();
+  }
+}
+
+/* ============================ 出牌阶段 ============================ */
+async function playPhase(p){
+  if (p.marks.skipPlay){ p.marks.skipPlay=false; log(`${nameSpan(p)} 跳过出牌阶段。`); return; }
+  if (p.isHuman) await humanPlayPhase(p);
+  else await aiPlayPhase(p);
+}
+
+/* ---------- 判断一张（或虚拟）牌在出牌阶段能否使用 ---------- */
+function slashLimit(p){
+  if (hasSkill(p,'paoxiao')) return Infinity;
+  if (p.equips.weapon && p.equips.weapon.wname==='crossbow') return Infinity;
+  return 1;
+}
+function canUseSlashNow(p){ return (p.marks.usedSlash||0) < slashLimit(p); }
+
+/* 该牌（实体）在出牌阶段是否“可点” + 可作为哪些用途 */
+function playableActions(p, card){
+  // 返回可执行的动作 list（用于人类点牌后决定）
+  const acts=[];
+  if (card.type==='basic'){
+    if (card.sub==='杀' && canUseSlashNow(p)) acts.push({kind:'杀'});
+    if (card.sub==='桃' && p.hp<p.maxHp) acts.push({kind:'桃'});
+    // 龙胆：闪当杀
+    if (card.sub==='闪' && hasSkill(p,'longdan') && canUseSlashNow(p)) acts.push({kind:'杀', via:'longdan'});
+    if (card.sub==='杀' && hasSkill(p,'longdan')) {/* 杀当闪只在响应时用 */}
+  } else if (card.type==='trick'){
+    acts.push({kind:'trick', sub:card.sub});
+  } else if (card.type==='equip'){
+    acts.push({kind:'equip'});
+  }
+  // 转化技：武圣（红→杀）、倾国（黑→闪，仅响应）、奇袭（黑→拆桥）、国色（方块→乐不思蜀）
+  if (hasSkill(p,'wusheng') && isRed(card.suit) && card.sub!=='杀' && canUseSlashNow(p)) acts.push({kind:'杀', via:'wusheng'});
+  if (hasSkill(p,'qixi') && isBlack(card.suit) && card.name!=='过河拆桥') acts.push({kind:'trick', sub:'chaiqiao', via:'qixi'});
+  if (hasSkill(p,'guose') && card.suit==='diamond' && card.name!=='乐不思蜀') acts.push({kind:'trick', sub:'lebu', via:'guose'});
+  return acts;
+}
+
+/* human 出牌阶段主循环 */
+async function humanPlayPhase(p){
+  while (true){
+    if (!p.alive || GS.finished) return;
+    const skillBtns = getActiveSkillButtons(p);
+    const res = await uiSelect({
+      prompt:`出牌阶段：选择手牌使用，或点“结束出牌”`,
+      cardOK:(card, sel)=>{
+        // 单选一张（多数情况）——选中即尝试使用；这里允许选1张
+        if (sel.length>=1 && !sel.some(s=>s.id===card.id)) return false;
+        return p.hand.some(c=>c.id===card.id) && playableActions(p,card).length>0;
+      },
+      canConfirm:(sel)=> sel.length===1,
+      confirmLabel:'使用',
+      buttons:[...skillBtns, {label:'结束出牌', value:'end', cls:''}],
+    });
+    if (!res || res.btn==='end') return;
+    if (res.btn && res.btn!=='confirm'){
+      // 触发主动技
+      await handleActiveSkill(p, res.btn);
+      renderHand(); updateAllSeats();
+      continue;
+    }
+    const card = res.cards[0];
+    if (!card) continue;
+    const ok = await humanUseCard(p, card);
+    renderHand(); updateAllSeats(); updateCenter();
+    if (GS.finished) return;
+  }
+}
+
+/* human 使用一张牌（决定用途 + 选目标） */
+async function humanUseCard(p, card){
+  const acts = playableActions(p, card);
+  if (acts.length===0) return false;
+  let act = acts[0];
+  if (acts.length>1){
+    const choice = await chooseOption('选择用途', `【${card.name}】`, acts.map((a,i)=>({
+      label: actLabel(a, card), value:i
+    })));
+    act = acts[choice];
+  }
+  return await performAct(p, card, act);
+}
+function actLabel(a, card){
+  if (a.kind==='杀') return a.via==='wusheng'?'当【杀】使用(武圣)':(a.via==='longdan'?'当【杀】使用(龙胆)':'使用【杀】');
+  if (a.kind==='桃') return '使用【桃】回血';
+  if (a.kind==='trick'){
+    const nm = TRICK_CN[a.sub]||card.name;
+    if (a.via==='qixi') return '当【过河拆桥】使用(奇袭)';
+    if (a.via==='guose') return '当【乐不思蜀】使用(国色)';
+    return `使用【${nm}】`;
+  }
+  if (a.kind==='equip') return '装备';
+  return '使用';
+}
+
+const TRICK_CN = { wuzhong:'无中生有', juedou:'决斗', chaiqiao:'过河拆桥', shunshou:'顺手牵羊',
+  jiedao:'借刀杀人', wugu:'五谷丰登', taoyuan:'桃园结义', nanman:'南蛮入侵', wanjian:'万箭齐发',
+  wuxie:'无懈可击', lebu:'乐不思蜀', shandian:'闪电' };
+
+/* 执行一个动作 */
+async function performAct(p, card, act){
+  if (act.kind==='equip'){
+    log(`${nameSpan(p)} 装备 ${cardMini(card)}。`);
+    equipCard(p, card);
+    if (card.sub==='weapon' && card.wname==='qinggang'){}
+    return true;
+  }
+  if (act.kind==='桃'){
+    removeCardFrom(p, card); toDiscard([card]);
+    log(`${nameSpan(p)} 使用【桃】。`);
+    healHp(p, 1);
+    return true;
+  }
+  if (act.kind==='杀'){
+    return await useSlash(p, card, act.via);
+  }
+  if (act.kind==='trick'){
+    return await useTrick(p, card, act.sub, act.via);
+  }
+  return false;
+}
+
+/* ============================ 【杀】 ============================ */
+async function useSlash(p, card, via){
+  // 选择目标（攻击范围内、非空城无手牌者等）
+  const targets = alivePlayers().filter(t=> t!==p && canBeSlashTarget(p,t));
+  if (targets.length===0){ toast('没有可选目标'); return false; }
+  let chosen;
+  // 雌雄双股剑/方天画戟不改变目标数（标准：杀单体）
+  if (p.isHuman){
+    chosen = await pickTargets(p, `使用【杀】：选择目标（攻击范围 ${attackRange(p)}）`, 1, 1,
+      t=> t!==p && canBeSlashTarget(p,t));
+    if (!chosen) return false;
+  }
+  const target = chosen[0];
+  removeCardFrom(p, card);
+  const virtualName = via==='wusheng'?'杀(武圣)':via==='longdan'?'杀(龙胆)':'杀';
+  log(`${nameSpan(p)} 对 ${nameSpan(target)} 使用 ${via?('【杀】·'+({wusheng:'武圣',longdan:'龙胆'}[via])):cardMini(card)}`);
+  flyCard(p, target, card);
+  toDiscard([card]);
+  p.marks.usedSlash = (p.marks.usedSlash||0)+1;
+  p.marks.usedSlashOrDodge = true;
+  await pace(350);
+  await resolveSlash(p, target, card, {});
+  return true;
+}
+
+function canBeSlashTarget(from, to){
+  if (!inAttackRange(from, to)) return false;
+  if (hasSkill(to,'kongcheng') && to.hand.length===0) return false; // 空城
+  return true;
+}
+
+/* 杀结算：目标响应闪 */
+async function resolveSlash(source, target, slashCard, opts){
+  // 流离（大乔）：成为杀目标时可转移
+  if (hasSkill(target,'liuli') && !opts.noLiuli && hasCardsToLose(target)){
+    const redirected = await tryLiuli(source, target, slashCard);
+    if (redirected){ target = redirected; }
+  }
+  if (!target.alive || GS.finished) return;
+  // 铁骑：马超可判定令此杀不可闪
+  let unavoidable = false;
+  if (hasSkill(source,'tieji') && !opts.fromJiedao){
+    unavoidable = await tryTieji(source, target);
+  }
+  // 青釭剑无视防具（八卦）
+  const qinggang = source.equips.weapon && source.equips.weapon.wname==='qinggang';
+  const dodgesNeeded = hasSkill(source,'wushuang') ? 2 : 1;
+
+  let dodged = false;
+  if (!unavoidable){
+    dodged = await askDodge(target, source, dodgesNeeded, {qinggang});
+  } else {
+    log(`<span class="sk">铁骑</span>：此【杀】不可被【闪】抵消。`);
+  }
+
+  if (dodged){ return; }
+  let dmg = 1;
+  if (source.marks.luoyi) dmg += 1; // 裸衣
+  const nature = slashCard && slashCard._nature ? slashCard._nature : null;
+  await dealDamage(source, target, dmg, {slash:true, source, damageCard:slashCard, nature});
+  // 麒麟弓
+  if (source.equips.weapon && source.equips.weapon.wname==='qilin' && source.alive){
+    await tryQilin(source, target);
+  }
+}
+
+/* 流离（大乔）：弃一张牌把杀转移给攻击范围内另一角色 */
+async function tryLiuli(source, target, slashCard){
+  const cand = alivePlayers().filter(t=> t!==target && t!==source && canBeSlashTarget(target,t));
+  if (cand.length===0) return null;
+  let go, dest, discardCard;
+  if (target.isHuman){
+    go = await confirmSkill(target,'流离','弃一张牌，将此【杀】转移给你攻击范围内的另一名角色？');
+    if (!go) return null;
+    const picks = await humanChooseNCards(target, 1, '流离：弃一张牌');
+    if (!picks||!picks.length) return null;
+    discardCard = picks[0];
+    const dests = await pickTargets(target, '流离：选择转移目标', 1,1, t=>cand.includes(t));
+    if (!dests){ return null; }
+    dest = dests[0];
+  } else {
+    // AI：把杀转给敌人
+    dest = cand.find(t=>aiHostility(target,t)>0) || null;
+    if (!dest) return null;
+    if (target.hand.length===0) return null;
+    discardCard = target.hand[0];
+  }
+  removeCardFrom(target, discardCard); toDiscard([discardCard]);
+  skillFlash(target,'流离');
+  log(`<span class="sk">流离</span>：${nameSpan(target)} 将【杀】转移给 ${nameSpan(dest)}。`);
+  updateSeat(target); if(target.isHuman) renderHand();
+  return dest;
+}
+
+/* 请求出闪（可能需要多张；八卦阵可判定生成闪；倾国黑手牌当闪；龙胆杀当闪） */
+async function askDodge(target, source, count, opts){
+  let got=0;
+  for (let i=0;i<count;i++){
+    // 八卦阵
+    if (target.equips.armor && target.equips.armor.aname==='bagua' && !opts.qinggang){
+      const jc = await baguaJudge(target);
+      if (jc){ got++; continue; }
+    }
+    const dodge = await getDodgeCard(target, source);
+    if (dodge){
+      useDodgeCard(target, dodge);
+      got++; continue;
+    }
+    // 护驾（曹操主公）：本人无闪时求助魏势力
+    if (hasSkill(target,'hujia')){
+      const hj = await tryHujia(target);
+      if (hj){ got++; continue; }
+    }
+    return false; // 未能凑齐，命中
+  }
+  if (got>=count){ log(`${nameSpan(target)} 抵消了【杀】。`); return true; }
+  return false;
+}
+
+/* ============================ 交互辅助 ============================ */
+let _toastTimer=null;
+function toast(msg){
+  let t=document.getElementById('toast');
+  if(!t){ t=document.createElement('div'); t.id='toast';
+    t.style.cssText='position:absolute;left:50%;top:24%;transform:translateX(-50%);z-index:120;background:rgba(20,15,8,.92);border:1px solid var(--gold-dim);color:var(--gold2);padding:8px 18px;border-radius:8px;font-family:Noto Serif SC,serif;box-shadow:var(--shadow);pointer-events:none;';
+    document.getElementById('app').appendChild(t);
+  }
+  t.textContent=msg; t.style.opacity='1';
+  clearTimeout(_toastTimer);
+  _toastTimer=setTimeout(()=>{ t.style.opacity='0'; }, 1300);
+}
+
+/* 人类选目标 */
+async function pickTargets(p, prompt, min, max, okFn){
+  const res = await uiSelect({
+    prompt,
+    targetOK:(t, sc, st)=> okFn(t) && (st.length<max || st.some(x=>x.seat===t.seat)),
+    canConfirm:(sc, st)=> st.length>=min && st.length<=max,
+    confirmLabel:'确定',
+    buttons:[{label:'取消', value:'cancel'}],
+  });
+  if (!res || res.btn==='cancel') return null;
+  return res.targets;
+}
+
+/* 出牌动画 */
+function flyCard(from, to, card){
+  try{
+    const fromEl = document.getElementById('seat-'+from.seat).getBoundingClientRect();
+    const toEl = document.getElementById('seat-'+to.seat).getBoundingClientRect();
+    const f = document.createElement('div');
+    f.className='fly-card';
+    f.innerHTML = cardHtml(card, {mini:true});
+    document.getElementById('app').appendChild(f);
+    f.style.left = (fromEl.left+fromEl.width/2-23)+'px';
+    f.style.top = (fromEl.top+fromEl.height/2-33)+'px';
+    requestAnimationFrame(()=>{
+      f.style.left = (toEl.left+toEl.width/2-23)+'px';
+      f.style.top = (toEl.top+toEl.height/2-33)+'px';
+      f.style.opacity='0.2';
+    });
+    setTimeout(()=>f.remove(), 480);
+  }catch(e){}
+}
+
+/* ============================ 获取【闪】 ============================ */
+/* 目标是否需要/愿意出闪，并返回一张“闪来源”描述 */
+async function getDodgeCard(target, source){
+  if (target.isHuman){
+    return await humanAskDodge(target, source);
+  } else {
+    return aiAskDodge(target, source);
+  }
+}
+function findDodgeInHand(p){ return p.hand.find(c=>c.sub==='闪'); }
+/* 龙胆：杀当闪；倾国：黑手牌当闪 */
+function dodgeCandidates(p){
+  const out=[];
+  p.hand.forEach(c=>{
+    if (c.sub==='闪') out.push({card:c, via:null});
+    else if (hasSkill(p,'longdan') && c.sub==='杀') out.push({card:c, via:'longdan'});
+    else if (hasSkill(p,'qingguo') && isBlack(c.suit)) out.push({card:c, via:'qingguo'});
+  });
+  return out;
+}
+function useDodgeCard(p, sel){
+  removeCardFrom(p, sel.card); toDiscard([sel.card]);
+  p.marks.usedSlashOrDodge = true;
+  const via = sel.via ? '·'+({longdan:'龙胆',qingguo:'倾国'}[sel.via]) : '';
+  if (sel.via) log(`${nameSpan(p)} 以 ${cardMini(sel.card)} 当【闪】${via}。`);
+  updateSeat(p); if(p.isHuman) renderHand();
+}
+
+async function humanAskDodge(target, source){
+  const cands = dodgeCandidates(target);
+  if (cands.length===0) return null;
+  const res = await uiSelect({
+    prompt:`${source.general.name} 对你使用【杀】，是否打出【闪】？`,
+    cardOK:(card, sel)=>{
+      if (sel.length>=1 && !sel.some(s=>s.id===card.id)) return false;
+      return cands.some(x=>x.card.id===card.id);
+    },
+    canConfirm:(sel)=> sel.length===1,
+    confirmLabel:'打出闪',
+    buttons:[{label:'不闪（受伤）', value:'no'}],
+  });
+  if (!res || res.btn==='no') return null;
+  const card = res.cards[0];
+  return cands.find(x=>x.card.id===card.id);
+}
+function aiAskDodge(target, source){
+  const cands = dodgeCandidates(target);
+  if (cands.length===0) return null;
+  // 简单策略：血少或有闪就闪；龙胆杀当闪要谨慎（保留杀反击）
+  const plainDodge = cands.find(x=>!x.via);
+  // 若濒危一定闪
+  if (target.hp<=1) return plainDodge || cands[0];
+  // 敌对关系判断
+  const hostile = aiHostility(source, target) > 0;
+  if (!hostile && Math.random()<0.3) {
+    // 友军的杀可能不闪（如激将），但一般还是闪
+  }
+  if (plainDodge) return plainDodge;
+  // 只有转化闪：血够就留着，除非要紧
+  if (target.hp<=2) return cands[0];
+  return Math.random()<0.5 ? cands[0] : null;
+}
+
+/* ============================ 获取【桃】(濒死) ============================ */
+async function askForPeach(rescuer, dying){
+  // 桃：手牌桃；华佗急救红牌当桃（回合外任何红牌）
+  const cands = peachCandidates(rescuer, dying);
+  if (cands.length===0) return null;
+  if (rescuer.isHuman){
+    return await humanAskPeach(rescuer, dying, cands);
+  }
+  return aiAskPeach(rescuer, dying, cands);
+}
+function peachCandidates(rescuer, dying){
+  const out=[];
+  // 只有自己能用桃救自己 or 桃对濒死者：标准桃可救任何濒死者
+  rescuer.hand.forEach(c=>{
+    if (c.sub==='桃') out.push({card:c, via:null});
+    else if (hasSkill(rescuer,'jijiu') && isRed(c.suit)) out.push({card:c, via:'jijiu'});
+  });
+  return out;
+}
+async function humanAskPeach(rescuer, dying, cands){
+  const who = rescuer===dying ? '你自己' : rescuer.general.name+'...你';
+  const res = await uiSelect({
+    prompt:`${dying.general.name} 濒死！是否使用【桃】${hasSkill(rescuer,'jijiu')?'/急救':''}相救？`,
+    cardOK:(card, sel)=>{
+      if (sel.length>=1 && !sel.some(s=>s.id===card.id)) return false;
+      return cands.some(x=>x.card.id===card.id);
+    },
+    canConfirm:(sel)=> sel.length===1,
+    confirmLabel:'救援',
+    buttons:[{label:'不救', value:'no'}],
+  });
+  if (!res || res.btn==='no') return null;
+  return cands.find(x=>x.card.id===res.cards[0].id);
+}
+function aiAskPeach(rescuer, dying, cands){
+  // 决策：救队友 / 不救敌人 / 自救
+  const self = rescuer===dying;
+  const help = self ? 2 : aiAllyScore(rescuer, dying);
+  if (self) return cands[0];
+  if (help>0) return cands[0]; // 盟友
+  return null;
+}
+function useTaoToSave(rescuer, dying, sel){
+  removeCardFrom(rescuer, sel.card); toDiscard([sel.card]);
+  const via = sel.via? '·急救':'';
+  log(`${nameSpan(rescuer)} 使用【桃】${via} 救助 ${nameSpan(dying)}。`);
+  updateSeat(rescuer); if(rescuer.isHuman) renderHand();
+  if (rescuer!==dying) noteHelpfulAct(rescuer, dying);   // 救人 → 更新声望
+  // 救援（孙权主公）：其他吴势力角色对主公用桃，多回复1点
+  if (rescuer!==dying && hasSkill(dying,'jiuyuan') && rescuer.kingdom==='wu' && dying.hp<=0){
+    skillFlash(dying,'救援');
+    log(`<span class="sk">救援</span>：${nameSpan(dying)} 额外回复1点。`);
+    healHp(dying, 1);
+  }
+}
+
+/* ============================ 装备相关判定 ============================ */
+async function baguaJudge(p){
+  log(`<span class="sk">八卦阵</span>：${nameSpan(p)} 发动判定…`);
+  const jc = await doJudge(p, '八卦阵');
+  if (isRed(jc.suit)){ log(`${nameSpan(p)} 八卦判定红色，视为打出【闪】。`); skillFlash(p,'八卦阵'); return true; }
+  return false;
+}
+async function tryTieji(source, target){
+  const want = source.isHuman ? await confirmSkill(source,'铁骑','是否发动【铁骑】判定使此杀不可闪？') : (aiHostility(source,target)>0);
+  if (!want) return false;
+  skillFlash(source,'铁骑');
+  const jc = await doJudge(source, '铁骑');
+  return isRed(jc.suit);
+}
+async function tryQilin(source, target){
+  const horses = ['-1','+1'].filter(k=>target.equips[k]);
+  if (!horses.length) return;
+  let want = source.isHuman ? await confirmSkill(source,'麒麟弓','是否弃置目标的坐骑？') : true;
+  if (!want) return;
+  const slot = horses[0];
+  const c = target.equips[slot]; target.equips[slot]=null; toDiscard([c]);
+  log(`<span class="sk">麒麟弓</span>：弃置 ${nameSpan(target)} 的坐骑 ${c.name}。`);
+  updateSeat(target);
+  await afterLoseCards(target, [c], {zone:'equip', slot});
+}
+
+async function confirmSkill(p, name, text){
+  if (!p.isHuman) return true;
+  const r = await chooseOption(name, text, [{label:'发动',value:true},{label:'放弃',value:false}]);
+  return r;
+}
+
+/* ============================ 锦囊牌 ============================ */
+async function useTrick(p, card, sub, via){
+  const realSub = sub;
+  switch(realSub){
+    case 'wuzhong': return await trickWuzhong(p, card, via);
+    case 'taoyuan': return await trickAOE(p, card, 'taoyuan', via);
+    case 'wugu':    return await trickWugu(p, card, via);
+    case 'nanman':  return await trickAOE(p, card, 'nanman', via);
+    case 'wanjian': return await trickAOE(p, card, 'wanjian', via);
+    case 'juedou':  return await trickJuedou(p, card, via);
+    case 'chaiqiao':return await trickChaiqiao(p, card, via);
+    case 'shunshou':return await trickShunshou(p, card, via);
+    case 'jiedao':  return await trickJiedao(p, card, via);
+    case 'lebu':    return await trickLebu(p, card, via);
+    case 'shandian':return await trickShandian(p, card, via);
+    case 'wuxie':   toast('无懈可击只能响应其他锦囊'); return false;
+    default: return false;
+  }
+}
+
+/* 集智：黄月英使用普通锦囊摸一张（在使用时触发） */
+function trickJizhi(p, card){
+  if (hasSkill(p,'jizhi') && card && card.sub!=='wuxie'){
+    skillFlash(p,'集智');
+    log(`<span class="sk">集智</span>：${nameSpan(p)} 摸一张牌。`);
+    drawCards(p,1);
+  }
+}
+
+/* 无中生有 */
+async function trickWuzhong(p, card, via){
+  removeCardFrom(p, card); toDiscard([card]);
+  log(`${nameSpan(p)} 使用【无中生有】。`);
+  const cancelled = await askWuxieChain(card, p, `【无中生有】`);
+  if (!cancelled){ drawCards(p, 2); }
+  trickJizhi(p, card);
+  return true;
+}
+
+/* AOE：桃园/南蛮/万箭/五谷 逐个目标可被无懈 */
+async function trickAOE(p, card, kind, via){
+  removeCardFrom(p, card); toDiscard([card]);
+  const cnMap={taoyuan:'桃园结义',nanman:'南蛮入侵',wanjian:'万箭齐发'};
+  log(`${nameSpan(p)} 使用【${cnMap[kind]}】。`);
+  trickJizhi(p, card);
+  let targets;
+  if (kind==='taoyuan') targets = alivePlayers();
+  else targets = alivePlayers().filter(t=>t!==p); // 南蛮/万箭 对其他所有
+
+  // 起始顺序：从使用者开始的座位顺序
+  targets = orderBySeat(p.seat, targets);
+  for (const t of targets){
+    if (!t.alive || GS.finished) continue;
+    const cancelled = await askWuxieChain(card, t, `【${cnMap[kind]}】对 ${t.general.name}`);
+    if (cancelled) continue;
+    if (kind==='taoyuan'){
+      if (t.hp<t.maxHp) healHp(t,1);
+    } else if (kind==='nanman'){
+      // 需要一张杀，否则受1点伤害
+      const slash = await askResponseCard(t, '杀', `【南蛮入侵】：${t.general.name} 请打出【杀】否则受伤`);
+      if (!slash){ await dealDamage(p, t, 1, {}); }
+      else { log(`${nameSpan(t)} 打出【杀】抵消南蛮。`); }
+    } else if (kind==='wanjian'){
+      const dodge = await askResponseCard(t, '闪', `【万箭齐发】：${t.general.name} 请打出【闪】否则受伤`);
+      if (!dodge){ await dealDamage(p, t, 1, {}); }
+      else { log(`${nameSpan(t)} 打出【闪】抵消万箭。`); }
+    }
+    if (GS.finished) return true;
+  }
+  return true;
+}
+
+/* 五谷丰登 */
+async function trickWugu(p, card, via){
+  removeCardFrom(p, card); toDiscard([card]);
+  log(`${nameSpan(p)} 使用【五谷丰登】。`);
+  trickJizhi(p, card);
+  const n = alivePlayers().length;
+  const reveal=[];
+  for (let i=0;i<n;i++){ if(GS.deck.length===0) reshuffle(); if(GS.deck.length) reveal.push(GS.deck.shift()); }
+  const targets = orderBySeat(p.seat, alivePlayers());
+  for (const t of targets){
+    if (reveal.length===0) break;
+    const cancelled = await askWuxieChain(card, t, `【五谷丰登】对 ${t.general.name}`);
+    if (cancelled) continue;
+    let pick;
+    if (t.isHuman){ pick = await humanPickFromReveal(reveal, '五谷丰登：选择一张牌'); }
+    else { pick = aiPickFromReveal(t, reveal); }
+    const idx = reveal.findIndex(c=>c.id===pick.id);
+    reveal.splice(idx,1);
+    t.hand.push(pick);
+    log(`${nameSpan(t)} 取走 ${cardMini(pick)}。`);
+    updateSeat(t); if(t.isHuman) renderHand();
+    await pace(250);
+  }
+  if (reveal.length) toDiscard(reveal);
+  updateCenter();
+  return true;
+}
+
+/* 决斗 */
+async function trickJuedou(p, card, via){
+  const targets = alivePlayers().filter(t=>t!==p && !(hasSkill(t,'kongcheng')&&t.hand.length===0));
+  if (targets.length===0){ toast('没有可决斗的目标'); return false; }
+  let chosen;
+  if (p.isHuman){ chosen = await pickTargets(p, '【决斗】选择目标', 1, 1, t=>t!==p && !(hasSkill(t,'kongcheng')&&t.hand.length===0)); if(!chosen) return false; }
+  const target = chosen[0];
+  removeCardFrom(p, card); toDiscard([card]);
+  log(`${nameSpan(p)} 对 ${nameSpan(target)} 使用【决斗】。`);
+  flyCard(p, target, card);
+  trickJizhi(p, card);
+  const cancelled = await askWuxieChain(card, target, `【决斗】对 ${target.general.name}`);
+  if (cancelled) return true;
+  // 轮流出杀，先由目标出。无双：对方需两张杀
+  let attacker = target, defender = p;
+  // 吕布无双：出杀方每次要求对方2张
+  let turn = 0;
+  while (true){
+    const responder = (turn%2===0) ? target : p;
+    const opponent = (turn%2===0) ? p : target;
+    const need = hasSkill(opponent,'wushuang') ? 2 : 1;
+    let ok=true;
+    for (let i=0;i<need;i++){
+      const slash = await askResponseCard(responder, '杀', `【决斗】：${responder.general.name} 请打出【杀】`);
+      if (!slash){ ok=false; break; }
+    }
+    if (!ok){
+      // responder 认输受伤
+      await dealDamage(opponent, responder, 1, {});
+      break;
+    }
+    turn++;
+    if (GS.finished) break;
+  }
+  return true;
+}
+
+/* 过河拆桥 */
+async function trickChaiqiao(p, card, via){
+  const targets = alivePlayers().filter(t=> t!==p && hasCardsToLose(t));
+  if (targets.length===0){ toast('没有可拆的目标'); return false; }
+  let chosen;
+  if (p.isHuman){ chosen = await pickTargets(p, `【过河拆桥】选择目标`, 1,1, t=>t!==p && hasCardsToLose(t)); if(!chosen) return false; }
+  const target = chosen[0];
+  removeCardFrom(p, card); toDiscard([card]);
+  log(`${nameSpan(p)} 对 ${nameSpan(target)} 使用【${via==='qixi'?'过河拆桥·奇袭':'过河拆桥'}】。`);
+  trickJizhi(p, card);
+  const cancelled = await askWuxieChain(card, target, `【过河拆桥】对 ${target.general.name}`);
+  if (cancelled) return true;
+  const picked = await pickCardFromPlayer(p, target, true);
+  if (picked){
+    const loc = ownerOf(picked); // 记录来源区
+    removeCardFrom(target, picked); toDiscard([picked]);
+    log(`${nameSpan(p)} 弃置 ${nameSpan(target)} 的一张牌。`);
+    updateSeat(target); if(target.isHuman) renderHand();
+    await afterLoseCards(target, [picked], loc);
+  }
+  return true;
+}
+
+/* 顺手牵羊（距离1） */
+async function trickShunshou(p, card, via){
+  const targets = alivePlayers().filter(t=> t!==p && hasCardsToLose(t) && distance(p,t)<=1 && !(hasSkill(t,'qianxun')));
+  if (targets.length===0){ toast('没有距离1且可选的目标'); return false; }
+  let chosen;
+  if (p.isHuman){ chosen = await pickTargets(p, `【顺手牵羊】选择目标（距离1）`, 1,1, t=>t!==p && hasCardsToLose(t) && distance(p,t)<=1 && !hasSkill(t,'qianxun')); if(!chosen) return false; }
+  const target = chosen[0];
+  removeCardFrom(p, card); toDiscard([card]);
+  log(`${nameSpan(p)} 对 ${nameSpan(target)} 使用【顺手牵羊】。`);
+  trickJizhi(p, card);
+  const cancelled = await askWuxieChain(card, target, `【顺手牵羊】对 ${target.general.name}`);
+  if (cancelled) return true;
+  const picked = await pickCardFromPlayer(p, target, true);
+  if (picked){
+    const loc = ownerOf(picked);
+    gainCard(p, picked, target);
+    log(`${nameSpan(p)} 获得 ${nameSpan(target)} 的一张牌。`);
+    await afterLoseCards(target, [picked], loc);
+  }
+  return true;
+}
+
+/* 借刀杀人 */
+async function trickJiedao(p, card, via){
+  // 目标：有武器的角色；令其对其攻击范围内一名角色使用杀
+  const armed = alivePlayers().filter(t=> t!==p && t.equips.weapon);
+  if (armed.length===0){ toast('没有装备武器的目标'); return false; }
+  let chosen;
+  if (p.isHuman){ chosen = await pickTargets(p, `【借刀杀人】选择一名装备武器的角色`, 1,1, t=>t!==p && t.equips.weapon); if(!chosen) return false; }
+  const wielder = chosen[0];
+  // 受害者：wielder 攻击范围内
+  const victims = alivePlayers().filter(v=> v!==wielder && canBeSlashTarget(wielder, v));
+  removeCardFrom(p, card); toDiscard([card]);
+  log(`${nameSpan(p)} 对 ${nameSpan(wielder)} 使用【借刀杀人】。`);
+  trickJizhi(p, card);
+  const cancelled = await askWuxieChain(card, wielder, `【借刀杀人】对 ${wielder.general.name}`);
+  if (cancelled) return true;
+  if (victims.length===0){ log(`${nameSpan(wielder)} 攻击范围内无目标，无效。`); return true; }
+  // wielder 选择：出杀 或 交出武器给使用者
+  let victim;
+  if (wielder.isHuman){
+    victim = (await pickTargets(wielder, `借刀杀人：请对一名角色使用【杀】，或取消交出武器`, 1,1, v=>v!==wielder && canBeSlashTarget(wielder,v)));
+    victim = victim?victim[0]:null;
+  } else {
+    victim = aiJiedaoChoice(wielder, victims, p);
+  }
+  if (!victim){
+    // 交出武器
+    const w = wielder.equips.weapon; wielder.equips.weapon=null;
+    p.hand.push(w);
+    updateSeat(wielder); updateSeat(p); if(p.isHuman) renderHand();
+    log(`${nameSpan(wielder)} 不愿出杀，将武器 ${w.name} 交给 ${nameSpan(p)}。`);
+    return true;
+  }
+  // wielder 出杀（需消耗一张杀）
+  const slashCard = wielder.hand.find(c=>c.sub==='杀') ||
+    (hasSkill(wielder,'wusheng') ? wielder.hand.find(c=>isRed(c.suit)) : null) ||
+    (hasSkill(wielder,'longdan') ? wielder.hand.find(c=>c.sub==='闪') : null);
+  if (!slashCard){
+    log(`${nameSpan(wielder)} 无【杀】可出，将武器交出。`);
+    const w = wielder.equips.weapon; wielder.equips.weapon=null; p.hand.push(w);
+    updateSeat(wielder); updateSeat(p); if(p.isHuman) renderHand();
+    return true;
+  }
+  removeCardFrom(wielder, slashCard); toDiscard([slashCard]);
+  log(`${nameSpan(wielder)} 被迫对 ${nameSpan(victim)} 出【杀】。`);
+  updateSeat(wielder); if(wielder.isHuman) renderHand();
+  await resolveSlash(wielder, victim, slashCard, {fromJiedao:true});
+  return true;
+}
+
+/* 乐不思蜀（延时，置入目标判定区） */
+async function trickLebu(p, card, via){
+  const targets = alivePlayers().filter(t=> t!==p && !hasSkill(t,'qianxun') && !t.judge.some(j=>j.sub==='lebu'));
+  if (targets.length===0){ toast('没有可指定的目标'); return false; }
+  let chosen;
+  if (p.isHuman){ chosen = await pickTargets(p, `【${via==='guose'?'乐不思蜀·国色':'乐不思蜀'}】选择目标`, 1,1, t=>t!==p && !hasSkill(t,'qianxun') && !t.judge.some(j=>j.sub==='lebu')); if(!chosen) return false; }
+  const target = chosen[0];
+  removeCardFrom(p, card);
+  // 国色转化的方块牌，作为乐不思蜀放入判定区（保留原牌面用于判定）
+  card._asDelay='lebu';
+  target.judge.push(card);
+  log(`${nameSpan(p)} 对 ${nameSpan(target)} 使用【乐不思蜀】。`);
+  trickJizhi(p, card);
+  updateSeat(target);
+  return true;
+}
+
+/* 闪电（延时，置入自己判定区） */
+async function trickShandian(p, card, via){
+  if (p.judge.some(j=>j.sub==='shandian')){ toast('你的判定区已有闪电'); return false; }
+  removeCardFrom(p, card);
+  p.judge.push(card);
+  log(`${nameSpan(p)} 使用【闪电】置入判定区。`);
+  updateSeat(p);
+  return true;
+}
+
+/* 通用：某人对某效果打出一张“杀/闪”响应 */
+async function askResponseCard(p, sub, prompt){
+  if (p.isHuman){
+    const cands = responseCandidates(p, sub);
+    if (cands.length===0){
+      // 主公技激将/护驾兜底
+      if (sub==='杀' && hasSkill(p,'jijiang')){ if (await tryJijiang(p)) return {via:'jijiang'}; }
+      if (sub==='闪' && hasSkill(p,'hujia')){ if (await tryHujia(p)) return {via:'hujia'}; }
+      return null;
+    }
+    const res = await uiSelect({
+      prompt,
+      cardOK:(card, sel)=>{ if(sel.length>=1 && !sel.some(s=>s.id===card.id)) return false; return cands.some(x=>x.card.id===card.id); },
+      canConfirm:(sel)=> sel.length===1,
+      confirmLabel:'打出',
+      buttons:[{label:'放弃', value:'no'}],
+    });
+    if (!res || res.btn==='no'){
+      if (sub==='杀' && hasSkill(p,'jijiang')){ if (await tryJijiang(p)) return {via:'jijiang'}; }
+      if (sub==='闪' && hasSkill(p,'hujia')){ if (await tryHujia(p)) return {via:'hujia'}; }
+      return null;
+    }
+    const sel = cands.find(x=>x.card.id===res.cards[0].id);
+    removeCardFrom(p, sel.card); toDiscard([sel.card]);
+    if (sub==='杀') p.marks.usedSlashOrDodge=true;
+    updateSeat(p); renderHand();
+    return sel;
+  } else {
+    const cands = responseCandidates(p, sub);
+    if (cands.length===0){
+      if (sub==='杀' && hasSkill(p,'jijiang')){ if (await tryJijiang(p)) return {via:'jijiang'}; }
+      if (sub==='闪' && hasSkill(p,'hujia')){ if (await tryHujia(p)) return {via:'hujia'}; }
+      return null;
+    }
+    // AI：一般打出以避免伤害（血少时必出）
+    if (p.hp<=1 || Math.random()<0.85){
+      const sel = cands[0];
+      removeCardFrom(p, sel.card); toDiscard([sel.card]);
+      if (sub==='杀') p.marks.usedSlashOrDodge=true;
+      updateSeat(p);
+      return sel;
+    }
+    return null;
+  }
+}
+function responseCandidates(p, sub){
+  const out=[];
+  p.hand.forEach(c=>{
+    if (c.sub===sub) out.push({card:c, via:null});
+    else if (sub==='杀' && hasSkill(p,'wusheng') && isRed(c.suit)) out.push({card:c, via:'wusheng'});
+    else if (sub==='杀' && hasSkill(p,'longdan') && c.sub==='闪') out.push({card:c, via:'longdan'});
+    else if (sub==='闪' && hasSkill(p,'longdan') && c.sub==='杀') out.push({card:c, via:'longdan'});
+    else if (sub==='闪' && hasSkill(p,'qingguo') && isBlack(c.suit)) out.push({card:c, via:'qingguo'});
+  });
+  return out;
+}
+
+/* ============================ 主公技：激将 / 护驾 / 救援 ============================ */
+/* 激将（刘备主公）：需要【杀】时，令蜀势力角色替其打出 */
+async function tryJijiang(lord, prompt){
+  if (!hasSkill(lord,'jijiang')) return false;
+  const helpers = alivePlayers().filter(t=>t!==lord && t.kingdom==='shu');
+  if (helpers.length===0) return false;
+  const go = lord.isHuman ? await confirmSkill(lord,'激将',prompt||'发动激将，请求蜀势力角色打出【杀】？')
+                          : true;
+  if (!go) return false;
+  skillFlash(lord,'激将');
+  for (const h of orderBySeat(lord.seat, helpers)){
+    const s = await askResponseCard(h, '杀', `激将：${h.general.name} 是否替主公打出【杀】？`);
+    if (s){ log(`<span class="sk">激将</span>：${nameSpan(h)} 替主公打出【杀】。`); return true; }
+  }
+  return false;
+}
+/* 护驾（曹操主公）：需要【闪】时，令魏势力角色替其打出 */
+async function tryHujia(lord){
+  if (!hasSkill(lord,'hujia')) return false;
+  const helpers = alivePlayers().filter(t=>t!==lord && t.kingdom==='wei');
+  if (helpers.length===0) return false;
+  const go = lord.isHuman ? await confirmSkill(lord,'护驾','发动护驾，请求魏势力角色打出【闪】？') : true;
+  if (!go) return false;
+  skillFlash(lord,'护驾');
+  for (const h of orderBySeat(lord.seat, helpers)){
+    const s = await askResponseCard(h, '闪', `护驾：${h.general.name} 是否替主公打出【闪】？`);
+    if (s){ log(`<span class="sk">护驾</span>：${nameSpan(h)} 替主公打出【闪】。`); return true; }
+  }
+  return false;
+}
+
+function hasCardsToLose(p){
+  return p.hand.length>0 || Object.values(p.equips).some(x=>x) || p.judge.length>0;
+}
+function orderBySeat(startSeat, list){
+  const set = new Set(list.map(p=>p.seat));
+  const out=[];
+  for (let i=0;i<N;i++){ const s=(startSeat+i)%N; if(set.has(s)) out.push(P(s)); }
+  return out;
+}
+
+/* ============================ 无懈可击链 ============================
+   对一个“锦囊效果”询问无懈：正无懈取消效果，负无懈（无懈其无懈）恢复效果。
+   返回 true = 效果最终被取消。
+   ============================================================ */
+async function askWuxieChain(trickCard, affected, desc){
+  let cancelDepth = 0; // 奇数层=当前被取消
+  while (true){
+    // 找出所有能出无懈的人
+    const responders = alivePlayers().filter(pl=> hasWuxie(pl));
+    if (responders.length===0) break;
+    let played = null;
+    // 询问顺序：从当前回合角色起
+    const order = orderBySeat(GS.current, responders);
+    for (const pl of order){
+      // 若这层是“取消效果”，则受益方(如效果目标的敌人)不想再无懈；简化：谁都可无懈
+      const wx = await askWuxieFrom(pl, trickCard, affected, desc, cancelDepth);
+      if (wx){ played = pl; break; }
+    }
+    if (!played) break;
+    cancelDepth++;
+    log(`${nameSpan(played)} 打出【无懈可击】${cancelDepth%2===1?'（欲化解）':'（反制无懈）'}。`);
+    await pace(300);
+  }
+  return cancelDepth % 2 === 1;
+}
+function hasWuxie(p){
+  return p.hand.some(c=>c.sub==='wuxie');
+}
+async function askWuxieFrom(p, trickCard, affected, desc, depth){
+  if (!hasWuxie(p)) return false;
+  if (p.isHuman){
+    // 询问人类是否使用无懈
+    const wx = p.hand.find(c=>c.sub==='wuxie');
+    const r = await chooseOption('无懈可击', `${desc}${depth>0?'（当前已有一张无懈）':''}，是否打出【无懈可击】？`,
+      [{label:'打出无懈',value:true},{label:'不使用',value:false}]);
+    if (r){
+      removeCardFrom(p, wx); toDiscard([wx]);
+      updateSeat(p); renderHand();
+      return true;
+    }
+    return false;
+  } else {
+    // AI 无懈判断：保护盟友/阻止对己不利
+    const use = aiWantWuxie(p, trickCard, affected, depth);
+    if (use){
+      const wx = p.hand.find(c=>c.sub==='wuxie');
+      removeCardFrom(p, wx); toDiscard([wx]);
+      updateSeat(p);
+      return true;
+    }
+    return false;
+  }
+}
+
+/* ============================ 选择目标身上的一张牌 ============================ */
+async function pickCardFromPlayer(actor, target, includeEquipJudge){
+  const zones=[];
+  target.hand.forEach(c=>zones.push({c, z:'手牌'}));
+  if (includeEquipJudge){
+    for (const k in target.equips){ if(target.equips[k]) zones.push({c:target.equips[k], z:'装备'}); }
+    target.judge.forEach(c=>zones.push({c, z:'判定'}));
+  }
+  if (zones.length===0) return null;
+  if (actor.isHuman){
+    return await humanPickCardZone(target, zones);
+  } else {
+    // AI：优先拆装备（武器/防具/坐骑），否则随机手牌
+    const equip = zones.find(z=>z.z==='装备' && (z.c.sub==='weapon'||z.c.sub==='armor'));
+    if (equip && Math.random()<0.7) return equip.c;
+    const hand = zones.filter(z=>z.z==='手牌');
+    if (hand.length) return hand[rnd(hand.length)].c;
+    return zones[rnd(zones.length)].c;
+  }
+}
+async function humanPickCardZone(target, zones){
+  return new Promise(resolve=>{
+    const handHidden = !target.isHuman;
+    const m = showModal(`<h3>选择 ${target.general.name} 的一张牌</h3>
+      <div class="desc">手牌${handHidden?'（背面，随机）':''} / 装备 / 判定</div>
+      <div class="choice-cards" id="zpick"></div>`);
+    const box=m.querySelector('#zpick');
+    zones.forEach((zn,i)=>{
+      const div=document.createElement('div');
+      if (zn.z==='手牌' && handHidden){
+        div.className='pcard';
+        div.style.background='linear-gradient(160deg,#3a2a1a,#1a120a)';
+        div.innerHTML=`<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--gold2);font-family:Noto Serif SC">手牌</div>`;
+      } else {
+        div.innerHTML=cardHtml(zn.c);
+        div=div.firstElementChild;
+      }
+      const tag=document.createElement('div');
+      div.onclick=()=>{ hideModal(); resolve(zn.c); };
+      box.appendChild(div);
+    });
+  });
+}
+
+/* 从展示区选一张（五谷） */
+async function humanPickFromReveal(reveal, title){
+  return new Promise(resolve=>{
+    const m = showModal(`<h3>${title}</h3><div class="choice-cards" id="rv"></div>`);
+    const box=m.querySelector('#rv');
+    reveal.forEach(c=>{
+      const w=document.createElement('div'); w.innerHTML=cardHtml(c);
+      const el=w.firstElementChild;
+      el.onclick=()=>{ hideModal(); resolve(c); };
+      box.appendChild(el);
+    });
+  });
+}
+function aiPickFromReveal(p, reveal){
+  // 简单：优先桃(缺血)、杀、装备
+  if (p.hp<p.maxHp){ const t=reveal.find(c=>c.sub==='桃'); if(t) return t; }
+  const pri = ['杀','闪','无中生有','过河拆桥'];
+  for (const nm of pri){ const c=reveal.find(x=>x.sub===nm||x.name===nm); if(c) return c; }
+  return reveal[0];
+}
+
+/* ============================ 技能钩子系统 ============================ */
+
+/* --- 准备/结束阶段技能 --- */
+async function triggerPhase(when, p){
+  if (when==='prepare'){
+    if (hasSkill(p,'luoshen')) await skLuoshen(p);
+    if (hasSkill(p,'guanxing')) await skGuanxing(p);
+  }
+  if (when==='end'){
+    if (hasSkill(p,'biyue')){ skillFlash(p,'闭月'); log(`<span class="sk">闭月</span>：${nameSpan(p)} 摸一张牌。`); drawCards(p,1); }
+  }
+}
+
+/* 洛神（甄姬） */
+async function skLuoshen(p){
+  let go = p.isHuman ? await confirmSkill(p,'洛神','准备阶段发动洛神？') : true;
+  if (!go) return;
+  let cont=true, gained=0;
+  while (cont && p.alive){
+    skillFlash(p,'洛神');
+    if (GS.deck.length===0) reshuffle();
+    const c = GS.deck.shift();
+    log(`<span class="sk">洛神</span>：${nameSpan(p)} 判定 ${cardMini(c)}`);
+    updateCenter();
+    await pace(400);
+    if (isBlack(c.suit)){ p.hand.push(c); gained++; updateSeat(p); if(p.isHuman) renderHand();
+      // 可继续
+      cont = p.isHuman ? await confirmSkill(p,'洛神','判定为黑色，获得此牌。是否继续？') : true;
+    } else { toDiscard([c]); cont=false; }
+  }
+  if (gained>0) log(`${nameSpan(p)} 洛神获得 ${gained} 张牌。`);
+}
+
+/* 观星（诸葛亮） */
+async function skGuanxing(p){
+  let go = p.isHuman ? await confirmSkill(p,'观星','准备阶段发动观星？') : (Math.random()<0.9);
+  if (!go) return;
+  skillFlash(p,'观星');
+  const n = Math.min(alivePlayers().length, 5);
+  const cards=[];
+  for (let i=0;i<n;i++){ if(GS.deck.length===0) reshuffle(); if(GS.deck.length) cards.push(GS.deck.shift()); }
+  if (cards.length===0) return;
+  if (p.isHuman){ await humanGuanxing(p, cards); }
+  else { aiGuanxing(p, cards); }
+  updateCenter();
+}
+async function humanGuanxing(p, cards){
+  return new Promise(resolve=>{
+    let top=[...cards], bottom=[];
+    const render=()=>{
+      const topHtml = top.map((c,i)=>`<div style="display:inline-block" data-side="top" data-i="${i}">${cardHtml(c,{mini:true})}</div>`).join('');
+      const botHtml = bottom.map((c,i)=>`<div style="display:inline-block" data-side="bot" data-i="${i}">${cardHtml(c,{mini:true})}</div>`).join('');
+      const m=showModal(`<h3>观星</h3>
+        <div class="desc">点击牌可在“牌堆顶”与“牌堆底”间移动。顶部最左将最先被摸到。</div>
+        <div style="width:100%"><div style="color:var(--gold2);margin:4px 0">牌堆顶 →</div><div class="choice-cards" id="gx-top">${topHtml||'<span style="color:var(--text3)">（空）</span>'}</div></div>
+        <div style="width:100%"><div style="color:var(--gold2);margin:8px 0 4px">牌堆底</div><div class="choice-cards" id="gx-bot">${botHtml||'<span style="color:var(--text3)">（空）</span>'}</div></div>
+        <div class="btn-row"><button class="btn sm" id="gx-ok">确定</button></div>`);
+      m.querySelectorAll('#gx-top [data-i]').forEach(el=>el.onclick=()=>{ const i=+el.dataset.i; bottom.push(top.splice(i,1)[0]); render(); });
+      m.querySelectorAll('#gx-bot [data-i]').forEach(el=>el.onclick=()=>{ const i=+el.dataset.i; top.push(bottom.splice(i,1)[0]); render(); });
+      m.querySelector('#gx-ok').onclick=()=>{
+        // 顶部按显示顺序放回（最左=最先摸）
+        GS.deck.unshift(...top);
+        GS.deck.push(...bottom);
+        hideModal();
+        log(`<span class="sk">观星</span>：${nameSpan(p)} 调整了牌堆顶 ${cards.length} 张牌。`);
+        resolve();
+      };
+    };
+    render();
+  });
+}
+function aiGuanxing(p, cards){
+  // 把好牌(桃/杀/无中)放顶，坏牌放底
+  const good=[], bad=[];
+  cards.forEach(c=>{ (['桃','杀','无中生有','闪','过河拆桥'].includes(c.name)?good:bad).push(c); });
+  GS.deck.unshift(...good);
+  GS.deck.push(...bad);
+  log(`<span class="sk">观星</span>：${nameSpan(p)} 观星调整了牌堆。`);
+}
+
+/* --- 摸牌阶段技能 --- */
+async function triggerDrawPhase(p){
+  // 突袭（张辽）
+  if (hasSkill(p,'tuxi')){
+    const go = p.isHuman ? await confirmSkill(p,'突袭','放弃摸牌，改为获得至多两名其他角色各一张手牌？') : aiWantTuxi(p);
+    if (go){
+      skillFlash(p,'突袭');
+      const victims = alivePlayers().filter(t=>t!==p && t.hand.length>0);
+      let picks;
+      if (p.isHuman){ picks = await pickTargets(p, '突袭：选择至多两名角色', 1, 2, t=>t!==p && t.hand.length>0); }
+      else { picks = shuffle(victims).slice(0, Math.min(2, victims.length)); }
+      if (picks){
+        for (const v of picks){
+          if (v.hand.length===0) continue;
+          const c = p.isHuman ? await pickCardFromPlayer(p, v, false) : v.hand[rnd(v.hand.length)];
+          if (c){ gainCard(p, c, v); log(`<span class="sk">突袭</span>：${nameSpan(p)} 获得 ${nameSpan(v)} 一张手牌。`); }
+        }
+        return {skip:true};
+      }
+    }
+  }
+  let delta = 0;
+  if (hasSkill(p,'yingzi')){ skillFlash(p,'英姿'); delta += 1; log(`<span class="sk">英姿</span>：${nameSpan(p)} 多摸一张。`); }
+  if (hasSkill(p,'luoyi')){
+    const go = p.isHuman ? await confirmSkill(p,'裸衣','少摸一张牌，本回合【杀】/【决斗】伤害+1？') : aiWantLuoyi(p);
+    if (go){ skillFlash(p,'裸衣'); delta -= 1; p.marks.luoyi=true; log(`<span class="sk">裸衣</span>：${nameSpan(p)} 少摸一张，伤害+1。`); }
+  }
+  return {delta};
+}
+
+/* --- 受伤后钩子 --- */
+async function triggerDamaged(source, target, amount, opts){
+  // 奸雄（曹操）：获得造成伤害的牌
+  if (hasSkill(target,'jianxiong') && opts.slash && opts.damageCard){
+    const go = target.isHuman ? await confirmSkill(target,'奸雄','获得对你造成伤害的【杀】？') : true;
+    if (go){ skillFlash(target,'奸雄'); const c=opts.damageCard;
+      const i=GS.discard.findIndex(x=>x.id===c.id); if(i>=0){ GS.discard.splice(i,1); target.hand.push(c); updateSeat(target); if(target.isHuman)renderHand(); updateCenter(); log(`<span class="sk">奸雄</span>：${nameSpan(target)} 获得 ${cardMini(c)}。`); }
+    }
+  }
+  // 反馈（司马懿）：获得伤害来源一张牌
+  if (hasSkill(target,'fankui') && source && source!==target && hasCardsToLose(source)){
+    const go = target.isHuman ? await confirmSkill(target,'反馈','获得伤害来源的一张牌？') : true;
+    if (go){ skillFlash(target,'反馈'); const c=await pickCardFromPlayer(target, source, true);
+      if (c){ gainCard(target, c, source); log(`<span class="sk">反馈</span>：${nameSpan(target)} 获得 ${nameSpan(source)} 一张牌。`); }
+    }
+  }
+  // 刚烈（夏侯惇）
+  if (hasSkill(target,'ganglie') && source && source!==target){
+    const go = target.isHuman ? await confirmSkill(target,'刚烈','发动刚烈判定？') : true;
+    if (go){ skillFlash(target,'刚烈');
+      const jc = await doJudge(target, '刚烈');
+      if (jc.suit!=='heart'){
+        // 来源弃两张手牌或受1点伤害
+        let discardTwo;
+        if (source.isHuman){ discardTwo = await chooseGangliePenalty(source); }
+        else { discardTwo = source.hand.length>=2 && source.hp>1 ? true : (source.hand.length>=2); }
+        if (discardTwo && source.hand.length>=2){
+          const toss = source.isHuman ? await humanChooseNCards(source, 2, '刚烈：弃两张手牌') : source.hand.slice(0,2);
+          toDiscard(toss.map(c=>{ removeCardFrom(source,c); return c; }));
+          log(`${nameSpan(source)} 弃两张手牌（刚烈）。`); updateSeat(source); if(source.isHuman)renderHand();
+        } else {
+          await dealDamage(target, source, 1, {});
+        }
+      } else log(`${nameSpan(target)} 刚烈判定红桃，无效果。`);
+    }
+  }
+  // 天妒的判定获得在 judge 钩子；遗计（郭嘉）每受1点伤害
+  if (hasSkill(target,'yiji')){
+    for (let i=0;i<amount;i++){
+      const go = target.isHuman ? await confirmSkill(target,'遗计','受到1点伤害，发动遗计摸两张并分配？') : true;
+      if (!go) continue;
+      skillFlash(target,'遗计');
+      const drawn = drawCards(target, 2);
+      log(`<span class="sk">遗计</span>：${nameSpan(target)} 摸两张牌并分配。`);
+      if (target.isHuman){ await humanYiji(target, drawn); }
+      else { aiYiji(target, drawn); }
+    }
+  }
+}
+async function chooseGangliePenalty(source){
+  const r = await chooseOption('刚烈', '选择：弃两张手牌，或受到1点伤害', [
+    {label:'弃两张手牌', value:true, disabled: source.hand.length<2},
+    {label:'受到1点伤害', value:false},
+  ].filter(o=>!o.disabled));
+  return r;
+}
+async function humanYiji(target, drawn){
+  // 简化：将这2张交给1-2名角色（可给自己保留=交给自己不允许，标准是交给其他角色，含自己? 标准遗计可给自己）
+  // 标准遗计：将这些牌交给一至两名角色（可含自己）。简化为逐张分配。
+  for (const c of [...drawn]){
+    if (!target.hand.some(h=>h.id===c.id)) continue;
+    const picks = await pickTargets(target, `遗计：将 ${c.name} 交给一名角色（也可给自己）`, 1,1, t=>t.alive);
+    if (picks){
+      const to=picks[0];
+      if (to!==target){ removeCardFrom(target,c); to.hand.push(c); updateSeat(to); log(`${nameSpan(target)} 将一张牌交给 ${nameSpan(to)}（遗计）。`); }
+    }
+  }
+  updateSeat(target); renderHand();
+}
+function aiYiji(target, drawn){
+  // 留给自己（简单）
+}
+
+/* --- 判定改判钩子（鬼才） --- */
+async function triggerRetrial(judgeOwner, card, label){
+  // 鬼才（司马懿）：任意有此技能者可用手牌替换判定牌
+  for (const p of alivePlayers()){
+    if (!hasSkill(p,'guicai')) continue;
+    if (p.hand.length===0) continue;
+    const go = p.isHuman ? await askGuicai(p, card, label) : aiGuicai(p, judgeOwner, card, label);
+    if (go){
+      const newCard = go.card;
+      removeCardFrom(p, newCard);
+      toDiscard([card]);
+      log(`<span class="sk">鬼才</span>：${nameSpan(p)} 以 ${cardMini(newCard)} 替换判定牌。`);
+      updateSeat(p); if(p.isHuman) renderHand();
+      await pace(300);
+      return newCard;
+    }
+  }
+  return card;
+}
+async function askGuicai(p, card, label){
+  if (p.hand.length===0) return null;
+  const r = await chooseOption('鬼才', `${nameSpan(p)}的判定为 ${cardMini(card)}。是否用一张手牌改判？`,
+    [{label:'改判',value:true},{label:'不改',value:false}]);
+  if (!r) return null;
+  const picks = await humanChooseNCards(p, 1, '鬼才：选择一张手牌替换判定');
+  if (!picks || !picks.length) return null;
+  return {card:picks[0]};
+}
+function aiGuicai(p, judgeOwner, card, label){
+  // 简单策略：自己判定不利时改判（洛神除外由自身处理）
+  // 对闪电/乐不思蜀有利益判断
+  if (p.hand.length===0) return null;
+  // 若是自己且是乐不思蜀，想判红桃
+  if (judgeOwner===p && label==='乐不思蜀' && card.suit!=='heart'){
+    const red=p.hand.find(c=>c.suit==='heart'); if(red) return {card:red};
+  }
+  if (judgeOwner===p && label==='闪电' && card.suit==='spade' && card.num>=2 && card.num<=9){
+    const safe=p.hand.find(c=>!(c.suit==='spade'&&c.num>=2&&c.num<=9)); if(safe) return {card:safe};
+  }
+  return null;
+}
+
+/* --- 判定结果获得（天妒/洛神已单独处理） --- */
+async function triggerJudgeResult(judgeOwner, card, label){
+  // 天妒（郭嘉）：判定牌生效后获得
+  if (hasSkill(judgeOwner,'tiandu')){
+    const go = judgeOwner.isHuman ? await confirmSkill(judgeOwner,'天妒','获得刚才的判定牌？') : true;
+    if (go){ skillFlash(judgeOwner,'天妒');
+      const i=GS.deck.findIndex(c=>c.id===card.id); // 判定牌尚未入弃牌堆
+      judgeOwner.hand.push(card); updateSeat(judgeOwner); if(judgeOwner.isHuman) renderHand();
+      log(`<span class="sk">天妒</span>：${nameSpan(judgeOwner)} 获得判定牌 ${cardMini(card)}。`);
+      return true;
+    }
+  }
+  return false;
+}
+
+/* --- 失去牌后钩子（枭姬/连营） --- */
+async function afterLoseCards(p, cards, loc){
+  if (!p.alive) return;
+  // 枭姬（孙尚香）：失去装备区的牌后摸两张
+  if (hasSkill(p,'xiaoji') && loc && loc.zone==='equip'){
+    const go = p.isHuman ? await confirmSkill(p,'枭姬','失去装备区的牌，摸两张牌？') : true;
+    if (go){ skillFlash(p,'枭姬'); log(`<span class="sk">枭姬</span>：${nameSpan(p)} 摸两张牌。`); drawCards(p,2); }
+  }
+  // 连营（陆逊）：失去最后手牌后摸一张
+  if (hasSkill(p,'lianying') && p.hand.length===0 && loc && loc.zone==='hand'){
+    const go = p.isHuman ? await confirmSkill(p,'连营','失去最后的手牌，摸一张牌？') : true;
+    if (go){ skillFlash(p,'连营'); log(`<span class="sk">连营</span>：${nameSpan(p)} 摸一张牌。`); drawCards(p,1); }
+  }
+}
+
+/* ============================ 主动技能 ============================ */
+function getActiveSkillButtons(p){
+  const btns=[];
+  const add=(sid, name)=>{ if(hasSkill(p,sid)) btns.push({label:name, value:'sk:'+sid, cls:'', disabled:!activeSkillUsable(p,sid)}); };
+  add('zhiheng','制衡');
+  add('rende','仁德');
+  add('kurou','苦肉');
+  add('qingnang','青囊');
+  add('jieyin','结姻');
+  add('fanjian','反间');
+  add('lijian','离间');
+  return btns;
+}
+function activeSkillUsable(p, sid){
+  switch(sid){
+    case 'zhiheng': return !p.skillUsed.zhiheng && p.hand.length>0;
+    case 'rende': return p.hand.length>0;
+    case 'kurou': return true;
+    case 'qingnang': return !p.skillUsed.qingnang && p.hand.length>0;
+    case 'jieyin': return !p.skillUsed.jieyin && p.hand.length>=2;
+    case 'fanjian': return !p.skillUsed.fanjian && p.hand.length>0;
+    case 'lijian': return !p.skillUsed.lijian && p.hand.length>0 && alivePlayers().filter(x=>x.gender==='male'&&x!==p).length>=2;
+    default: return true;
+  }
+}
+async function handleActiveSkill(p, btnVal){
+  const sid = btnVal.slice(3);
+  switch(sid){
+    case 'zhiheng': await skZhiheng(p); break;
+    case 'rende': await skRende(p); break;
+    case 'kurou': await skKurou(p); break;
+    case 'qingnang': await skQingnang(p); break;
+    case 'jieyin': await skJieyin(p); break;
+    case 'fanjian': await skFanjian(p); break;
+    case 'lijian': await skLijian(p); break;
+  }
+}
+
+/* 制衡（孙权） */
+async function skZhiheng(p){
+  if (p.skillUsed.zhiheng) return;
+  const picks = await humanChooseUpToN(p, p.hand.length, '制衡：选择任意张手牌弃置');
+  if (!picks || picks.length===0) return;
+  p.skillUsed.zhiheng=true;
+  skillFlash(p,'制衡');
+  const n=picks.length;
+  toDiscard(picks.map(c=>{ removeCardFrom(p,c); return c; }));
+  log(`<span class="sk">制衡</span>：${nameSpan(p)} 弃 ${n} 张，摸 ${n} 张。`);
+  drawCards(p,n); updateSeat(p); renderHand();
+}
+
+/* 仁德（刘备） */
+async function skRende(p){
+  const picks = await humanChooseUpToN(p, p.hand.length, '仁德：选择要赠予的手牌');
+  if (!picks || picks.length===0) return;
+  const targets = await pickTargets(p, '仁德：选择一名其他角色', 1,1, t=>t!==p);
+  if (!targets){ return; }
+  const to = targets[0];
+  skillFlash(p,'仁德');
+  picks.forEach(c=>{ removeCardFrom(p,c); to.hand.push(c); });
+  p.marks.rendeGiven = (p.marks.rendeGiven||0) + picks.length;
+  log(`<span class="sk">仁德</span>：${nameSpan(p)} 将 ${picks.length} 张牌交给 ${nameSpan(to)}。`);
+  updateSeat(p); updateSeat(to); renderHand();
+  if (p.marks.rendeGiven>=2 && !p.marks.rendeHealed && p.hp<p.maxHp){
+    p.marks.rendeHealed=true;
+    log(`<span class="sk">仁德</span>：赠牌达两张，${nameSpan(p)} 回复1点体力。`);
+    healHp(p,1);
+  }
+}
+
+/* 苦肉（黄盖） */
+async function skKurou(p){
+  skillFlash(p,'苦肉');
+  log(`<span class="sk">苦肉</span>：${nameSpan(p)} 失去1点体力，摸两张牌。`);
+  await loseHp(p,1,'苦肉');
+  if (p.alive){ drawCards(p,2); }
+}
+
+/* 青囊（华佗） */
+async function skQingnang(p){
+  if (p.skillUsed.qingnang) return;
+  const targets = await pickTargets(p, '青囊：选择一名受伤角色回复1点', 1,1, t=>t.hp<t.maxHp);
+  if (!targets) return;
+  const picks = await humanChooseNCards(p, 1, '青囊：弃一张手牌');
+  if (!picks||!picks.length) return;
+  p.skillUsed.qingnang=true;
+  skillFlash(p,'青囊');
+  toDiscard(picks.map(c=>{ removeCardFrom(p,c); return c; }));
+  log(`<span class="sk">青囊</span>：${nameSpan(p)} 令 ${nameSpan(targets[0])} 回复1点。`);
+  healHp(targets[0],1); renderHand(); updateSeat(p);
+}
+
+/* 结姻（孙尚香） */
+async function skJieyin(p){
+  if (p.skillUsed.jieyin) return;
+  const targets = await pickTargets(p, '结姻：选择一名已受伤的男性角色', 1,1, t=>t!==p && t.gender==='male' && t.hp<t.maxHp);
+  if (!targets) return;
+  const picks = await humanChooseNCards(p, 2, '结姻：弃两张手牌');
+  if (!picks||picks.length<2) return;
+  p.skillUsed.jieyin=true;
+  skillFlash(p,'结姻');
+  toDiscard(picks.map(c=>{ removeCardFrom(p,c); return c; }));
+  log(`<span class="sk">结姻</span>：${nameSpan(p)} 与 ${nameSpan(targets[0])} 各回复1点。`);
+  healHp(p,1); healHp(targets[0],1); renderHand(); updateSeat(p);
+}
+
+/* 反间（周瑜） */
+async function skFanjian(p){
+  if (p.skillUsed.fanjian) return;
+  const targets = await pickTargets(p, '反间：选择一名其他角色', 1,1, t=>t!==p);
+  if (!targets) return;
+  const picks = await humanChooseNCards(p, 1, '反间：选择一张手牌交给对方');
+  if (!picks||!picks.length) return;
+  p.skillUsed.fanjian=true;
+  const target=targets[0], card=picks[0];
+  skillFlash(p,'反间');
+  const suit = await askSuitChoice(target);
+  removeCardFrom(p, card); target.hand.push(card);
+  log(`<span class="sk">反间</span>：${nameSpan(target)} 选择了 ${SUIT_CN[suit]}，获得 ${cardMini(card)}。`);
+  updateSeat(p); updateSeat(target); renderHand();
+  if (card.suit!==suit){ await dealDamage(p, target, 1, {}); }
+}
+async function askSuitChoice(target){
+  if (target.isHuman){
+    return await chooseOption('反间','请选择一种花色',[
+      {label:'♠ 黑桃',value:'spade',cls:''},{label:'♥ 红桃',value:'heart',cls:''},
+      {label:'♣ 梅花',value:'club',cls:''},{label:'♦ 方块',value:'diamond',cls:''}]);
+  }
+  return ['spade','heart','club','diamond'][rnd(4)];
+}
+
+/* 离间（貂蝉） */
+async function skLijian(p){
+  if (p.skillUsed.lijian) return;
+  const males = alivePlayers().filter(t=>t!==p && t.gender==='male');
+  if (males.length<2) return;
+  const first = await pickTargets(p, '离间：选择第一名男性角色（将被视为使用【决斗】者的目标）', 1,1, t=>t!==p && t.gender==='male');
+  if (!first) return;
+  const second = await pickTargets(p, '离间：选择第二名男性角色', 1,1, t=>t!==p && t.gender==='male' && t!==first[0]);
+  if (!second) return;
+  const picks = await humanChooseNCards(p, 1, '离间：弃一张牌');
+  if (!picks||!picks.length) return;
+  p.skillUsed.lijian=true;
+  skillFlash(p,'离间');
+  toDiscard(picks.map(c=>{ removeCardFrom(p,c); return c; }));
+  const a=second[0], b=first[0]; // a 对 b 决斗（a先出杀）
+  log(`<span class="sk">离间</span>：${nameSpan(p)} 令 ${nameSpan(b)} 与 ${nameSpan(a)} 决斗。`);
+  renderHand(); updateSeat(p);
+  await forcedDuel(a, b);
+}
+/* 由 a 发起对 b 的决斗（b 先出杀） */
+async function forcedDuel(a, b){
+  let turnFirst = b; // 被决斗目标先出杀
+  let cur = b, opp = a;
+  while (true){
+    const need = hasSkill(opp,'wushuang')?2:1;
+    let ok=true;
+    for (let i=0;i<need;i++){
+      const s = await askResponseCard(cur, '杀', `决斗：${cur.general.name} 请打出【杀】`);
+      if (!s){ ok=false; break; }
+    }
+    if (!ok){ await dealDamage(opp, cur, 1, {}); break; }
+    [cur,opp]=[opp,cur];
+    if (GS.finished) break;
+  }
+}
+
+/* ============================ 通用选牌辅助 ============================ */
+async function humanChooseNCards(p, n, title){
+  const res = await uiSelect({
+    prompt: title,
+    cardOK:(card, sel)=> p.hand.some(c=>c.id===card.id) && (sel.length<n || sel.some(s=>s.id===card.id)),
+    canConfirm:(sel)=> sel.length===n,
+    confirmLabel:'确定',
+    buttons:[{label:'取消', value:'cancel'}],
+  });
+  if (!res || res.btn==='cancel') return null;
+  return res.cards;
+}
+async function humanChooseUpToN(p, n, title){
+  const res = await uiSelect({
+    prompt: title,
+    cardOK:(card, sel)=> p.hand.some(c=>c.id===card.id) && (sel.length<n || sel.some(s=>s.id===card.id)),
+    canConfirm:(sel)=> sel.length>=1,
+    confirmLabel:'确定',
+    buttons:[{label:'取消', value:'cancel'}],
+  });
+  if (!res || res.btn==='cancel') return null;
+  return res.cards;
+}
+
+/* ============================ AI 决策层 ============================ */
+/* 阵营与敌友判断 —— 基于“身份推理”而非上帝视角，更还原。
+   除主公公开外，AI 通过“声望(rep)”推断他人立场：
+     rep > 0：行为像忠臣（保护主公、攻击疑似反贼）
+     rep < 0：行为像反贼（攻击主公/忠臣）
+   己方身份决定倾向；对他人依据 rep 判断敌友。 */
+function factionOf(role){
+  if (role==='主公'||role==='忠臣') return 'loyal';
+  if (role==='反贼') return 'rebel';
+  return 'spy';
+}
+
+/* 记录“行为声望”：攻击者对被攻击者做出敌对行为时更新公开印象 */
+function noteHostileAct(actor, victim){
+  if (!actor || !victim || actor===victim) return;
+  if (victim.role==='主公'){
+    actor.marks.rep = (actor.marks.rep||0) - 2;         // 攻击主公 → 疑似反贼
+  } else if ((actor.marks.rep||0) < -1){
+    // 已疑似反贼者继续行动，不额外加分
+  } else {
+    // 攻击疑似反贼者 → 疑似忠臣
+    if ((victim.marks.rep||0) < -1) actor.marks.rep = (actor.marks.rep||0) + 1;
+    else actor.marks.rep = (actor.marks.rep||0) - 0.4; // 攻击身份不明者，略偏可疑
+  }
+}
+function noteHelpfulAct(actor, target){
+  if (!actor || !target || actor===target) return;
+  if (target.role==='主公') actor.marks.rep = (actor.marks.rep||0) + 1.5; // 救/助主公 → 忠臣
+}
+
+/* AI 对某目标的敌意 (>0 敌, <0 友) —— 基于身份推理 */
+function aiHostility(self, other){
+  if (self===other) return -2;
+  const a=self.role;
+  const lord = GS.players.find(x=>x.role==='主公');
+  const aliveCount = alivePlayers().length;
+  const rep = other.marks.rep||0;              // 他人的公开印象
+  const knownLord = (other.role==='主公');     // 主公公开
+  const revealed = other.revealed;             // 死亡才公开真实身份
+
+  // 若真实身份已公开（死亡），无意义；存活按推理
+  if (a==='主公'){
+    if (knownLord) return -2;
+    if (rep <= -1.5) return 2;      // 疑似反贼
+    if (rep >= 1.5) return -1;      // 疑似忠臣
+    return 0.2;                     // 未知，略警惕
+  }
+  if (a==='忠臣'){
+    if (knownLord) return -2;       // 死保主公
+    if (rep <= -1.5) return 2;      // 疑似反贼
+    if (rep >= 1.5) return -1;      // 同为疑似忠臣
+    return 0.2;
+  }
+  if (a==='反贼'){
+    if (knownLord) return 3;        // 首要目标主公
+    if (rep >= 1.5) return 1.5;     // 疑似忠臣，次要目标
+    if (rep <= -1.5) return -1;     // 疑似反贼同伙
+    return 0.1;                     // 未知，暂不敌视（可能是同伙/内奸）
+  }
+  if (a==='内奸'){
+    // 留主公到最后，先削弱其他人使局面趋于 1v1
+    if (aliveCount<=2) return knownLord?2:0;
+    if (knownLord) return -0.5;     // 暂时保护主公
+    if (rep >= 1.5) return 1;       // 削弱忠臣
+    if (rep <= -1.5) return 0.8;    // 也削弱反贼
+    return 0.5;
+  }
+  return 0;
+}
+function aiAllyScore(self, other){ return -aiHostility(self, other); }
+
+/* AI 出牌阶段 */
+async function aiPlayPhase(p){
+  let guard=0;
+  while (p.alive && !GS.finished && guard++<40){
+    const action = aiChoosePlay(p);
+    if (!action) break;
+    await bubble(p, action.say || '出牌', 500);
+    const ok = await aiExecute(p, action);
+    updateAllSeats(); updateCenter();
+    if (!ok) break;
+    await pace(250);
+  }
+}
+
+/* 选择下一步出牌动作 */
+function aiChoosePlay(p){
+  const hand = p.hand;
+  // 1) 濒危先回血
+  if (p.hp<p.maxHp){
+    const tao = hand.find(c=>c.sub==='桃');
+    if (tao && p.hp<=Math.max(1, p.maxHp-1) && (p.hp<=2)) return {type:'桃', card:tao, say:'补血'};
+  }
+  // 2) 装备（武器/防具/坐骑）优先上装备
+  const equip = hand.find(c=>c.type==='equip' && shouldEquip(p,c));
+  if (equip) return {type:'equip', card:equip, say:'装备'};
+
+  // 3) 主动技能（部分）
+  if (hasSkill(p,'kurou') && p.role!=='主公' && p.hp>=3 && hand.length<2 && Math.random()<0.5)
+    return {type:'skill', sid:'kurou', say:'苦肉'};
+  if (hasSkill(p,'zhiheng') && !p.skillUsed.zhiheng){
+    const junk = hand.filter(c=>isJunk(p,c));
+    if (junk.length>=2) return {type:'skill', sid:'zhiheng', cards:junk.slice(0,Math.min(junk.length,4)), say:'制衡'};
+  }
+  if (hasSkill(p,'fanjian') && !p.skillUsed.fanjian && hand.length>=2){
+    const enemy = pickEnemy(p);
+    if (enemy && Math.random()<0.5) return {type:'skill', sid:'fanjian', target:enemy, say:'反间'};
+  }
+  if (hasSkill(p,'lijian') && !p.skillUsed.lijian){
+    const males = alivePlayers().filter(t=>t!==p && t.gender==='male');
+    if (males.length>=2 && hand.length>=2){
+      // 让两个敌人互斗
+      const enemies = males.filter(t=>aiHostility(p,t)>0);
+      if (enemies.length>=1 && males.length>=2) return {type:'skill', sid:'lijian', say:'离间'};
+    }
+  }
+  if (hasSkill(p,'qingnang') && !p.skillUsed.qingnang && hand.length>=2){
+    const hurtAlly = alivePlayers().find(t=>t.hp<t.maxHp && aiHostility(p,t)<0);
+    if (hurtAlly) return {type:'skill', sid:'qingnang', target:hurtAlly, say:'青囊'};
+  }
+  if (hasSkill(p,'jieyin') && !p.skillUsed.jieyin && hand.length>=2){
+    const t = alivePlayers().find(x=>x!==p && x.gender==='male' && x.hp<x.maxHp && aiHostility(p,x)<0);
+    if (t) return {type:'skill', sid:'jieyin', target:t, say:'结姻'};
+  }
+
+  // 4) 锦囊：无中生有先用
+  const wuzhong = hand.find(c=>c.sub==='wuzhong');
+  if (wuzhong) return {type:'trick', card:wuzhong, sub:'wuzhong', say:'无中生有'};
+
+  // 顺手牵羊 / 过河拆桥 对敌人
+  const chai = hand.find(c=>c.name==='过河拆桥') || (hasSkill(p,'qixi')?hand.find(c=>isBlack(c.suit)&&c.type!=='equip'):null);
+  if (chai){
+    const t = pickEnemyWithCards(p);
+    if (t) return {type:'trick', card:chai, sub:'chaiqiao', via:(chai.name==='过河拆桥'?null:'qixi'), target:t, say:'拆牌'};
+  }
+  const shun = hand.find(c=>c.name==='顺手牵羊');
+  if (shun){
+    const t = alivePlayers().find(x=>x!==p && distance(p,x)<=1 && hasCardsToLose(x) && aiHostility(p,x)>0 && !hasSkill(x,'qianxun'));
+    if (t) return {type:'trick', card:shun, sub:'shunshou', target:t, say:'顺牌'};
+  }
+
+  // 乐不思蜀 对强敌
+  const lebu = hand.find(c=>c.name==='乐不思蜀') || (hasSkill(p,'guose')?hand.find(c=>c.suit==='diamond'):null);
+  if (lebu){
+    const t = alivePlayers().find(x=>x!==p && aiHostility(p,x)>1 && !x.judge.some(j=>j.sub==='lebu') && !hasSkill(x,'qianxun'));
+    if (t) return {type:'trick', card:lebu, sub:'lebu', via:(lebu.name==='乐不思蜀'?null:'guose'), target:t, say:'乐不思蜀'};
+  }
+
+  // 群体锦囊
+  const wugu = hand.find(c=>c.sub==='wugu'); if (wugu) return {type:'trick', card:wugu, sub:'wugu', say:'五谷丰登'};
+  const taoyuan = hand.find(c=>c.sub==='taoyuan'); if (taoyuan && p.hp<p.maxHp) return {type:'trick', card:taoyuan, sub:'taoyuan', say:'桃园结义'};
+  // 南蛮/万箭：若对自己有利（敌多）
+  const nanman = hand.find(c=>c.sub==='nanman');
+  if (nanman && aoeGood(p)) return {type:'trick', card:nanman, sub:'nanman', say:'南蛮入侵'};
+  const wanjian = hand.find(c=>c.sub==='wanjian');
+  if (wanjian && aoeGood(p)) return {type:'trick', card:wanjian, sub:'wanjian', say:'万箭齐发'};
+
+  // 闪电（对主公/强敌，或自己是反贼时给主公）——简化：反贼给主公
+  const shandian = hand.find(c=>c.sub==='shandian');
+  if (shandian){
+    // 放到自己判定区（标准闪电只能对自己）；AI 血多时可用来赌
+    if (p.hp>=3 && Math.random()<0.15 && !p.judge.some(j=>j.sub==='shandian'))
+      return {type:'trick', card:shandian, sub:'shandian', say:'闪电'};
+  }
+
+  // 决斗 对敌人
+  const juedou = hand.find(c=>c.sub==='juedou');
+  if (juedou){
+    const t = pickEnemy(p);
+    if (t && !(hasSkill(t,'kongcheng')&&t.hand.length===0)) return {type:'trick', card:juedou, sub:'juedou', target:t, say:'决斗'};
+  }
+
+  // 5) 杀
+  if (canUseSlashNow(p)){
+    const slash = findSlashCard(p);
+    if (slash){
+      const t = pickSlashTarget(p);
+      if (t) return {type:'杀', card:slash.card, via:slash.via, target:t, say:'杀'};
+    }
+  }
+
+  // 6) 借刀杀人
+  const jiedao = hand.find(c=>c.sub==='jiedao');
+  if (jiedao){
+    const wielder = alivePlayers().find(w=> w!==p && w.equips.weapon && alivePlayers().some(v=>v!==w && canBeSlashTarget(w,v) && aiHostility(p,v)>0));
+    if (wielder) return {type:'trick', card:jiedao, sub:'jiedao', say:'借刀杀人'};
+  }
+
+  return null;
+}
+
+function findSlashCard(p){
+  const s = p.hand.find(c=>c.sub==='杀'); if (s) return {card:s, via:null};
+  if (hasSkill(p,'wusheng')){ const r=p.hand.find(c=>isRed(c.suit)&&c.type!=='equip'); if(r) return {card:r, via:'wusheng'}; }
+  if (hasSkill(p,'longdan')){ const d=p.hand.find(c=>c.sub==='闪'); if(d) return {card:d, via:'longdan'}; }
+  return null;
+}
+function pickSlashTarget(p){
+  const cands = alivePlayers().filter(t=>t!==p && canBeSlashTarget(p,t) && aiHostility(p,t)>0);
+  if (cands.length===0) return null;
+  // 优先血少的敌人
+  cands.sort((a,b)=> (a.hp - b.hp) || (aiHostility(p,b)-aiHostility(p,a)));
+  return cands[0];
+}
+function pickEnemy(p){
+  const cands = alivePlayers().filter(t=>t!==p && aiHostility(p,t)>0);
+  cands.sort((a,b)=> aiHostility(p,b)-aiHostility(p,a) || a.hp-b.hp);
+  return cands[0]||null;
+}
+function pickEnemyWithCards(p){
+  const cands = alivePlayers().filter(t=>t!==p && aiHostility(p,t)>0 && hasCardsToLose(t));
+  cands.sort((a,b)=> (b.equips.weapon?1:0)-(a.equips.weapon?1:0) || aiHostility(p,b)-aiHostility(p,a));
+  return cands[0]||null;
+}
+function aoeGood(p){
+  const enemies = alivePlayers().filter(t=>t!==p && aiHostility(p,t)>0).length;
+  const allies = alivePlayers().filter(t=>t!==p && aiHostility(p,t)<0).length;
+  return enemies > allies;
+}
+function shouldEquip(p, c){
+  if (c.sub==='weapon') return !p.equips.weapon || WEAPON_INFO[c.wname].range > (p.equips.weapon?WEAPON_INFO[p.equips.weapon.wname].range:0);
+  if (c.sub==='armor') return !p.equips.armor;
+  if (c.sub==='-1') return !p.equips['-1'];
+  if (c.sub==='+1') return !p.equips['+1'];
+  return false;
+}
+function isJunk(p, c){
+  // 制衡弃牌判断：装备不弃，桃不弃(缺血时)，其余视手牌质量
+  if (c.type==='equip') return false;
+  if (c.sub==='桃' && p.hp<p.maxHp) return false;
+  if (c.sub==='闪' && p.hp<=2) return false;
+  if (c.sub==='无懈可击') return false;
+  return true;
+}
+function aiChooseDiscard(p, count){
+  // 保留：桃、闪、杀、无懈、装备牌不在手牌；先弃冗余锦囊/多余杀
+  const scored = p.hand.map(c=>({c, s:cardKeepScore(p,c)}));
+  scored.sort((a,b)=>a.s-b.s); // 分低先弃
+  return scored.slice(0,count).map(x=>x.c);
+}
+function cardKeepScore(p, c){
+  if (c.sub==='桃') return p.hp<p.maxHp?100:40;
+  if (c.sub==='无懈可击') return 70;
+  if (c.sub==='闪') return 60;
+  if (c.sub==='杀') return 45;
+  if (c.type==='equip') return 55;
+  if (c.type==='trick') return 35;
+  return 30;
+}
+function aiChooseDiscardWrap(p, count){ return aiChooseDiscard(p, count); }
+
+/* 执行 AI 动作 */
+async function aiExecute(p, action){
+  switch(action.type){
+    case '桃':{
+      removeCardFrom(p, action.card); toDiscard([action.card]);
+      log(`${nameSpan(p)} 使用【桃】回血。`); healHp(p,1); return true;
+    }
+    case 'equip':{
+      log(`${nameSpan(p)} 装备 ${cardMini(action.card)}。`); equipCard(p, action.card); return true;
+    }
+    case '杀':{
+      removeCardFrom(p, action.card);
+      log(`${nameSpan(p)} 对 ${nameSpan(action.target)} 使用【杀】${action.via?('·'+({wusheng:'武圣',longdan:'龙胆'}[action.via])):''}。`);
+      flyCard(p, action.target, action.card); toDiscard([action.card]);
+      p.marks.usedSlash=(p.marks.usedSlash||0)+1; p.marks.usedSlashOrDodge=true;
+      await pace(300);
+      await resolveSlash(p, action.target, action.card, {});
+      return true;
+    }
+    case 'trick':
+      return await aiExecuteTrick(p, action);
+    case 'skill':
+      return await aiExecuteSkill(p, action);
+  }
+  return false;
+}
+
+async function aiExecuteTrick(p, action){
+  const { card, sub, via, target } = action;
+  // 有目标类：直接调用带 target 的版本
+  if (sub==='wuzhong') return await trickWuzhong(p, card, via);
+  if (sub==='wugu') return await trickWugu(p, card, via);
+  if (sub==='taoyuan') return await trickAOE(p, card, 'taoyuan', via);
+  if (sub==='nanman') return await trickAOE(p, card, 'nanman', via);
+  if (sub==='wanjian') return await trickAOE(p, card, 'wanjian', via);
+  if (sub==='shandian') return await trickShandian(p, card, via);
+  if (sub==='juedou') return await aiTrickSingle(p, card, 'juedou', via, target);
+  if (sub==='chaiqiao') return await aiTrickSingle(p, card, 'chaiqiao', via, target);
+  if (sub==='shunshou') return await aiTrickSingle(p, card, 'shunshou', via, target);
+  if (sub==='lebu') return await aiTrickSingle(p, card, 'lebu', via, target);
+  if (sub==='jiedao') return await aiJiedao(p, card);
+  return false;
+}
+
+/* AI 单体锦囊统一执行（复用结算逻辑，跳过人类选目标） */
+async function aiTrickSingle(p, card, sub, via, target){
+  if (!target){ return false; }
+  removeCardFrom(p, card);
+  const cn = TRICK_CN[sub];
+  if (sub==='lebu'){
+    card._asDelay='lebu'; target.judge.push(card);
+    log(`${nameSpan(p)} 对 ${nameSpan(target)} 使用【乐不思蜀】。`); trickJizhi(p,card); updateSeat(target); return true;
+  }
+  toDiscard([card]);
+  log(`${nameSpan(p)} 对 ${nameSpan(target)} 使用【${cn}】。`);
+  flyCard(p, target, card); trickJizhi(p, card);
+  const cancelled = await askWuxieChain(card, target, `【${cn}】对 ${target.general.name}`);
+  if (cancelled) return true;
+  if (sub==='juedou'){
+    let cur=target, opp=p;
+    while(true){ const need=hasSkill(opp,'wushuang')?2:1; let ok=true;
+      for(let i=0;i<need;i++){ const s=await askResponseCard(cur,'杀',`决斗：${cur.general.name} 打出【杀】`); if(!s){ok=false;break;} }
+      if(!ok){ await dealDamage(opp,cur,1,{}); break; } [cur,opp]=[opp,cur]; if(GS.finished) break; }
+  } else if (sub==='chaiqiao'){
+    const picked = await pickCardFromPlayer(p, target, true);
+    if (picked){ removeCardFrom(target,picked); toDiscard([picked]); log(`${nameSpan(p)} 弃置 ${nameSpan(target)} 一张牌。`); updateSeat(target); if(target.isHuman)renderHand(); }
+  } else if (sub==='shunshou'){
+    const picked = await pickCardFromPlayer(p, target, true);
+    if (picked){ gainCard(p, picked, target); log(`${nameSpan(p)} 获得 ${nameSpan(target)} 一张牌。`); }
+  }
+  return true;
+}
+
+async function aiJiedao(p, card){
+  const wielders = alivePlayers().filter(w=> w!==p && w.equips.weapon);
+  let best=null, bestVictim=null;
+  for (const w of wielders){
+    const victims = alivePlayers().filter(v=>v!==w && canBeSlashTarget(w,v) && aiHostility(p,v)>0);
+    if (victims.length){ best=w; bestVictim=victims.sort((a,b)=>a.hp-b.hp)[0]; break; }
+  }
+  if (!best) return false;
+  removeCardFrom(p, card); toDiscard([card]);
+  log(`${nameSpan(p)} 对 ${nameSpan(best)} 使用【借刀杀人】。`); trickJizhi(p,card);
+  const cancelled = await askWuxieChain(card, best, `【借刀杀人】对 ${best.general.name}`);
+  if (cancelled) return true;
+  // wielder 决策
+  const victim = aiJiedaoChoice(best, [bestVictim], p);
+  if (!victim){
+    const w=best.equips.weapon; best.equips.weapon=null; p.hand.push(w);
+    updateSeat(best); updateSeat(p); if(p.isHuman)renderHand();
+    log(`${nameSpan(best)} 交出武器 ${w.name} 给 ${nameSpan(p)}。`); return true;
+  }
+  const slashCard = best.hand.find(c=>c.sub==='杀') || (hasSkill(best,'wusheng')?best.hand.find(c=>isRed(c.suit)):null);
+  if (!slashCard){
+    const w=best.equips.weapon; best.equips.weapon=null; p.hand.push(w);
+    updateSeat(best); updateSeat(p); if(p.isHuman)renderHand();
+    log(`${nameSpan(best)} 无杀，交出武器给 ${nameSpan(p)}。`); return true;
+  }
+  removeCardFrom(best, slashCard); toDiscard([slashCard]);
+  log(`${nameSpan(best)} 被迫对 ${nameSpan(victim)} 出【杀】。`); updateSeat(best);
+  await resolveSlash(best, victim, slashCard, {fromJiedao:true});
+  return true;
+}
+function aiJiedaoChoice(wielder, victims, user){
+  // wielder 若视 victim 为敌则乐意出杀；若 victim 为友则宁可交武器（除非武器很关键）
+  const v = victims[0];
+  if (!v) return null;
+  if (aiHostility(wielder, v) > 0) return v;
+  // victim 是友：不出杀（交武器）——除非 wielder 讨厌 user 更多? 简化：交武器
+  return Math.random()<0.3 ? v : null;
+}
+
+async function aiExecuteSkill(p, action){
+  switch(action.sid){
+    case 'kurou':{ skillFlash(p,'苦肉'); log(`<span class="sk">苦肉</span>：${nameSpan(p)} 失去1点体力摸两张。`); await loseHp(p,1,'苦肉'); if(p.alive) drawCards(p,2); return true; }
+    case 'zhiheng':{
+      p.skillUsed.zhiheng=true; skillFlash(p,'制衡');
+      const cards=action.cards; const n=cards.length;
+      toDiscard(cards.map(c=>{ removeCardFrom(p,c); return c; }));
+      log(`<span class="sk">制衡</span>：${nameSpan(p)} 换 ${n} 张牌。`); drawCards(p,n); updateSeat(p); return true;
+    }
+    case 'fanjian':{
+      p.skillUsed.fanjian=true; const target=action.target; const card=p.hand[rnd(p.hand.length)];
+      skillFlash(p,'反间'); const suit=await askSuitChoice(target);
+      removeCardFrom(p,card); target.hand.push(card);
+      log(`<span class="sk">反间</span>：${nameSpan(target)} 选 ${SUIT_CN[suit]}，得 ${cardMini(card)}。`);
+      updateSeat(p); updateSeat(target); if(target.isHuman)renderHand();
+      if (card.suit!==suit) await dealDamage(p,target,1,{}); return true;
+    }
+    case 'qingnang':{
+      p.skillUsed.qingnang=true; const junk=p.hand.find(c=>isJunk(p,c))||p.hand[0];
+      skillFlash(p,'青囊'); toDiscard([junk]); removeCardFrom(p,junk);
+      log(`<span class="sk">青囊</span>：${nameSpan(p)} 令 ${nameSpan(action.target)} 回血。`); healHp(action.target,1); updateSeat(p); return true;
+    }
+    case 'jieyin':{
+      p.skillUsed.jieyin=true; const toss=p.hand.slice(0,2);
+      skillFlash(p,'结姻'); toDiscard(toss.map(c=>{removeCardFrom(p,c);return c;}));
+      log(`<span class="sk">结姻</span>：${nameSpan(p)} 与 ${nameSpan(action.target)} 各回血。`);
+      healHp(p,1); healHp(action.target,1); updateSeat(p); return true;
+    }
+    case 'lijian':{
+      p.skillUsed.lijian=true;
+      const males=alivePlayers().filter(t=>t!==p&&t.gender==='male');
+      const enemies=males.filter(t=>aiHostility(p,t)>0);
+      let a,b;
+      if (enemies.length>=2){ a=enemies[0]; b=enemies[1]; }
+      else if (enemies.length===1){ a=enemies[0]; b=males.find(m=>m!==a); }
+      else { a=males[0]; b=males[1]; }
+      const toss=p.hand[0]; skillFlash(p,'离间'); removeCardFrom(p,toss); toDiscard([toss]);
+      log(`<span class="sk">离间</span>：${nameSpan(p)} 令 ${nameSpan(b)} 与 ${nameSpan(a)} 决斗。`); updateSeat(p);
+      await forcedDuel(a, b); return true;
+    }
+  }
+  return false;
+}
+
+/* AI 无懈判断 */
+function aiWantWuxie(p, trickCard, affected, depth){
+  // affected 是被作用者。若 depth 为偶数（当前效果将生效），且 affected 是盟友且效果有害→无懈
+  const harmful = ['nanman','wanjian','juedou','chaiqiao','shunshou','lebu'].includes(trickCard.sub);
+  const beneficial = ['taoyuan','wugu','wuzhong'].includes(trickCard.sub);
+  if (depth%2===0){
+    // 效果将生效
+    if (harmful && aiHostility(p, affected)<0) return Math.random()<0.7; // 救盟友
+    if (beneficial && aiHostility(p, affected)>0) return Math.random()<0.4; // 阻止敌人得益
+  } else {
+    // 已被无懈，效果被取消：若我方想让它生效
+    if (harmful && aiHostility(p, affected)>0) return Math.random()<0.5;
+    if (beneficial && aiHostility(p, affected)<0) return Math.random()<0.4;
+  }
+  return false;
+}
+function aiWantTuxi(p){ return alivePlayers().some(t=>t!==p && t.hand.length>0 && aiHostility(p,t)>0); }
+function aiWantLuoyi(p){ return p.hp>=3 && p.hand.some(c=>c.sub==='杀'||c.sub==='juedou'); }
+
+/* ============================ 引导 & 事件接线 ============================ */
+function bindUI(){
+  document.getElementById('btn-start').onclick = ()=>{ setupGame(); };
+  document.getElementById('btn-again').onclick = ()=>{ location.reload(); };
+  document.getElementById('btn-restart').onclick = ()=>{ if(confirm('确定重新开始？')) location.reload(); };
+  const openRules=()=>document.getElementById('rules-overlay').classList.add('active');
+  const closeRules=()=>document.getElementById('rules-overlay').classList.remove('active');
+  document.getElementById('btn-rules').onclick=openRules;
+  document.getElementById('btn-rules2').onclick=openRules;
+  document.getElementById('btn-close-rules').onclick=closeRules;
+}
+document.addEventListener('DOMContentLoaded', bindUI);
+if (document.readyState!=='loading') bindUI();
+</script>
+</body>
+</html>

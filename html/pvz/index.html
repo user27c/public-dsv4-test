@@ -1,0 +1,2572 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plants vs. Zombies</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #1a1a2e;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-family: 'Arial', sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+#container {
+  position: relative;
+  border: 3px solid #5c3d1a;
+  border-radius: 4px;
+  box-shadow: 0 0 40px rgba(0,0,0,0.5);
+}
+canvas {
+  display: block;
+  cursor: crosshair;
+}
+#overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+}
+#overlay.active { pointer-events: all; }
+#overlay .panel {
+  background: rgba(0,0,0,0.85);
+  border: 3px solid #8B6914;
+  border-radius: 12px;
+  padding: 30px 50px;
+  text-align: center;
+  color: #fff;
+  display: none;
+}
+#overlay .panel.show { display: block; }
+#overlay h1 {
+  font-size: 36px;
+  color: #FFD700;
+  text-shadow: 2px 2px 4px #000;
+  margin-bottom: 10px;
+}
+#overlay h2 {
+  font-size: 24px;
+  color: #FFA500;
+  margin-bottom: 20px;
+}
+#overlay .sub {
+  font-size: 14px;
+  color: #aaa;
+  margin-bottom: 25px;
+}
+#overlay button {
+  background: linear-gradient(180deg, #8B6914, #5c3d1a);
+  border: 2px solid #FFD700;
+  color: #FFD700;
+  font-size: 20px;
+  padding: 12px 40px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin: 5px;
+}
+#overlay button:hover {
+  background: linear-gradient(180deg, #A0792A, #6B4D2A);
+  transform: scale(1.05);
+}
+#overlay .wave-text {
+  font-size: 48px;
+  color: #FF4444;
+  font-weight: bold;
+  text-shadow: 3px 3px 6px #000;
+  animation: pulse 0.5s ease-in-out infinite alternate;
+}
+@keyframes pulse { from { transform: scale(1); } to { transform: scale(1.1); } }
+</style>
+</head>
+<body>
+
+<div id="container">
+  <canvas id="game"></canvas>
+  <div id="overlay">
+    <div class="panel show" id="panel-menu">
+      <h1>🌻 Plants vs. Zombies 🧟</h1>
+      <h2>植物大战僵尸</h2>
+      <div class="sub">点击草地放置植物，阻止僵尸入侵你的家园！</div>
+      <button onclick="startGame()">开始游戏</button>
+    </div>
+    <div class="panel" id="panel-win">
+      <h1>🎉 胜利！</h1>
+      <h2>僵尸被击退了！</h2>
+      <button onclick="startGame()">再来一局</button>
+    </div>
+    <div class="panel" id="panel-lose">
+      <h1>💀 失败！</h1>
+      <h2>僵尸吃掉了你的脑子！</h2>
+      <button onclick="startGame()">重新开始</button>
+    </div>
+    <div class="panel" id="panel-wave">
+      <div class="wave-text" id="wave-label"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  CONFIG
+// ============================================================
+const CANVAS_W = 1000;
+const CANVAS_H = 600;
+const GRID_LEFT = 80;
+const GRID_RIGHT = 800;
+const GRID_TOP = 90;
+const GRID_BOTTOM = 590;
+const ROWS = 5;
+const COLS = 9;
+const CELL_W = (GRID_RIGHT - GRID_LEFT) / COLS;
+const CELL_H = (GRID_BOTTOM - GRID_TOP) / ROWS;
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = CANVAS_W;
+canvas.height = CANVAS_H;
+
+const overlay = document.getElementById('overlay');
+const panelMenu = document.getElementById('panel-menu');
+const panelWin = document.getElementById('panel-win');
+const panelLose = document.getElementById('panel-lose');
+const panelWave = document.getElementById('panel-wave');
+const waveLabel = document.getElementById('wave-label');
+
+function cellCenter(col, row) {
+  return { x: GRID_LEFT + col * CELL_W + CELL_W / 2, y: GRID_TOP + row * CELL_H + CELL_H / 2 };
+}
+function cellBounds(col, row) {
+  return { x: GRID_LEFT + col * CELL_W, y: GRID_TOP + row * CELL_H, w: CELL_W, h: CELL_H };
+}
+
+// ============================================================
+//  AUDIO SYSTEM (Web Audio API)
+// ============================================================
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+function initAudio() {
+  if (!audioCtx) audioCtx = new AudioCtx();
+}
+function playTone(freq, duration, type = 'square', vol = 0.08, ramp = true) {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t);
+  gain.gain.setValueAtTime(vol, t);
+  if (ramp) gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+  else gain.gain.setValueAtTime(0, t + duration);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + duration);
+}
+function sfxPeashoot() { playTone(800, 0.08, 'square', 0.04); }
+function sfxSnowPea() { playTone(1200, 0.1, 'sine', 0.04); }
+function sfxHit() { playTone(200, 0.08, 'triangle', 0.05); }
+function sfxExplosion() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.3, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (audioCtx.sampleRate * 0.08));
+  }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.12, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+  src.connect(gain);
+  gain.connect(audioCtx.destination);
+  src.start(t);
+}
+function sfxSun() { playTone(1500, 0.12, 'sine', 0.06); playTone(2000, 0.12, 'sine', 0.05); }
+function sfxChomp() { playTone(300, 0.06, 'sawtooth', 0.05); }
+function sfxPlant() { playTone(600, 0.06, 'sine', 0.04); playTone(900, 0.06, 'sine', 0.03); }
+function sfxZombieGroan() { playTone(80 + Math.random() * 40, 0.3, 'sawtooth', 0.03); }
+function sfxLawnmower() {
+  for (let i = 0; i < 5; i++) {
+    setTimeout(() => playTone(60 + i * 10, 0.1, 'sawtooth', 0.03), i * 50);
+  }
+}
+function sfxWin() {
+  [523, 659, 784, 1047].forEach((f, i) => {
+    setTimeout(() => playTone(f, 0.2, 'sine', 0.06), i * 120);
+  });
+}
+function sfxLose() {
+  [400, 350, 300, 200].forEach((f, i) => {
+    setTimeout(() => playTone(f, 0.3, 'triangle', 0.06), i * 200);
+  });
+}
+
+// ============================================================
+//  UTILS
+// ============================================================
+function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function rand(min, max) { return Math.random() * (max - min) + min; }
+function randInt(min, max) { return Math.floor(rand(min, max + 1)); }
+
+// ============================================================
+//  GAME STATE
+// ============================================================
+let gameState = 'menu'; // menu | playing | paused | win | lose
+let sunCount = 300;
+let gameTime = 0;
+let selectedCard = null; // plant type string or null
+let mouseX = 0, mouseY = 0;
+let mouseOnCanvas = false;
+let shovelMode = false;
+// Grid tracking: grid[row][col] = plant reference or null
+const grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+
+const plants = [];
+const zombies = [];
+const projectiles = [];
+const suns = [];
+const lawnMowers = [];
+const particles = [];
+
+// Wave system
+let currentWave = 0;
+const TOTAL_WAVES = 12;
+let waveActive = false;
+let waveZombiesRemaining = 0;
+let waveSpawnTimer = 0;
+let waveSpawnInterval = 120; // frames between spawns
+let waveAnnounceTimer = 0;
+let waveZombieTypes = ['normal'];
+let isFinalWave = false;
+
+// Card cooldowns (in frames)
+const cardCooldowns = {
+  sunflower: 0, peashooter: 0, snowpea: 0, repeater: 0,
+  wallnut: 0, potatomine: 0, chomper: 0, cherrybomb: 0
+};
+const cardMaxCooldowns = {
+  sunflower: 300, peashooter: 300, snowpea: 450, repeater: 420,
+  wallnut: 720, potatomine: 600, chomper: 420, cherrybomb: 1200
+};
+const cardCosts = {
+  sunflower: 50, peashooter: 100, snowpea: 175, repeater: 200,
+  wallnut: 50, potatomine: 25, chomper: 150, cherrybomb: 150
+};
+const cardNames = {
+  sunflower: '向日葵', peashooter: '豌豆射手', snowpea: '寒冰射手',
+  repeater: '双发射手', wallnut: '坚果墙', potatomine: '土豆地雷',
+  chomper: '大嘴花', cherrybomb: '樱桃炸弹'
+};
+
+// ============================================================
+//  DRAWING HELPERS
+// ============================================================
+function drawRoundedRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+// ============================================================
+//  ENTITY BASE
+// ============================================================
+class Entity {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.alive = true;
+    this.animFrame = 0;
+    this.animTimer = 0;
+    this.animSpeed = 0.1;
+  }
+  updateFrame() {
+    this.animTimer += this.animSpeed;
+    if (this.animTimer >= 1) {
+      this.animTimer -= 1;
+      this.animFrame = (this.animFrame + 1) % 60;
+    }
+  }
+}
+
+// ============================================================
+//  SUN
+// ============================================================
+class Sun extends Entity {
+  constructor(x, y, targetY = y + 300) {
+    super(x, y);
+    this.targetY = Math.min(targetY, GRID_BOTTOM - 20);
+    this.startY = y;
+    this.speed = 1.0;
+    this.lifetime = 600; // frames up to ~10 seconds
+    this.collected = false;
+    this.collectAnim = 0;
+    this.value = 50;
+    this.radius = 20;
+  }
+  update() {
+    if (this.collected) {
+      this.collectAnim += 0.1;
+      if (this.collectAnim >= 1) { this.alive = false; return; }
+      return;
+    }
+    if (this.y < this.targetY) {
+      this.y += this.speed;
+    }
+    this.lifetime--;
+    if (this.lifetime <= 0) {
+      this.alive = false;
+    }
+    this.updateFrame();
+  }
+  render() {
+    if (this.collected) {
+      const t = this.collectAnim;
+      const tx = lerp(this.x, 50, easeOut(t));
+      const ty = lerp(this.y, 25, easeOut(t));
+      const s = lerp(1, 0.3, t);
+      ctx.save();
+      ctx.translate(tx, ty);
+      ctx.scale(s, s);
+      drawSunSprite(0, 0, this.radius);
+      ctx.restore();
+      return;
+    }
+    // Blink warning when expiring
+    if (this.lifetime < 120 && Math.floor(this.lifetime / 15) % 2 === 0) return;
+    drawSunSprite(this.x, this.y, this.radius);
+  }
+}
+
+function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
+
+function drawSunSprite(x, y, r) {
+  // Glow
+  ctx.save();
+  const glow = ctx.createRadialGradient(x, y, r * 0.3, x, y, r * 1.4);
+  glow.addColorStop(0, 'rgba(255,255,200,0.8)');
+  glow.addColorStop(0.5, 'rgba(255,200,50,0.4)');
+  glow.addColorStop(1, 'rgba(255,200,50,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(x - r * 1.5, y - r * 1.5, r * 3, r * 3);
+  
+  // Sun body
+  ctx.fillStyle = '#FFD700';
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#FFA500';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  
+  // Rays
+  ctx.strokeStyle = '#FFD700';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2 + gameTime * 0.02;
+    const inner = r + 2;
+    const outer = r + 7 + Math.sin(gameTime * 0.05 + i) * 3;
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(angle) * inner, y + Math.sin(angle) * inner);
+    ctx.lineTo(x + Math.cos(angle) * outer, y + Math.sin(angle) * outer);
+    ctx.stroke();
+  }
+  
+  // Face
+  ctx.fillStyle = '#333';
+  ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.2, r * 0.12, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + r * 0.3, y - r * 0.2, r * 0.12, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x, y + r * 0.15, r * 0.35, 0, Math.PI);
+  ctx.fill();
+  ctx.restore();
+}
+
+// ============================================================
+//  PROJECTILE
+// ============================================================
+class Projectile extends Entity {
+  constructor(x, y, isFrozen = false) {
+    super(x, y);
+    this.speed = 6;
+    this.isFrozen = isFrozen;
+    this.damage = 25;
+    this.radius = 6;
+  }
+  update() {
+    this.x += this.speed;
+    if (this.x > CANVAS_W + 20) this.alive = false;
+  }
+  render() {
+    ctx.save();
+    if (this.isFrozen) {
+      // Ice pea
+      ctx.fillStyle = '#88CCFF';
+      ctx.strokeStyle = '#AADDFF';
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = '#AAEEFF';
+      ctx.shadowBlur = 6;
+    } else {
+      // Normal pea
+      ctx.fillStyle = '#4CAF50';
+      ctx.strokeStyle = '#2E7D32';
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = '#4CAF50';
+      ctx.shadowBlur = 4;
+    }
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// ============================================================
+//  PLANTS
+// ============================================================
+class Plant extends Entity {
+  constructor(x, y, row, col) {
+    super(x, y);
+    this.row = row;
+    this.col = col;
+    this.hp = 300;
+    this.maxHp = 300;
+    this.plantType = 'base';
+    this.shootTimer = 0;
+    this.shootCooldown = 0;
+    this.productionTimer = 0;
+    this.state = 'idle'; // idle, attack, chomping, arming, dead
+    this.animOffset = Math.random() * Math.PI * 2;
+  }
+  update() {
+    this.updateFrame();
+  }
+  takeDamage(dmg) {
+    this.hp -= dmg;
+    if (this.hp <= 0) {
+      this.alive = false;
+      if (this.col >= 0 && this.col < COLS) grid[this.row][this.col] = null;
+      spawnParticles(this.x, this.y, '#4CAF50', 8);
+    }
+  }
+  render() {}
+  renderHpBar() {
+    if (this.hp >= this.maxHp) return;
+    const w = CELL_W - 10;
+    const h = 4;
+    const barX = this.x - w / 2;
+    const barY = this.y - CELL_H / 2 + 4;
+    const ratio = this.hp / this.maxHp;
+    ctx.fillStyle = '#333';
+    ctx.fillRect(barX, barY, w, h);
+    const color = ratio > 0.5 ? '#4CAF50' : ratio > 0.25 ? '#FF9800' : '#F44336';
+    ctx.fillStyle = color;
+    ctx.fillRect(barX, barY, w * ratio, h);
+  }
+}
+
+// --- Sunflower ---
+class Sunflower extends Plant {
+  constructor(x, y, row, col) {
+    super(x, y, row, col);
+    this.plantType = 'sunflower';
+    this.sunTimer = 0;
+    this.sunInterval = 600; // frames = ~10s at 60fps
+  }
+  update() {
+    super.update();
+    this.sunTimer++;
+    if (this.sunTimer >= this.sunInterval) {
+      this.sunTimer = 0;
+      suns.push(new Sun(this.x + rand(-10, 10), this.y - 10));
+    }
+  }
+  render() {
+    const cx = this.x, cy = this.y;
+    const bob = Math.sin(gameTime * 0.03 + this.animOffset) * 3;
+    
+    // Stem
+    ctx.save();
+    ctx.strokeStyle = '#2E7D32';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + 20);
+    ctx.lineTo(cx, cy - 5 + bob);
+    ctx.stroke();
+    
+    // Petals
+    const petalCount = 10;
+    for (let i = 0; i < petalCount; i++) {
+      const angle = (i / petalCount) * Math.PI * 2 + Math.sin(gameTime * 0.02) * 0.1;
+      const px = cx + Math.cos(angle) * 18;
+      const py = cy - 5 + bob + Math.sin(angle) * 18;
+      ctx.fillStyle = '#FFD700';
+      ctx.beginPath();
+      ctx.ellipse(px, py, 10, 6, angle, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // Center
+    const grad = ctx.createRadialGradient(cx, cy - 5 + bob, 3, cx, cy - 5 + bob, 12);
+    grad.addColorStop(0, '#5D4037');
+    grad.addColorStop(0.6, '#795548');
+    grad.addColorStop(1, '#8D6E63');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy - 5 + bob, 12, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Eyes
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.arc(cx - 4, cy - 8 + bob, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 4, cy - 8 + bob, 2, 0, Math.PI * 2); ctx.fill();
+    
+    // Smile
+    ctx.beginPath();
+    ctx.arc(cx, cy - 2 + bob, 4, 0, Math.PI);
+    ctx.fillStyle = '#111';
+    ctx.fill();
+    
+    // Leaves
+    ctx.fillStyle = '#4CAF50';
+    ctx.beginPath();
+    ctx.ellipse(cx - 15, cy + 8, 12, 5, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(cx + 15, cy + 5, 12, 5, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.restore();
+    this.renderHpBar();
+  }
+}
+
+// --- Peashooter ---
+class Peashooter extends Plant {
+  constructor(x, y, row, col) {
+    super(x, y, row, col);
+    this.plantType = 'peashooter';
+    this.shootTimer = 0;
+    this.shootInterval = 60; // ~1s
+    this.hasTarget = false;
+  }
+  update() {
+    super.update();
+    this.shootTimer++;
+    this.hasTarget = false;
+    for (const z of zombies) {
+      if (z.row === this.row && z.x > this.x && z.alive) {
+        this.hasTarget = true;
+        break;
+      }
+    }
+    if (this.hasTarget && this.shootTimer >= this.shootInterval) {
+      this.shootTimer = 0;
+      this.shoot();
+    }
+  }
+  shoot() {
+    const p = new Projectile(this.x + 15, this.y - 5);
+    projectiles.push(p);
+    sfxPeashoot();
+  }
+  render() {
+    const cx = this.x, cy = this.y;
+    const bob = Math.sin(gameTime * 0.04 + this.animOffset) * 2;
+    const recoil = this.shootTimer < 6 ? 4 * (1 - this.shootTimer / 6) : 0;
+    
+    ctx.save();
+    // Stem
+    ctx.strokeStyle = '#2E7D32';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + 20);
+    ctx.lineTo(cx, cy);
+    ctx.stroke();
+    
+    // Body (head)
+    const bodyX = cx - recoil;
+    const grad = ctx.createRadialGradient(bodyX - 3, cy - 8 + bob, 2, bodyX, cy + bob, 16);
+    grad.addColorStop(0, '#66BB6A');
+    grad.addColorStop(0.7, '#43A047');
+    grad.addColorStop(1, '#2E7D32');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(bodyX, cy + bob, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#1B5E20';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    // Shoot tube
+    ctx.fillStyle = '#4CAF50';
+    ctx.strokeStyle = '#2E7D32';
+    ctx.lineWidth = 2;
+    drawRoundedRect(bodyX + 5, cy - 5 + bob, 16, 10, 5);
+    ctx.fill();
+    ctx.stroke();
+    
+    // Shoot hole
+    ctx.fillStyle = '#1B5E20';
+    ctx.beginPath();
+    ctx.arc(bodyX + 21, cy + bob, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Eyes
+    ctx.fillStyle = '#FFF';
+    ctx.beginPath(); ctx.arc(bodyX - 2, cy - 6 + bob, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(bodyX + 8, cy - 6 + bob, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.arc(bodyX - 1, cy - 5 + bob, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(bodyX + 9, cy - 5 + bob, 3, 0, Math.PI * 2); ctx.fill();
+    
+    // Leaves
+    ctx.fillStyle = '#4CAF50';
+    ctx.beginPath(); ctx.ellipse(cx - 14, cy + 6, 10, 5, -0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + 16, cy + 4, 10, 5, 0.4, 0, Math.PI * 2); ctx.fill();
+    
+    ctx.restore();
+    this.renderHpBar();
+  }
+}
+
+// --- Snow Pea ---
+class SnowPea extends Plant {
+  constructor(x, y, row, col) {
+    super(x, y, row, col);
+    this.plantType = 'snowpea';
+    this.shootTimer = 0;
+    this.shootInterval = 72;
+    this.hasTarget = false;
+  }
+  update() {
+    super.update();
+    this.shootTimer++;
+    this.hasTarget = false;
+    for (const z of zombies) {
+      if (z.row === this.row && z.x > this.x && z.alive) { this.hasTarget = true; break; }
+    }
+    if (this.hasTarget && this.shootTimer >= this.shootInterval) {
+      this.shootTimer = 0;
+      const p = new Projectile(this.x + 15, this.y - 5, true);
+      projectiles.push(p);
+      sfxSnowPea();
+    }
+  }
+  render() {
+    const cx = this.x, cy = this.y;
+    const bob = Math.sin(gameTime * 0.04 + this.animOffset) * 2;
+    const recoil = this.shootTimer < 6 ? 4 * (1 - this.shootTimer / 6) : 0;
+    
+    ctx.save();
+    ctx.strokeStyle = '#2E7D32';
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(cx, cy + 20); ctx.lineTo(cx, cy); ctx.stroke();
+    
+    const bodyX = cx - recoil;
+    const grad = ctx.createRadialGradient(bodyX - 3, cy - 8 + bob, 2, bodyX, cy + bob, 16);
+    grad.addColorStop(0, '#90CAF9');
+    grad.addColorStop(0.7, '#64B5F6');
+    grad.addColorStop(1, '#42A5F5');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(bodyX, cy + bob, 16, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#1E88E5'; ctx.lineWidth = 2; ctx.stroke();
+    
+    // Shoot tube
+    ctx.fillStyle = '#64B5F6';
+    ctx.strokeStyle = '#42A5F5'; ctx.lineWidth = 2;
+    drawRoundedRect(bodyX + 5, cy - 5 + bob, 16, 10, 5);
+    ctx.fill(); ctx.stroke();
+    
+    ctx.fillStyle = '#1565C0';
+    ctx.beginPath(); ctx.arc(bodyX + 21, cy + bob, 3.5, 0, Math.PI * 2); ctx.fill();
+    
+    // Frosty eyebrows
+    ctx.fillStyle = '#E3F2FD';
+    ctx.beginPath(); ctx.arc(bodyX - 2, cy - 7 + bob, 7.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(bodyX + 8, cy - 7 + bob, 7.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#0D47A1';
+    ctx.beginPath(); ctx.arc(bodyX - 1, cy - 5 + bob, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(bodyX + 9, cy - 5 + bob, 3, 0, Math.PI * 2); ctx.fill();
+    
+    ctx.fillStyle = '#64B5F6';
+    ctx.beginPath(); ctx.ellipse(cx - 14, cy + 6, 10, 5, -0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + 16, cy + 4, 10, 5, 0.4, 0, Math.PI * 2); ctx.fill();
+    
+    ctx.restore();
+    this.renderHpBar();
+  }
+}
+
+// --- Repeater ---
+class Repeater extends Plant {
+  constructor(x, y, row, col) {
+    super(x, y, row, col);
+    this.plantType = 'repeater';
+    this.shootTimer = 0;
+    this.shootInterval = 72;
+    this.secondShotTimer = 0;
+    this.firing = false;
+    this.hasTarget = false;
+  }
+  update() {
+    super.update();
+    this.shootTimer++;
+    if (this.firing) {
+      this.secondShotTimer++;
+      if (this.secondShotTimer >= 8) {
+        const p = new Projectile(this.x + 15, this.y - 5);
+        projectiles.push(p);
+        sfxPeashoot();
+        this.firing = false;
+        this.secondShotTimer = 0;
+      }
+    }
+    this.hasTarget = false;
+    for (const z of zombies) {
+      if (z.row === this.row && z.x > this.x && z.alive) { this.hasTarget = true; break; }
+    }
+    if (this.hasTarget && this.shootTimer >= this.shootInterval && !this.firing) {
+      this.shootTimer = 0;
+      this.firing = true;
+      const p = new Projectile(this.x + 15, this.y - 5);
+      projectiles.push(p);
+      sfxPeashoot();
+    }
+  }
+  render() {
+    const cx = this.x, cy = this.y;
+    const bob = Math.sin(gameTime * 0.04 + this.animOffset) * 2;
+    const recoil = (this.shootTimer < 6 || this.firing) ? 4 : 0;
+    
+    ctx.save();
+    // Two heads
+    for (let i = 0; i < 2; i++) {
+      const offX = i * 6;
+      const grad = ctx.createRadialGradient(cx - 3 - recoil + offX, cy - 10 + bob + i * 2, 2, cx - recoil + offX, cy - 3 + bob + i * 2, 12);
+      grad.addColorStop(0, '#81C784');
+      grad.addColorStop(0.7, '#4CAF50');
+      grad.addColorStop(1, '#388E3C');
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(cx - recoil + offX, cy - 3 + bob + i * 2, 12, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#1B5E20'; ctx.lineWidth = 2; ctx.stroke();
+      
+      ctx.fillStyle = '#4CAF50'; ctx.strokeStyle = '#2E7D32';
+      drawRoundedRect(cx + 2 - recoil + offX, cy - 7 + bob + i * 2, 12, 8, 4);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#1B5E20';
+      ctx.beginPath(); ctx.arc(cx + 14 - recoil + offX, cy - 3 + bob + i * 2, 2.5, 0, Math.PI * 2); ctx.fill();
+      
+      ctx.fillStyle = '#FFF';
+      ctx.beginPath(); ctx.arc(cx - 5 - recoil + offX, cy - 7 + bob + i * 2, 5.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#111';
+      ctx.beginPath(); ctx.arc(cx - 4 - recoil + offX, cy - 6 + bob + i * 2, 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+    
+    ctx.strokeStyle = '#2E7D32'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(cx + 3, cy + 15); ctx.lineTo(cx + 3, cy); ctx.stroke();
+    
+    ctx.fillStyle = '#4CAF50';
+    ctx.beginPath(); ctx.ellipse(cx - 10, cy + 7, 9, 4, -0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + 14, cy + 5, 9, 4, 0.4, 0, Math.PI * 2); ctx.fill();
+    
+    ctx.restore();
+    this.renderHpBar();
+  }
+}
+
+// --- Wall-nut ---
+class WallNut extends Plant {
+  constructor(x, y, row, col) {
+    super(x, y, row, col);
+    this.plantType = 'wallnut';
+    this.hp = 4000;
+    this.maxHp = 4000;
+  }
+  update() { super.update(); }
+  render() {
+    const cx = this.x, cy = this.y;
+    const hpRatio = this.hp / this.maxHp;
+    const crackStage = hpRatio < 0.33 ? 2 : hpRatio < 0.66 ? 1 : 0;
+    
+    ctx.save();
+    // Body
+    const grad = ctx.createRadialGradient(cx - 3, cy - 5, 3, cx, cy, 22);
+    grad.addColorStop(0, '#D7CCC8');
+    grad.addColorStop(0.6, '#A1887F');
+    grad.addColorStop(1, '#795548');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 22, 26, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#5D4037'; ctx.lineWidth = 3; ctx.stroke();
+    
+    // Cracks
+    ctx.strokeStyle = '#3E2723';
+    ctx.lineWidth = 1.5;
+    if (crackStage >= 1) {
+      ctx.beginPath();
+      ctx.moveTo(cx - 10, cy - 12);
+      ctx.lineTo(cx - 4, cy - 2);
+      ctx.lineTo(cx - 8, cy + 8);
+      ctx.stroke();
+    }
+    if (crackStage >= 2) {
+      ctx.beginPath();
+      ctx.moveTo(cx + 8, cy - 10);
+      ctx.lineTo(cx + 2, cy + 0);
+      ctx.lineTo(cx + 10, cy + 8);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx - 2, cy - 18);
+      ctx.lineTo(cx + 5, cy - 12);
+      ctx.stroke();
+    }
+    
+    // Face
+    ctx.fillStyle = '#3E2723';
+    ctx.beginPath(); ctx.arc(cx - 8, cy - 4, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 8, cy - 4, 3, 0, Math.PI * 2); ctx.fill();
+    
+    // Mouth
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (hpRatio < 0.33) {
+      ctx.arc(cx, cy + 12, 5, 0, Math.PI, false); // worried
+    } else {
+      ctx.arc(cx, cy + 8, 5, 0, Math.PI, false); // neutral
+    }
+    ctx.stroke();
+    
+    ctx.restore();
+    this.renderHpBar();
+  }
+}
+
+// --- Potato Mine ---
+class PotatoMine extends Plant {
+  constructor(x, y, row, col) {
+    super(x, y, row, col);
+    this.plantType = 'potatomine';
+    this.armed = false;
+    this.armTimer = 0;
+    this.armTime = 300; // frames ~5s to arm
+  }
+  update() {
+    super.update();
+    if (!this.armed) {
+      this.armTimer++;
+      if (this.armTimer >= this.armTime) {
+        this.armed = true;
+      }
+    }
+    // Check for zombies
+    if (this.armed) {
+      for (const z of zombies) {
+        if (z.row === this.row && Math.abs(z.x - this.x) < CELL_W * 0.8 && z.alive) {
+          this.explode(z);
+          return;
+        }
+      }
+    }
+  }
+  explode(target) {
+    sfxExplosion();
+    spawnParticles(this.x, this.y, '#FF5722', 20);
+    spawnParticles(this.x, this.y, '#FF9800', 15);
+    // Damage all zombies in same cell
+    for (const z of zombies) {
+      if (z.row === this.row && Math.abs(z.x - this.x) < CELL_W && z.alive) {
+        z.takeDamage(1800);
+      }
+    }
+    this.alive = false;
+    if (this.col >= 0 && this.col < COLS) grid[this.row][this.col] = null;
+  }
+  render() {
+    const cx = this.x, cy = this.y + 8;
+    
+    ctx.save();
+    // Dirt mound
+    ctx.fillStyle = '#795548';
+    ctx.beginPath();
+    ctx.ellipse(cx - 2, cy + 12, 18, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#5D4037';
+    ctx.beginPath();
+    ctx.ellipse(cx - 2, cy + 12, 14, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Potato body
+    const grad = ctx.createRadialGradient(cx - 2, cy - 3, 2, cx, cy + 2, 14);
+    grad.addColorStop(0, '#CDA87A');
+    grad.addColorStop(0.7, '#A0793C');
+    grad.addColorStop(1, '#7B5B2A');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 14, 11, -0.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#6B4F2C'; ctx.lineWidth = 2; ctx.stroke();
+    
+    // "Bumps" on potato
+    ctx.fillStyle = '#8D6E3E';
+    ctx.beginPath(); ctx.arc(cx - 5, cy - 7, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 6, cy - 4, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx - 3, cy + 6, 3, 0, Math.PI * 2); ctx.fill();
+    
+    // Red dot when armed
+    if (this.armed) {
+      const blink = Math.sin(gameTime * 0.1) > 0;
+      if (blink) {
+        ctx.fillStyle = '#FF0000';
+        ctx.beginPath(); ctx.arc(cx, cy - 3, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowColor = '#FF0000'; ctx.shadowBlur = 8;
+        ctx.beginPath(); ctx.arc(cx, cy - 3, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+    } else {
+      // Un-armed: show progress
+      const progress = this.armTimer / this.armTime;
+      ctx.strokeStyle = '#FF0000';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 16, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
+      ctx.stroke();
+    }
+    
+    // Eyes
+    ctx.fillStyle = '#FFF';
+    ctx.beginPath(); ctx.arc(cx - 5, cy - 1, 4.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 6, cy - 1, 4.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.arc(cx - 4, cy - 1, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 7, cy - 1, 2, 0, Math.PI * 2); ctx.fill();
+    
+    ctx.restore();
+    this.renderHpBar();
+  }
+}
+
+// --- Chomper ---
+class Chomper extends Plant {
+  constructor(x, y, row, col) {
+    super(x, y, row, col);
+    this.plantType = 'chomper';
+    this.chewing = false;
+    this.chewTimer = 0;
+    this.chewDuration = 600; // frames ~10s
+  }
+  update() {
+    super.update();
+    if (this.chewing) {
+      this.chewTimer++;
+      if (this.chewTimer >= this.chewDuration) {
+        this.chewing = false;
+        this.chewTimer = 0;
+      }
+      return;
+    }
+    // Check for zombie in front
+    for (const z of zombies) {
+      if (z.row === this.row && Math.abs(z.x - (this.x + CELL_W * 0.5)) < CELL_W * 0.7 && z.alive && !z.isGargantuar) {
+        this.chewing = true;
+        z.alive = false;
+        sfxChomp();
+        spawnParticles(z.x, z.y, '#666', 10);
+        break;
+      }
+    }
+  }
+  render() {
+    const cx = this.x, cy = this.y;
+    const mouthOpen = this.chewing ? (this.chewTimer < 15 ? this.chewTimer / 15 : 1) : 
+      (Math.sin(gameTime * 0.02 + this.animOffset) * 0.1 + 0.1);
+    
+    ctx.save();
+    // Stem
+    ctx.strokeStyle = '#4A148C';
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(cx, cy + 20); ctx.lineTo(cx, cy); ctx.stroke();
+    
+    // Head - upper jaw
+    ctx.fillStyle = '#9C27B0';
+    ctx.beginPath();
+    ctx.ellipse(cx + 2, cy - 5 - mouthOpen * 8, 14, 12 - mouthOpen * 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#6A1B9A'; ctx.lineWidth = 2; ctx.stroke();
+    
+    // Head - lower jaw
+    ctx.fillStyle = '#AB47BC';
+    ctx.beginPath();
+    ctx.ellipse(cx + 2, cy + 5 + mouthOpen * 8, 14, 10 - mouthOpen * 3, 0, Math.PI, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#6A1B9A'; ctx.lineWidth = 2; ctx.stroke();
+    
+    // Teeth on upper jaw
+    if (!this.chewing || this.chewTimer < 15) {
+      ctx.fillStyle = '#FFF';
+      const teethY = cy - 8 - mouthOpen * 8;
+      for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.moveTo(cx + i * 5 - 2, teethY - 5);
+        ctx.lineTo(cx + i * 5, teethY);
+        ctx.lineTo(cx + i * 5 + 2, teethY - 5);
+        ctx.fill();
+      }
+      // Teeth on lower jaw
+      const teethY2 = cy + 8 + mouthOpen * 8;
+      for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.moveTo(cx + i * 5 - 2, teethY2 + 5);
+        ctx.lineTo(cx + i * 5, teethY2);
+        ctx.lineTo(cx + i * 5 + 2, teethY2 + 5);
+        ctx.fill();
+      }
+    }
+    
+    // Spots on head
+    ctx.fillStyle = '#CE93D8';
+    ctx.beginPath(); ctx.arc(cx - 4, cy - 12, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 8, cy - 8, 3, 0, Math.PI * 2); ctx.fill();
+    
+    // Eyes (on top of head)
+    ctx.fillStyle = '#FFF';
+    ctx.beginPath(); ctx.arc(cx - 4, cy - 15, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 8, cy - 15, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.arc(cx - 4, cy - 15, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 8, cy - 15, 2, 0, Math.PI * 2); ctx.fill();
+    
+    ctx.restore();
+    this.renderHpBar();
+  }
+}
+
+// --- Cherry Bomb ---
+class CherryBomb extends Plant {
+  constructor(x, y, row, col) {
+    super(x, y, row, col);
+    this.plantType = 'cherrybomb';
+    this.fuse = 0;
+    this.fuseMax = 45; // frames ~0.75s
+    this.exploded = false;
+  }
+  update() {
+    super.update();
+    if (!this.exploded) {
+      this.fuse++;
+      if (this.fuse >= this.fuseMax) {
+        this.explode();
+      }
+    } else {
+      this.hp = 0;
+      this.alive = false;
+      if (this.col >= 0 && this.col < COLS) grid[this.row][this.col] = null;
+    }
+  }
+  explode() {
+    this.exploded = true;
+    sfxExplosion();
+    // 3x3 explosion
+    for (let r = this.row - 1; r <= this.row + 1; r++) {
+      if (r < 0 || r >= ROWS) continue;
+      for (let c = this.col - 1; c <= this.col + 1; c++) {
+        if (c < 0 || c >= COLS) continue;
+        // Kill all zombies in these cells
+        for (const z of zombies) {
+          const zc = getZombieCol(z);
+          if (z.row === r && Math.abs(zc - c) <= 1 && z.alive) {
+            z.takeDamage(1800);
+          }
+        }
+      }
+    }
+    spawnParticles(this.x, this.y, '#FF0000', 30);
+    spawnParticles(this.x, this.y, '#FF6600', 20);
+    spawnParticles(this.x, this.y, '#FFFF00', 15);
+  }
+  render() {
+    const cx = this.x, cy = this.y;
+    const shake = this.fuse > 35 ? Math.sin(gameTime * 0.5) * 3 : 0;
+    
+    ctx.save();
+    if (this.fuse > 35 && Math.floor(this.fuse / 3) % 2 === 0) {
+      ctx.globalAlpha = 0.5;
+    }
+    
+    // Stems
+    ctx.strokeStyle = '#2E7D32';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(cx - 8, cy - 5 + shake); ctx.lineTo(cx - 8, cy + 15); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + 8, cy - 5 + shake); ctx.lineTo(cx + 8, cy + 15); ctx.stroke();
+    
+    // Left cherry
+    const gradL = ctx.createRadialGradient(cx - 8, cy - 5 + shake, 3, cx - 8, cy - 5 + shake, 14);
+    gradL.addColorStop(0, '#FF5252');
+    gradL.addColorStop(0.6, '#D32F2F');
+    gradL.addColorStop(1, '#B71C1C');
+    ctx.fillStyle = gradL;
+    ctx.beginPath(); ctx.arc(cx - 8, cy - 5 + shake, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#B71C1C'; ctx.lineWidth = 2; ctx.stroke();
+    
+    // Right cherry
+    const gradR = ctx.createRadialGradient(cx + 8, cy - 5 + shake, 3, cx + 8, cy - 5 + shake, 14);
+    gradR.addColorStop(0, '#FF5252');
+    gradR.addColorStop(0.6, '#D32F2F');
+    gradR.addColorStop(1, '#B71C1C');
+    ctx.fillStyle = gradR;
+    ctx.beginPath(); ctx.arc(cx + 8, cy - 5 + shake, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#B71C1C'; ctx.lineWidth = 2; ctx.stroke();
+    
+    // Highlights
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.beginPath(); ctx.arc(cx - 11, cy - 9 + shake, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 5, cy - 9 + shake, 4, 0, Math.PI * 2); ctx.fill();
+    
+    // Fuse
+    ctx.strokeStyle = '#FFA000';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 15 + shake);
+    ctx.lineTo(cx, cy - 22 + shake);
+    ctx.stroke();
+    if (this.fuse > this.fuseMax * 0.5) {
+      ctx.fillStyle = '#FF5722';
+      ctx.beginPath(); ctx.arc(cx, cy - 22 + shake, 4, 0, Math.PI * 2); ctx.fill();
+    }
+    
+    // Eyes
+    ctx.fillStyle = '#FFF';
+    ctx.beginPath(); ctx.arc(cx - 11, cy - 8 + shake, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 5, cy - 8 + shake, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.arc(cx - 10, cy - 8 + shake, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 6, cy - 8 + shake, 2.5, 0, Math.PI * 2); ctx.fill();
+    // Angry eyebrows
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx - 15, cy - 14 + shake); ctx.lineTo(cx - 7, cy - 12 + shake); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + 15, cy - 14 + shake); ctx.lineTo(cx + 7, cy - 12 + shake); ctx.stroke();
+    
+    ctx.restore();
+  }
+}
+
+// ============================================================
+//  ZOMBIES
+// ============================================================
+class Zombie extends Entity {
+  constructor(x, y, row) {
+    super(x, y);
+    this.row = row;
+    this.hp = 100;
+    this.maxHp = 100;
+    this.baseSpeed = 0.5;
+    this.speed = this.baseSpeed;
+    this.slowed = false;
+    this.slowTimer = 0;
+    this.attacking = false;
+    this.attackTimer = 0;
+    this.attackInterval = 30;
+    this.targetPlant = null;
+    this.deathTimer = 0;
+    this.dying = false;
+    this.zombieType = 'normal';
+    this.animOffset = Math.random() * Math.PI * 2;
+    this.isGargantuar = false;
+  }
+  update() {
+    if (this.dying) {
+      this.deathTimer++;
+      if (this.deathTimer >= 30) { this.alive = false; }
+      return;
+    }
+    
+    // Slow effect
+    if (this.slowed) {
+      this.slowTimer++;
+      if (this.slowTimer >= 180) { // 3 seconds
+        this.slowed = false;
+        this.slowTimer = 0;
+        this.speed = this.baseSpeed;
+      } else {
+        this.speed = this.baseSpeed * 0.4;
+      }
+    }
+    
+    // Find target plant
+    this.targetPlant = null;
+    for (const p of plants) {
+      if (p.row === this.row && p.alive) {
+        const plantRight = p.x + CELL_W / 2;
+        const zombieLeft = this.x - 16;
+        if (zombieLeft <= plantRight && this.x + 10 >= p.x - CELL_W / 2) {
+          this.targetPlant = p;
+          break;
+        }
+      }
+    }
+    
+    if (this.targetPlant) {
+      this.attacking = true;
+      this.attackTimer++;
+      if (this.attackTimer >= this.attackInterval) {
+        this.attackTimer = 0;
+        this.targetPlant.takeDamage(100);
+      }
+    } else {
+      this.attacking = false;
+      this.x -= this.speed;
+    }
+    
+    // Reached left side
+    if (this.x < 40) {
+      this.alive = false;
+      // Lawn mower trigger - handled in game loop
+    }
+    
+    this.updateFrame();
+  }
+  takeDamage(dmg, isFrozen = false) {
+    this.hp -= dmg;
+    if (isFrozen) {
+      this.slowed = true;
+      this.slowTimer = 0;
+    }
+    if (this.hp <= 0) {
+      this.dying = true;
+      this.deathTimer = 0;
+    } else {
+      sfxHit();
+    }
+  }
+  render() {
+    if (this.dying) {
+      this.renderDeath();
+      return;
+    }
+    const cx = this.x, cy = this.y;
+    const wobble = Math.sin(gameTime * 0.06 + this.animOffset) * 3;
+    const armSwing = Math.sin(gameTime * 0.08 + this.animOffset) * 5 + 5;
+    
+    ctx.save();
+    // Slow effect visual
+    if (this.slowed) {
+      ctx.strokeStyle = 'rgba(100,180,255,0.4)';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(cx, cy - 30, 20, 0, Math.PI * 2); ctx.stroke();
+    }
+    
+    // Legs
+    const legAngle = Math.sin(gameTime * 0.08 + this.animOffset) * 0.3;
+    ctx.fillStyle = '#555';
+    ctx.fillRect(cx - 8, cy + 25, 7, 18);
+    ctx.fillRect(cx + 1, cy + 25, 7, 18);
+    
+    // Shoes
+    ctx.fillStyle = '#333';
+    ctx.fillRect(cx - 10, cy + 40, 11, 7);
+    ctx.fillRect(cx - 1, cy + 40, 11, 7);
+    
+    // Body
+    this.renderZombieBody(cx, cy, wobble, armSwing);
+    
+    ctx.restore();
+    this.renderHpBarZombie(cx, cy);
+  }
+  renderZombieBody(cx, cy, wobble, armSwing) {
+    // Body
+    ctx.fillStyle = '#777';
+    drawRoundedRect(cx - 10, cy + 5, 20, 22, 3);
+    ctx.fill();
+    ctx.strokeStyle = '#444'; ctx.lineWidth = 1.5; ctx.stroke();
+    
+    // Tie
+    ctx.fillStyle = '#C62828';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + 8);
+    ctx.lineTo(cx - 5, cy + 20);
+    ctx.lineTo(cx, cy + 18);
+    ctx.lineTo(cx + 5, cy + 20);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Arms
+    ctx.fillStyle = '#777';
+    // Left arm
+    ctx.fillRect(cx - 18, cy + 5, 8, 5);
+    ctx.fillRect(cx - 18, cy + 5, 5, 16 + armSwing);
+    // Right arm
+    ctx.fillRect(cx + 10, cy + 5, 8, 5);
+    ctx.fillRect(cx + 13, cy + 5, 5, 16 - armSwing);
+    
+    // Hands
+    ctx.fillStyle = '#8D6E63';
+    ctx.beginPath(); ctx.arc(cx - 15, cy + 22 + armSwing, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 16, cy + 22 - armSwing, 4, 0, Math.PI * 2); ctx.fill();
+    
+    // Head
+    ctx.fillStyle = '#9CCC65';
+    ctx.beginPath(); ctx.arc(cx, cy - 8 + wobble, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#7CB342'; ctx.lineWidth = 2; ctx.stroke();
+    
+    // Hair
+    ctx.fillStyle = '#444';
+    ctx.beginPath();
+    ctx.arc(cx, cy - 20 + wobble, 12, Math.PI, Math.PI * 2);
+    ctx.fill();
+    
+    // Eyes
+    ctx.fillStyle = '#FFEB3B';
+    ctx.beginPath(); ctx.arc(cx - 5, cy - 10 + wobble, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 5, cy - 10 + wobble, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#D32F2F';
+    ctx.beginPath(); ctx.arc(cx - 4, cy - 10 + wobble, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 6, cy - 10 + wobble, 2, 0, Math.PI * 2); ctx.fill();
+    
+    // Mouth
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    if (this.attacking) {
+      ctx.arc(cx, cy - 2 + wobble, 5, 0.2, Math.PI - 0.2);
+    } else {
+      ctx.arc(cx, cy + 2 + wobble, 3, 0, Math.PI);
+    }
+    ctx.stroke();
+    
+    // Teeth
+    if (this.attacking) {
+      ctx.fillStyle = '#FFF';
+      ctx.beginPath(); ctx.moveTo(cx - 2, cy - 3 + wobble); ctx.lineTo(cx, cy + 2 + wobble); ctx.lineTo(cx + 2, cy - 3 + wobble); ctx.fill();
+    }
+    
+    return wobble;
+  }
+  renderHpBarZombie(cx, cy) {
+    if (this.hp >= this.maxHp) return;
+    const w = 30;
+    const h = 3;
+    const barX = cx - w / 2;
+    const barY = cy - 30;
+    const ratio = this.hp / this.maxHp;
+    ctx.fillStyle = '#333';
+    ctx.fillRect(barX, barY, w, h);
+    ctx.fillStyle = ratio > 0.5 ? '#4CAF50' : ratio > 0.25 ? '#FF9800' : '#F44336';
+    ctx.fillRect(barX, barY, w * ratio, h);
+  }
+  renderDeath() {
+    const cx = this.x, cy = this.y;
+    const t = this.deathTimer / 30;
+    ctx.save();
+    ctx.globalAlpha = 1 - t;
+    ctx.translate(cx, cy + t * 20);
+    ctx.rotate(-t * 0.5);
+    
+    ctx.fillStyle = '#777';
+    ctx.fillRect(-10, 5, 20, 22);
+    ctx.fillStyle = '#9CCC65';
+    ctx.beginPath(); ctx.arc(0, -8, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#FFEB3B';
+    ctx.beginPath(); ctx.arc(-5, -10, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(5, -10, 2, 0, Math.PI * 2); ctx.fill();
+    
+    ctx.restore();
+  }
+}
+
+function getZombieCol(z) {
+  return Math.floor((z.x - GRID_LEFT) / CELL_W);
+}
+
+// --- Conehead Zombie ---
+class ConeZombie extends Zombie {
+  constructor(x, y, row) {
+    super(x, y, row);
+    this.hp = 200; this.maxHp = 200;
+    this.zombieType = 'cone';
+    this.coneHp = 100;
+    this.baseSpeed = 0.5; this.speed = this.baseSpeed;
+  }
+  render() {
+    if (this.dying) { this.renderDeath(); return; }
+    const cx = this.x, cy = this.y;
+    const wobble = Math.sin(gameTime * 0.06 + this.animOffset) * 3;
+    const armSwing = Math.sin(gameTime * 0.08 + this.animOffset) * 5 + 5;
+    
+    ctx.save();
+    if (this.slowed) {
+      ctx.strokeStyle = 'rgba(100,180,255,0.4)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(cx, cy - 30, 20, 0, Math.PI * 2); ctx.stroke();
+    }
+    
+    // Legs
+    ctx.fillStyle = '#555'; ctx.fillRect(cx - 8, cy + 25, 7, 18); ctx.fillRect(cx + 1, cy + 25, 7, 18);
+    ctx.fillStyle = '#333'; ctx.fillRect(cx - 10, cy + 40, 11, 7); ctx.fillRect(cx - 1, cy + 40, 11, 7);
+    
+    this.renderZombieBody(cx, cy, wobble, armSwing);
+    
+    // Cone
+    ctx.fillStyle = '#FF8F00';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 24);
+    ctx.lineTo(cx - 12, cy - 6);
+    ctx.lineTo(cx + 12, cy - 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#E65100'; ctx.lineWidth = 1.5; ctx.stroke();
+    // Stripes
+    ctx.strokeStyle = '#E65100'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cx - 4, cy - 12); ctx.lineTo(cx - 9, cy - 7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + 4, cy - 12); ctx.lineTo(cx + 9, cy - 7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, cy - 18); ctx.lineTo(cx - 7, cy - 10); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, cy - 18); ctx.lineTo(cx + 7, cy - 10); ctx.stroke();
+    
+    ctx.restore();
+    this.renderHpBarZombie(cx, cy);
+  }
+}
+
+// --- Buckethead Zombie ---
+class BucketZombie extends Zombie {
+  constructor(x, y, row) {
+    super(x, y, row);
+    this.hp = 500; this.maxHp = 500;
+    this.zombieType = 'bucket';
+    this.baseSpeed = 0.45; this.speed = this.baseSpeed;
+  }
+  render() {
+    if (this.dying) { this.renderDeath(); return; }
+    const cx = this.x, cy = this.y;
+    const wobble = Math.sin(gameTime * 0.06 + this.animOffset) * 3;
+    const armSwing = Math.sin(gameTime * 0.08 + this.animOffset) * 5 + 5;
+    
+    ctx.save();
+    if (this.slowed) {
+      ctx.strokeStyle = 'rgba(100,180,255,0.4)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(cx, cy - 30, 20, 0, Math.PI * 2); ctx.stroke();
+    }
+    
+    ctx.fillStyle = '#555'; ctx.fillRect(cx - 8, cy + 25, 7, 18); ctx.fillRect(cx + 1, cy + 25, 7, 18);
+    ctx.fillStyle = '#333'; ctx.fillRect(cx - 10, cy + 40, 11, 7); ctx.fillRect(cx - 1, cy + 40, 11, 7);
+    
+    this.renderZombieBody(cx, cy, wobble, armSwing);
+    
+    // Bucket
+    ctx.fillStyle = '#90A4AE';
+    drawRoundedRect(cx - 12, cy - 22, 24, 20, 3);
+    ctx.fill();
+    ctx.strokeStyle = '#546E7A'; ctx.lineWidth = 2; ctx.stroke();
+    // Bucket handle
+    ctx.strokeStyle = '#78909C'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy - 6, 16, Math.PI * 1.15, Math.PI * 1.85);
+    ctx.stroke();
+    // Dents
+    ctx.strokeStyle = '#546E7A'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cx - 5, cy - 15); ctx.lineTo(cx - 2, cy - 12); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + 6, cy - 10); ctx.lineTo(cx + 8, cy - 6); ctx.stroke();
+    
+    ctx.restore();
+    this.renderHpBarZombie(cx, cy);
+  }
+}
+
+// --- Flag Zombie ---
+class FlagZombie extends Zombie {
+  constructor(x, y, row) {
+    super(x, y, row);
+    this.hp = 100; this.maxHp = 100;
+    this.zombieType = 'flag';
+    this.baseSpeed = 0.6; this.speed = this.baseSpeed;
+  }
+  render() {
+    if (this.dying) { this.renderDeath(); return; }
+    const cx = this.x, cy = this.y;
+    const wobble = Math.sin(gameTime * 0.06 + this.animOffset) * 3;
+    const armSwing = Math.sin(gameTime * 0.08 + this.animOffset) * 5 + 5;
+    
+    ctx.save();
+    if (this.slowed) {
+      ctx.strokeStyle = 'rgba(100,180,255,0.4)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(cx, cy - 30, 20, 0, Math.PI * 2); ctx.stroke();
+    }
+    
+    this.renderZombieBody(cx, cy, wobble, armSwing);
+    ctx.fillStyle = '#555'; ctx.fillRect(cx - 8, cy + 25, 7, 18); ctx.fillRect(cx + 1, cy + 25, 7, 18);
+    ctx.fillStyle = '#333'; ctx.fillRect(cx - 10, cy + 40, 11, 7); ctx.fillRect(cx - 1, cy + 40, 11, 7);
+    
+    // Flag
+    ctx.strokeStyle = '#8D6E63'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx + 12, cy - 10); ctx.lineTo(cx + 12, cy - 32); ctx.stroke();
+    ctx.fillStyle = '#F44336';
+    ctx.beginPath();
+    ctx.rect(cx + 12, cy - 32, 14, 10);
+    ctx.fill();
+    
+    ctx.restore();
+    this.renderHpBarZombie(cx, cy);
+  }
+}
+
+// --- Pole Vaulter Zombie ---
+class PoleVaulter extends Zombie {
+  constructor(x, y, row) {
+    super(x, y, row);
+    this.hp = 250; this.maxHp = 250;
+    this.zombieType = 'polevaulter';
+    this.baseSpeed = 0.7; this.speed = this.baseSpeed;
+    this.vaulted = false;
+    this.vaultTimer = 0;
+    this.vaulting = false;
+  }
+  update() {
+    if (this.dying) {
+      this.deathTimer++;
+      if (this.deathTimer >= 30) this.alive = false;
+      return;
+    }
+    if (this.vaulting) {
+      this.vaultTimer++;
+      if (this.vaultTimer < 20) {
+        this.x -= 0.5;
+        this.y -= (20 - this.vaultTimer) * 1.5;
+      } else if (this.vaultTimer < 35) {
+        this.x -= 0.5;
+        this.y += (this.vaultTimer - 20) * 1.5;
+      } else {
+        this.vaulting = false;
+        this.vaulted = true;
+        this.speed = this.baseSpeed * 0.8;
+        this.y = GRID_TOP + this.row * CELL_H + CELL_H / 2;
+      }
+      return;
+    }
+
+    // Slow effect
+    if (this.slowed) {
+      this.slowTimer++;
+      if (this.slowTimer >= 180) {
+        this.slowed = false; this.slowTimer = 0;
+        this.speed = this.baseSpeed * (this.vaulted ? 0.8 : 1);
+      } else {
+        this.speed = this.baseSpeed * (this.vaulted ? 0.8 : 1) * 0.4;
+      }
+    }
+
+    // Check for vault opportunity
+    if (!this.vaulted && !this.vaulting) {
+      for (const p of plants) {
+        if (p.row === this.row && p.alive && Math.abs(p.x + CELL_W / 2 - this.x) < CELL_W && this.x > p.x - CELL_W) {
+          this.vaulting = true;
+          this.vaultTimer = 0;
+          return;
+        }
+      }
+    }
+
+    // Normal movement/attack
+    this.targetPlant = null;
+    for (const p of plants) {
+      if (p.row === this.row && p.alive) {
+        const plantRight = p.x + CELL_W / 2;
+        const zombieLeft = this.x - 16;
+        if (zombieLeft <= plantRight && this.x + 10 >= p.x - CELL_W / 2) {
+          this.targetPlant = p;
+          break;
+        }
+      }
+    }
+    if (this.targetPlant) {
+      this.attacking = true;
+      this.attackTimer++;
+      if (this.attackTimer >= this.attackInterval) {
+        this.attackTimer = 0;
+        this.targetPlant.takeDamage(100);
+      }
+    } else {
+      this.attacking = false;
+      this.x -= this.speed;
+    }
+
+    if (this.x < 40) this.alive = false;
+    this.updateFrame();
+  }
+  render() {
+    if (this.dying) { this.renderDeath(); return; }
+    const cx = this.x, cy = this.y;
+    const wobble = Math.sin(gameTime * 0.06 + this.animOffset) * 3;
+    const armSwing = Math.sin(gameTime * 0.08 + this.animOffset) * 5 + 5;
+    
+    ctx.save();
+    if (this.slowed) {
+      ctx.strokeStyle = 'rgba(100,180,255,0.4)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(cx, cy - 30, 20, 0, Math.PI * 2); ctx.stroke();
+    }
+    
+    ctx.fillStyle = '#555'; ctx.fillRect(cx - 8, cy + 25, 7, 18); ctx.fillRect(cx + 1, cy + 25, 7, 18);
+    ctx.fillStyle = '#333'; ctx.fillRect(cx - 10, cy + 40, 11, 7); ctx.fillRect(cx - 1, cy + 40, 11, 7);
+    
+    this.renderZombieBody(cx, cy, wobble, armSwing);
+    
+    // Pole
+    ctx.strokeStyle = '#8D6E63'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(cx + 14, cy - 15); ctx.lineTo(cx + 14, cy + 20); ctx.stroke();
+    
+    ctx.restore();
+    this.renderHpBarZombie(cx, cy);
+  }
+}
+
+// --- Newspaper Zombie ---
+class NewspaperZombie extends Zombie {
+  constructor(x, y, row) {
+    super(x, y, row);
+    this.hp = 300; this.maxHp = 300;
+    this.zombieType = 'newspaper';
+    this.baseSpeed = 0.4; this.speed = this.baseSpeed;
+    this.enraged = false;
+    this.paperHp = 200;
+  }
+  takeDamage(dmg, isFrozen = false) {
+    if (!this.enraged) {
+      this.paperHp -= dmg;
+      if (this.paperHp <= 0) {
+        this.enraged = true;
+        this.speed = this.baseSpeed * 2.5;
+        this.attackInterval = 15; // faster biting
+        spawnParticles(this.x, this.y, '#FFF', 10);
+        sfxExplosion();
+        // Remaining damage carries over
+        this.hp += this.paperHp;
+        this.paperHp = 0;
+      }
+      return;
+    }
+    this.hp -= dmg;
+    if (isFrozen) { this.slowed = true; this.slowTimer = 0; }
+    if (this.hp <= 0) { this.dying = true; this.deathTimer = 0; }
+    else sfxHit();
+  }
+  render() {
+    if (this.dying) { this.renderDeath(); return; }
+    const cx = this.x, cy = this.y;
+    const wobble = Math.sin(gameTime * 0.06 + this.animOffset) * 3;
+    const armSwing = Math.sin(gameTime * 0.08 + this.animOffset) * 5 + 5;
+    const angryWobble = this.enraged ? Math.sin(gameTime * 0.15) * 4 : 0;
+    
+    ctx.save();
+    if (this.slowed) {
+      ctx.strokeStyle = 'rgba(100,180,255,0.4)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(cx, cy - 30, 20, 0, Math.PI * 2); ctx.stroke();
+    }
+    
+    ctx.fillStyle = '#555'; ctx.fillRect(cx - 8, cy + 25, 7, 18); ctx.fillRect(cx + 1, cy + 25, 7, 18);
+    ctx.fillStyle = '#333'; ctx.fillRect(cx - 10, cy + 40, 11, 7); ctx.fillRect(cx - 1, cy + 40, 11, 7);
+    
+    // Body - brown robe
+    ctx.fillStyle = '#8D6E63';
+    drawRoundedRect(cx - 10, cy + 5, 20, 22, 3); ctx.fill();
+    ctx.strokeStyle = '#5D4037'; ctx.lineWidth = 1.5; ctx.stroke();
+    
+    // Arms
+    ctx.fillStyle = '#8D6E63';
+    ctx.fillRect(cx - 18, cy + 5, 8, 5); ctx.fillRect(cx - 18, cy + 5, 5, 16 + armSwing);
+    ctx.fillRect(cx + 10, cy + 5, 8, 5); ctx.fillRect(cx + 13, cy + 5, 5, 16 - armSwing);
+    ctx.fillStyle = '#9CCC65';
+    ctx.beginPath(); ctx.arc(cx - 15, cy + 22 + armSwing, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 16, cy + 22 - armSwing, 4, 0, Math.PI * 2); ctx.fill();
+    
+    // Head
+    ctx.fillStyle = '#9CCC65';
+    ctx.beginPath(); ctx.arc(cx, cy - 8 + wobble + angryWobble, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#7CB342'; ctx.lineWidth = 2; ctx.stroke();
+    
+    // Glasses
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(cx - 6, cy - 10 + wobble + angryWobble, 5, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx + 6, cy - 10 + wobble + angryWobble, 5, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx - 1, cy - 10 + wobble + angryWobble); ctx.lineTo(cx + 1, cy - 10 + wobble + angryWobble); ctx.stroke();
+    
+    // Eyes
+    if (this.enraged) {
+      ctx.fillStyle = '#F44336';
+    } else {
+      ctx.fillStyle = '#FF5722';
+    }
+    ctx.beginPath(); ctx.arc(cx - 6, cy - 10 + wobble + angryWobble, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 6, cy - 10 + wobble + angryWobble, 2, 0, Math.PI * 2); ctx.fill();
+    
+    // Hair
+    ctx.fillStyle = '#9E9E9E';
+    ctx.beginPath(); ctx.arc(cx, cy - 20 + wobble + angryWobble, 12, Math.PI, Math.PI * 2); ctx.fill();
+    
+    // Newspaper
+    if (!this.enraged) {
+      ctx.fillStyle = '#FFF';
+      drawRoundedRect(cx - 4, cy + 3, 14, 18, 2); ctx.fill();
+      ctx.fillStyle = '#333';
+      ctx.fillRect(cx - 1, cy + 5, 2, 14);
+      for (let i = 0; i < 3; i++) {
+        ctx.fillRect(cx + 3, cy + 6 + i * 5, 6, 1);
+      }
+      ctx.strokeStyle = '#999'; ctx.lineWidth = 1;
+      drawRoundedRect(cx - 4, cy + 3, 14, 18, 2); ctx.stroke();
+    }
+    
+    ctx.restore();
+    this.renderHpBarZombie(cx, cy);
+  }
+}
+
+// ============================================================
+//  LAWN MOWER
+// ============================================================
+class LawnMower {
+  constructor(row) {
+    const cy = GRID_TOP + row * CELL_H + CELL_H / 2;
+    this.row = row;
+    this.x = GRID_LEFT - 20;
+    this.y = cy;
+    this.triggered = false;
+    this.active = false;
+    this.speed = 5;
+    this.alive = true;
+  }
+  update() {
+    if (!this.triggered) {
+      // Check if any zombie reached lawnmower
+      for (const z of zombies) {
+        if (z.row === this.row && z.alive && z.x < GRID_LEFT + 20) {
+          this.triggered = true;
+          this.active = true;
+          sfxLawnmower();
+          break;
+        }
+      }
+    }
+    if (this.active) {
+      this.x += this.speed;
+      // Kill zombies in this row
+      for (const z of zombies) {
+        if (z.row === this.row && z.alive && Math.abs(z.x - this.x) < 30) {
+          z.takeDamage(1800);
+        }
+      }
+      if (this.x > CANVAS_W + 50) {
+        this.alive = false;
+      }
+    }
+  }
+  render() {
+    if (!this.alive) return;
+    ctx.save();
+    const cx = this.x, cy = this.y;
+    
+    // Body
+    ctx.fillStyle = '#C62828';
+    drawRoundedRect(cx - 15, cy - 10, 30, 20, 5); ctx.fill();
+    ctx.strokeStyle = '#8B0000'; ctx.lineWidth = 2; ctx.stroke();
+    
+    // Wheels
+    ctx.fillStyle = '#333';
+    const wheelRot = gameTime * (this.active ? 0.3 : 0.05);
+    ctx.beginPath(); ctx.arc(cx - 8, cy + 12, 6, wheelRot, wheelRot + Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 8, cy + 12, 6, wheelRot, wheelRot + Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#555';
+    ctx.beginPath(); ctx.arc(cx - 8, cy + 12, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 8, cy + 12, 3, 0, Math.PI * 2); ctx.fill();
+    
+    // Handle
+    ctx.strokeStyle = '#795548'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(cx + 10, cy - 8); ctx.lineTo(cx + 20, cy - 20); ctx.stroke();
+    
+    // Grass clippings when active
+    if (this.active) {
+      for (let i = 0; i < 3; i++) {
+        ctx.fillStyle = '#4CAF50';
+        ctx.beginPath();
+        ctx.arc(cx - 20 + i * 8, cy + 5 + Math.sin(gameTime + i) * 3, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    
+    ctx.restore();
+  }
+}
+
+// ============================================================
+//  PARTICLE SYSTEM
+// ============================================================
+class Particle {
+  constructor(x, y, color) {
+    this.x = x;
+    this.y = y;
+    this.color = color;
+    this.vx = rand(-3, 3);
+    this.vy = rand(-4, 1);
+    this.life = 1;
+    this.decay = rand(0.02, 0.05);
+    this.size = rand(2, 6);
+    this.alive = true;
+  }
+  update() {
+    this.life -= this.decay;
+    this.x += this.vx;
+    this.y += this.vy;
+    this.vy += 0.05; // gravity
+    if (this.life <= 0) this.alive = false;
+  }
+  render() {
+    ctx.save();
+    ctx.globalAlpha = this.life;
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size * this.life, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function spawnParticles(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    particles.push(new Particle(x, y, color));
+  }
+}
+
+// ============================================================
+//  CARDS / UI
+// ============================================================
+const cardOrder = ['sunflower', 'peashooter', 'snowpea', 'repeater', 'wallnut', 'potatomine', 'chomper', 'cherrybomb'];
+
+function renderUI() {
+  ctx.save();
+  
+  // Top bar background
+  const barGrad = ctx.createLinearGradient(0, 0, 0, GRID_TOP);
+  barGrad.addColorStop(0, '#3E2723');
+  barGrad.addColorStop(1, '#4E342E');
+  ctx.fillStyle = barGrad;
+  ctx.fillRect(0, 0, CANVAS_W, GRID_TOP);
+  ctx.fillStyle = '#5D4037';
+  ctx.fillRect(0, GRID_TOP - 2, CANVAS_W, 2);
+  
+  // Sun counter
+  ctx.fillStyle = '#FFD700';
+  ctx.font = 'bold 22px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText('☀ ' + Math.floor(sunCount), 10, 30);
+  
+  // Sun icon
+  drawSunSprite(8, 22, 10);
+  
+  // Cards
+  for (let i = 0; i < cardOrder.length; i++) {
+    const ctype = cardOrder[i];
+    const cardX = 100 + i * 70;
+    const cardY = 5;
+    const cardW = 60;
+    const cardH = 75;
+    const cost = cardCosts[ctype];
+    const cd = cardCooldowns[ctype];
+    const maxCd = cardMaxCooldowns[ctype];
+    const canAfford = sunCount >= cost;
+    const onCooldown = cd > 0;
+    const isSelected = selectedCard === ctype;
+    
+    // Card background
+    ctx.fillStyle = isSelected ? '#8BC34A' : (canAfford && !onCooldown) ? '#795548' : '#4E342E';
+    ctx.strokeStyle = isSelected ? '#FFD700' : (canAfford && !onCooldown) ? '#FFD700' : '#555';
+    ctx.lineWidth = isSelected ? 3 : 1.5;
+    drawRoundedRect(cardX, cardY, cardW, cardH, 6);
+    ctx.fill();
+    ctx.stroke();
+    
+    // Cooldown overlay
+    if (onCooldown) {
+      const cdRatio = cd / maxCd;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(cardX, cardY, cardW, cardH * cdRatio);
+    }
+    
+    // Plant icon on card
+    drawCardIcon(ctype, cardX + cardW / 2, cardY + 25);
+    
+    // Plant name
+    ctx.fillStyle = '#FFF';
+    ctx.font = '9px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(cardNames[ctype], cardX + cardW / 2, cardY + 50);
+    
+    // Cost
+    ctx.fillStyle = canAfford && !onCooldown ? '#FFD700' : '#999';
+    ctx.font = 'bold 11px Arial';
+    ctx.fillText(cost, cardX + cardW / 2, cardY + 68);
+  }
+  
+  // Shovel button
+  const shovelX = 100 + cardOrder.length * 70 + 10;
+  ctx.fillStyle = shovelMode ? '#8BC34A' : '#795548';
+  ctx.strokeStyle = shovelMode ? '#FFD700' : '#8D6E63';
+  ctx.lineWidth = 2;
+  drawRoundedRect(shovelX, 5, 55, 75, 6);
+  ctx.fill(); ctx.stroke();
+  // Shovel icon
+  ctx.fillStyle = '#A1887F';
+  ctx.beginPath();
+  ctx.rect(shovelX + 22, 18, 6, 2); // handle top
+  ctx.fillRect(shovelX + 20, 15, 10, 4);
+  ctx.strokeStyle = '#795548'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(shovelX + 27, 20); ctx.lineTo(shovelX + 27, 40); ctx.stroke();
+  ctx.fillStyle = '#9E9E9E';
+  ctx.beginPath(); ctx.moveTo(shovelX + 22, 40); ctx.lineTo(shovelX + 15, 48); ctx.lineTo(shovelX + 39, 48); ctx.lineTo(shovelX + 32, 40); ctx.fill();
+  ctx.fillStyle = '#FFF';
+  ctx.font = '10px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(shovelMode ? '取消' : '铲子', shovelX + 27, 68);
+  
+  // Wave indicator
+  ctx.fillStyle = '#FFD700';
+  ctx.font = 'bold 12px Arial';
+  ctx.textAlign = 'right';
+  ctx.fillText(`波次: ${currentWave}/${TOTAL_WAVES}`, CANVAS_W - 15, 25);
+  
+  // Pause button
+  ctx.fillStyle = '#795548';
+  ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 1.5;
+  drawRoundedRect(CANVAS_W - 55, 40, 40, 25, 4);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#FFD700';
+  ctx.font = 'bold 12px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(gameState === 'paused' ? '▶' : '⏸', CANVAS_W - 35, 58);
+  
+  ctx.restore();
+}
+
+function drawCardIcon(ctype, cx, cy) {
+  ctx.save();
+  switch (ctype) {
+    case 'sunflower':
+      // Mini sunflower
+      const gradS = ctx.createRadialGradient(cx, cy, 1, cx, cy, 10);
+      gradS.addColorStop(0, '#FFD700'); gradS.addColorStop(1, '#FF8F00');
+      ctx.fillStyle = gradS;
+      ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#5D4037';
+      ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fill();
+      break;
+    case 'peashooter':
+      ctx.fillStyle = '#4CAF50';
+      ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#2E7D32';
+      ctx.fillRect(cx + 5, cy - 3, 10, 6);
+      ctx.fillStyle = '#FFF'; ctx.beginPath(); ctx.arc(cx - 3, cy - 3, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(cx - 2, cy - 3, 2, 0, Math.PI * 2); ctx.fill();
+      break;
+    case 'snowpea':
+      ctx.fillStyle = '#64B5F6';
+      ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#42A5F5'; ctx.fillRect(cx + 5, cy - 3, 10, 6);
+      ctx.fillStyle = '#E3F2FD'; ctx.beginPath(); ctx.arc(cx - 3, cy - 3, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#0D47A1'; ctx.beginPath(); ctx.arc(cx - 2, cy - 3, 2, 0, Math.PI * 2); ctx.fill();
+      break;
+    case 'repeater':
+      ctx.fillStyle = '#4CAF50';
+      ctx.beginPath(); ctx.arc(cx - 3, cy - 2, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + 3, cy + 2, 8, 0, Math.PI * 2); ctx.fill();
+      break;
+    case 'wallnut':
+      ctx.fillStyle = '#A1887F';
+      ctx.beginPath(); ctx.ellipse(cx, cy, 10, 12, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#3E2723';
+      ctx.beginPath(); ctx.arc(cx - 4, cy - 2, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + 4, cy - 2, 2, 0, Math.PI * 2); ctx.fill();
+      break;
+    case 'potatomine':
+      ctx.fillStyle = '#795548';
+      ctx.beginPath(); ctx.ellipse(cx, cy + 2, 10, 6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#A0793C';
+      ctx.beginPath(); ctx.ellipse(cx, cy, 9, 7, 0, 0, Math.PI * 2); ctx.fill();
+      break;
+    case 'chomper':
+      ctx.fillStyle = '#9C27B0';
+      ctx.beginPath(); ctx.arc(cx, cy + 2, 10, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#CE93D8';
+      ctx.beginPath(); ctx.arc(cx, cy - 4, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#FFF'; ctx.fillRect(cx - 4, cy + 8, 2, 3); ctx.fillRect(cx, cy + 8, 2, 3); ctx.fillRect(cx + 4, cy + 8, 2, 3);
+      break;
+    case 'cherrybomb':
+      ctx.fillStyle = '#D32F2F';
+      ctx.beginPath(); ctx.arc(cx - 5, cy, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + 5, cy, 8, 0, Math.PI * 2); ctx.fill();
+      break;
+  }
+  ctx.restore();
+}
+
+// ============================================================
+//  WAVE SYSTEM
+// ============================================================
+function startNextWave() {
+  if (currentWave >= TOTAL_WAVES) return;
+  currentWave++;
+  waveActive = true;
+  waveSpawnTimer = 0;
+  
+  // Determine zombie types for this wave
+  waveZombieTypes = ['normal'];
+  if (currentWave >= 2) waveZombieTypes.push('flag');
+  if (currentWave >= 3) waveZombieTypes.push('cone');
+  if (currentWave >= 5) waveZombieTypes.push('bucket');
+  if (currentWave >= 7) waveZombieTypes.push('polevaulter');
+  if (currentWave >= 9) waveZombieTypes.push('newspaper');
+  
+  isFinalWave = currentWave === TOTAL_WAVES;
+  waveZombiesRemaining = isFinalWave ? 30 : 2 + currentWave * 2;
+  waveSpawnInterval = isFinalWave ? 25 : Math.max(25, 100 - currentWave * 8);
+
+  // Announce wave
+  waveAnnounceTimer = 90;
+  panelWave.classList.add('show');
+  overlay.classList.add('active');
+  waveLabel.textContent = isFinalWave ? '💀 最终波来袭！' : `第 ${currentWave} 波`;
+  setTimeout(() => {
+    panelWave.classList.remove('show');
+    overlay.classList.remove('active');
+  }, 1500);
+  
+  // Spawn flag zombie at start of each wave
+  if (currentWave >= 2 && !isFinalWave) {
+    const row = randInt(0, ROWS - 1);
+    spawnZombie('flag', row);
+  }
+  if (isFinalWave) {
+    for (let i = 0; i < 3; i++) {
+      const row = randInt(0, ROWS - 1);
+      spawnZombie('flag', row);
+    }
+  }
+}
+
+function spawnZombie(type, row) {
+  const cy = GRID_TOP + row * CELL_H + CELL_H / 2;
+  const spawnX = CANVAS_W + rand(20, 100);
+  let z;
+  switch (type) {
+    case 'normal': z = new Zombie(spawnX, cy, row); break;
+    case 'flag': z = new FlagZombie(spawnX, cy, row); break;
+    case 'cone': z = new ConeZombie(spawnX, cy, row); break;
+    case 'bucket': z = new BucketZombie(spawnX, cy, row); break;
+    case 'polevaulter': z = new PoleVaulter(spawnX, cy, row); break;
+    case 'newspaper': z = new NewspaperZombie(spawnX, cy, row); break;
+    default: z = new Zombie(spawnX, cy, row);
+  }
+  zombies.push(z);
+}
+
+function updateWave() {
+  // Count down announcement timer (works even when wave is inactive)
+  if (waveAnnounceTimer > 0) {
+    waveAnnounceTimer--;
+    // When announcement ends and no active wave, start next wave
+    if (waveAnnounceTimer <= 0 && !waveActive && currentWave < TOTAL_WAVES) {
+      startNextWave();
+    }
+    return;
+  }
+
+  // If no active wave and no announcement, trigger next wave
+  if (!waveActive) {
+    if (currentWave < TOTAL_WAVES) {
+      waveAnnounceTimer = 60;
+    }
+    return;
+  }
+  
+  waveSpawnTimer++;
+  if (waveSpawnTimer >= waveSpawnInterval && waveZombiesRemaining > 0) {
+    waveSpawnTimer = 0;
+    waveZombiesRemaining--;
+    
+    let type;
+    if (isFinalWave) {
+      const r = Math.random();
+      if (r < 0.15) type = 'bucket';
+      else if (r < 0.30) type = 'newspaper';
+      else if (r < 0.45) type = 'polevaulter';
+      else if (r < 0.65) type = 'cone';
+      else type = 'normal';
+    } else {
+      type = waveZombieTypes[randInt(0, waveZombieTypes.length - 1)];
+    }
+    
+    const row = randInt(0, ROWS - 1);
+    spawnZombie(type, row);
+  }
+  
+  if (waveZombiesRemaining <= 0 && zombies.every(z => !z.alive || z.dying)) {
+    waveActive = false;
+    if (currentWave >= TOTAL_WAVES) {
+      victory();
+    } else {
+      waveAnnounceTimer = 120;
+    }
+  }
+}
+
+// ============================================================
+//  INPUT HANDLING
+// ============================================================
+canvas.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  mouseX = (e.clientX - rect.left) * (CANVAS_W / rect.width);
+  mouseY = (e.clientY - rect.top) * (CANVAS_H / rect.height);
+});
+
+canvas.addEventListener('click', (e) => {
+  if (gameState !== 'playing') return;
+  
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (CANVAS_W / rect.width);
+  const my = (e.clientY - rect.top) * (CANVAS_H / rect.height);
+  
+  // Check pause button
+  if (mx > CANVAS_W - 55 && mx < CANVAS_W - 15 && my > 40 && my < 65) {
+    if (gameState === 'playing') { gameState = 'paused'; }
+    else if (gameState === 'paused') { gameState = 'playing'; }
+    return;
+  }
+  
+  // Check sun collection
+  for (const sun of suns) {
+    if (!sun.collected && dist({ x: mx, y: my }, { x: sun.x, y: sun.y }) < sun.radius + 8) {
+      sun.collected = true;
+      sunCount += sun.value;
+      sfxSun();
+      return;
+    }
+  }
+  
+  // Check card clicks
+  for (let i = 0; i < cardOrder.length; i++) {
+    const ctype = cardOrder[i];
+    const cardX = 100 + i * 70;
+    const cardY = 5;
+    const cardW = 60;
+    const cardH = 75;
+    if (mx >= cardX && mx <= cardX + cardW && my >= cardY && my <= cardY + cardH) {
+      if (cardCooldowns[ctype] <= 0 && sunCount >= cardCosts[ctype]) {
+        if (selectedCard === ctype) {
+          selectedCard = null;
+          shovelMode = false;
+        } else {
+          selectedCard = ctype;
+          shovelMode = false;
+        }
+      }
+      return;
+    }
+  }
+  
+  // Shovel button
+  const shovelX = 100 + cardOrder.length * 70 + 10;
+  if (mx >= shovelX && mx <= shovelX + 55 && my >= 5 && my <= 80) {
+    shovelMode = !shovelMode;
+    selectedCard = null;
+    return;
+  }
+  
+  // Grid placement
+  if (my >= GRID_TOP && my < GRID_BOTTOM && mx >= GRID_LEFT && mx < GRID_RIGHT) {
+    const col = Math.floor((mx - GRID_LEFT) / CELL_W);
+    const row = Math.floor((my - GRID_TOP) / CELL_H);
+    
+    if (col >= 0 && col < COLS && row >= 0 && row < ROWS) {
+      if (shovelMode) {
+        // Remove plant
+        if (grid[row][col]) {
+          const plant = grid[row][col];
+          sunCount += Math.floor(cardCosts[plant.plantType] * 0.3);
+          plant.alive = false;
+          grid[row][col] = null;
+          spawnParticles(plant.x, plant.y, '#8BC34A', 6);
+        }
+        shovelMode = false;
+      } else if (selectedCard) {
+        // Place plant
+        if (!grid[row][col]) {
+          const cost = cardCosts[selectedCard];
+          if (sunCount >= cost) {
+            sunCount -= cost;
+            cardCooldowns[selectedCard] = cardMaxCooldowns[selectedCard];
+            const pos = cellCenter(col, row);
+            let plant;
+            switch (selectedCard) {
+              case 'sunflower': plant = new Sunflower(pos.x, pos.y, row, col); break;
+              case 'peashooter': plant = new Peashooter(pos.x, pos.y, row, col); break;
+              case 'snowpea': plant = new SnowPea(pos.x, pos.y, row, col); break;
+              case 'repeater': plant = new Repeater(pos.x, pos.y, row, col); break;
+              case 'wallnut': plant = new WallNut(pos.x, pos.y, row, col); break;
+              case 'potatomine': plant = new PotatoMine(pos.x, pos.y, row, col); break;
+              case 'chomper': plant = new Chomper(pos.x, pos.y, row, col); break;
+              case 'cherrybomb': plant = new CherryBomb(pos.x, pos.y, row, col); break;
+            }
+            plants.push(plant);
+            grid[row][col] = plant;
+            sfxPlant();
+          }
+        }
+      }
+    }
+  }
+});
+
+canvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  if (gameState === 'playing') {
+    selectedCard = null;
+    shovelMode = false;
+  }
+});
+
+// ============================================================
+//  GAME LOOP
+// ============================================================
+function update() {
+  if (gameState !== 'playing') return;
+  
+  gameTime++;
+  
+  // Update card cooldowns
+  for (const key of Object.keys(cardCooldowns)) {
+    if (cardCooldowns[key] > 0) cardCooldowns[key]--;
+  }
+  
+  // Sun generation (falling from sky)
+  if (gameTime % 210 === 0 && gameTime > 0) { // every ~3.5s
+    const sx = rand(GRID_LEFT + 50, GRID_RIGHT - 50);
+    suns.push(new Sun(sx, -20, rand(GRID_TOP + 50, GRID_BOTTOM - 100)));
+  }
+  
+  // Update suns
+  for (const s of suns) s.update();
+  
+  // Update plants
+  for (const p of plants) {
+    if (p.alive) p.update();
+  }
+  
+  // Update projectiles
+  for (const proj of projectiles) {
+    proj.update();
+    // Check collision with zombies
+    for (const z of zombies) {
+      if (z.alive && !z.dying && dist(proj, z) < proj.radius + 18) {
+        proj.alive = false;
+        z.takeDamage(proj.damage, proj.isFrozen);
+        spawnParticles(proj.x, proj.y, proj.isFrozen ? '#88CCFF' : '#4CAF50', 3);
+        break;
+      }
+    }
+  }
+  
+  // Update zombies
+  for (const z of zombies) {
+    if (z.alive) z.update();
+  }
+  
+  // Check lawnmower triggers before zombie reaches left edge
+  for (const z of zombies) {
+    if (z.alive && !z.dying && z.x < GRID_LEFT) {
+      // Check if there's a lawn mower
+      const lm = lawnMowers[z.row];
+      if (lm && lm.alive && !lm.triggered) {
+        lm.triggered = true;
+        lm.active = true;
+        sfxLawnmower();
+      } else if (!lm || !lm.alive) {
+        // No mower - zombie wins
+        gameState = 'lose';
+        showPanel('lose');
+        sfxLose();
+        return;
+      }
+    }
+  }
+  
+  // Update lawnmowers
+  for (const lm of lawnMowers) {
+    if (lm.alive) lm.update();
+  }
+  
+  // Update particles
+  for (const p of particles) p.update();
+  
+  // Update waves
+  updateWave();
+  
+  // Cleanup dead objects
+  for (let i = suns.length - 1; i >= 0; i--) { if (!suns[i].alive) suns.splice(i, 1); }
+  for (let i = plants.length - 1; i >= 0; i--) { if (!plants[i].alive) plants.splice(i, 1); }
+  for (let i = zombies.length - 1; i >= 0; i--) { if (!zombies[i].alive) zombies.splice(i, 1); }
+  for (let i = projectiles.length - 1; i >= 0; i--) { if (!projectiles[i].alive) projectiles.splice(i, 1); }
+  for (let i = particles.length - 1; i >= 0; i--) { if (!particles[i].alive) particles.splice(i, 1); }
+  for (let i = lawnMowers.length - 1; i >= 0; i--) { if (!lawnMowers[i].alive) lawnMowers.splice(i, 1); }
+  
+  // Check win condition
+  if (currentWave >= TOTAL_WAVES && !waveActive && zombies.length === 0) {
+    victory();
+  }
+}
+
+function victory() {
+  gameState = 'win';
+  showPanel('win');
+  sfxWin();
+}
+
+function showPanel(type) {
+  overlay.classList.add('active');
+  panelMenu.classList.remove('show');
+  panelWin.classList.remove('show');
+  panelLose.classList.remove('show');
+  panelWave.classList.remove('show');
+  if (type === 'menu') panelMenu.classList.add('show');
+  if (type === 'win') panelWin.classList.add('show');
+  if (type === 'lose') panelLose.classList.add('show');
+}
+
+// ============================================================
+//  RENDER
+// ============================================================
+function renderBackground() {
+  // Sky gradient
+  const skyGrad = ctx.createLinearGradient(0, GRID_TOP, 0, GRID_BOTTOM);
+  skyGrad.addColorStop(0, '#87CEEB');
+  skyGrad.addColorStop(0.3, '#90D470');
+  skyGrad.addColorStop(0.6, '#7CB342');
+  skyGrad.addColorStop(1, '#558B2F');
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(0, GRID_TOP, CANVAS_W, CANVAS_H - GRID_TOP);
+  
+  // Grid lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 1;
+  for (let r = 0; r <= ROWS; r++) {
+    const y = GRID_TOP + r * CELL_H;
+    ctx.beginPath();
+    ctx.moveTo(GRID_LEFT, y);
+    ctx.lineTo(GRID_RIGHT, y);
+    ctx.stroke();
+  }
+  for (let c = 0; c <= COLS; c++) {
+    const x = GRID_LEFT + c * CELL_W;
+    ctx.beginPath();
+    ctx.moveTo(x, GRID_TOP);
+    ctx.lineTo(x, GRID_BOTTOM);
+    ctx.stroke();
+  }
+  
+  // Grass texture patches
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cx = GRID_LEFT + c * CELL_W + CELL_W / 2;
+      const cy = GRID_TOP + r * CELL_H + CELL_H / 2;
+      // Random grass tufts
+      ctx.fillStyle = 'rgba(139,195,74,0.5)';
+      for (let i = 0; i < 3; i++) {
+        const gx = cx + (0.5 - Math.sin(r * 3 + c * 7 + i * 1.7) * 0.5) * 25;
+        const gy = cy + (0.5 - Math.cos(r * 5 + c * 3 + i * 2.3) * 0.5) * 35;
+        ctx.beginPath();
+        ctx.arc(gx, gy, 3 + (r + c + i) % 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+  
+  // Fence posts at right edge
+  ctx.fillStyle = '#8D6E63';
+  for (let r = 0; r <= ROWS; r++) {
+    const y = GRID_TOP + r * CELL_H - 2;
+    ctx.fillRect(GRID_RIGHT - 2, y - 10, 4, 20);
+  }
+}
+
+function render() {
+  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+  
+  // Background
+  renderBackground();
+  
+  // Placeholder visual for selected card
+  if (selectedCard && gameState === 'playing') {
+    const col = Math.floor((mouseX - GRID_LEFT) / CELL_W);
+    const row = Math.floor((mouseY - GRID_TOP) / CELL_H);
+    if (col >= 0 && col < COLS && row >= 0 && row < ROWS && !grid[row][col]) {
+      const pos = cellCenter(col, row);
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.strokeStyle = '#FFF';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.strokeRect(pos.x - CELL_W / 2, pos.y - CELL_H / 2, CELL_W, CELL_H);
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  }
+  
+  // Shovel mode highlight
+  if (shovelMode && gameState === 'playing') {
+    const col = Math.floor((mouseX - GRID_LEFT) / CELL_W);
+    const row = Math.floor((mouseY - GRID_TOP) / CELL_H);
+    if (col >= 0 && col < COLS && row >= 0 && row < ROWS && grid[row][col]) {
+      const pos = cellCenter(col, row);
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.strokeStyle = '#F44336';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.strokeRect(pos.x - CELL_W / 2, pos.y - CELL_H / 2, CELL_W, CELL_H);
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  }
+  
+  // Render lawnmowers
+  for (const lm of lawnMowers) {
+    if (lm.alive) lm.render();
+  }
+  
+  // Render plants
+  for (const p of plants) {
+    if (p.alive) p.render();
+  }
+  
+  // Render projectiles
+  for (const proj of projectiles) {
+    if (proj.alive) proj.render();
+  }
+  
+  // Render zombies
+  for (const z of zombies) {
+    if (z.alive) z.render();
+  }
+  
+  // Render particles
+  for (const p of particles) {
+    if (p.alive) p.render();
+  }
+  
+  // Render suns (on top so they're always clickable)
+  for (const s of suns) {
+    if (s.alive) s.render();
+  }
+  
+  // UI on top
+  renderUI();
+  
+  // Pause overlay
+  if (gameState === 'paused') {
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 48px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('⏸ 已暂停', CANVAS_W / 2, CANVAS_H / 2);
+  }
+}
+
+function gameLoop() {
+  update();
+  render();
+  requestAnimationFrame(gameLoop);
+}
+
+// ============================================================
+//  START / RESET
+// ============================================================
+window.startGame = function() {
+  initAudio();
+  
+  // Reset state
+  gameState = 'playing';
+  sunCount = 300;
+  gameTime = 0;
+  selectedCard = null;
+  shovelMode = false;
+  currentWave = 0;
+  waveActive = false;
+  waveZombiesRemaining = 0;
+  waveSpawnTimer = 0;
+  waveAnnounceTimer = 30;
+  isFinalWave = false;
+  
+  // Clear all entities
+  plants.length = 0;
+  zombies.length = 0;
+  projectiles.length = 0;
+  suns.length = 0;
+  lawnMowers.length = 0;
+  particles.length = 0;
+  
+  // Reset grid
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      grid[r][c] = null;
+    }
+  }
+  
+  // Reset card cooldowns
+  for (const key of Object.keys(cardCooldowns)) {
+    cardCooldowns[key] = 0;
+  }
+  
+  // Create lawn mowers
+  for (let r = 0; r < ROWS; r++) {
+    lawnMowers.push(new LawnMower(r));
+  }
+  
+  // Start first wave after brief delay
+  waveAnnounceTimer = 60;
+  
+  // Hide all panels
+  overlay.classList.remove('active');
+  panelMenu.classList.remove('show');
+  panelWin.classList.remove('show');
+  panelLose.classList.remove('show');
+  panelWave.classList.remove('show');
+};
+
+// ============================================================
+//  INIT
+// ============================================================
+function init() {
+  // Show menu
+  showPanel('menu');
+  // Start game loop (rendering starts immediately, game logic waits for start)
+  gameLoop();
+}
+
+init();
+</script>
+
+</body>
+</html>
