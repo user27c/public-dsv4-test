@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VOID EATER — 大吃小</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: #04040e;
+    overflow: hidden;
+    font-family: 'Courier New', monospace;
+    user-select: none; -webkit-user-select: none;
+    height: 100vh; width: 100vw;
+    cursor: none;
+  }
+  canvas { display:block; position:fixed; top:0; left:0; z-index:1; }
+
+  #hud {
+    position:fixed; z-index:10; pointer-events:none;
+    top:18px; left:50%; transform:translateX(-50%);
+    display:flex; gap:40px;
+    font-family:'Courier New',monospace; font-size:12px;
+    letter-spacing:2px;
+  }
+  #hud .hud-item { text-align:center; }
+  #hud .label { color:rgba(0,255,255,0.3); font-size:8px; letter-spacing:3px; text-transform:uppercase; }
+  #hud .value { color:rgba(0,255,255,0.9); font-size:16px; font-weight:bold; }
+  #hud .size-val { color:rgba(255,0,128,0.9); }
+
+  #leaderboard {
+    position:fixed; z-index:10; pointer-events:none;
+    top:80px; right:20px;
+    font-family:'Courier New',monospace; font-size:10px;
+    letter-spacing:1px;
+    background:rgba(4,4,14,0.8);
+    border:1px solid rgba(0,255,255,0.1);
+    padding:10px 14px;
+    min-width:140px;
+  }
+  #leaderboard .lb-title {
+    color:rgba(0,255,255,0.5); font-size:9px;
+    letter-spacing:3px; text-align:center;
+    margin-bottom:6px; padding-bottom:6px;
+    border-bottom:1px solid rgba(0,255,255,0.1);
+  }
+  #leaderboard .lb-row {
+    color:rgba(255,255,255,0.4);
+    padding:2px 0;
+    display:flex; justify-content:space-between; gap:12px;
+  }
+  #leaderboard .lb-row.you { color:rgba(0,255,255,0.9); }
+  #leaderboard .lb-rank { color:rgba(0,255,255,0.3); width:20px; }
+
+  #gameover {
+    position:fixed; z-index:60; pointer-events:all;
+    top:0;left:0;right:0;bottom:0;
+    background:rgba(3,3,15,0.88);
+    display:none; flex-direction:column;
+    align-items:center; justify-content:center;
+    font-family:'Courier New',monospace;
+  }
+  #gameover h2 { color:rgba(255,0,80,0.95); font-size:28px; letter-spacing:6px; margin-bottom:6px; }
+  #gameover .sub { color:rgba(255,255,255,0.4); font-size:11px; letter-spacing:3px; margin-bottom:16px; }
+  #gameover .stats { color:rgba(255,255,255,0.5); font-size:12px; letter-spacing:2px; line-height:2; text-align:center; margin-bottom:20px; }
+  #gameover .stats b { color:rgba(0,255,255,0.8); }
+  #restart-btn {
+    background:transparent; border:1px solid rgba(0,255,255,0.4);
+    color:rgba(0,255,255,0.8); font-family:'Courier New',monospace;
+    font-size:13px; letter-spacing:4px; padding:10px 28px;
+    cursor:pointer; transition:all 0.2s;
+  }
+  #restart-btn:hover { background:rgba(0,255,255,0.08); box-shadow:0 0 20px rgba(0,255,255,0.2); }
+
+  .toast {
+    position:fixed; bottom:60px; left:50%; transform:translateX(-50%);
+    z-index:30; pointer-events:none;
+    font-family:'Courier New',monospace; font-size:13px;
+    letter-spacing:3px; color:rgba(0,255,255,0.6);
+    opacity:0; transition:opacity 0.4s;
+  }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div class="hud-item">
+    <div class="label">SIZE</div>
+    <div class="value size-val" id="sizeHud">1.0</div>
+  </div>
+  <div class="hud-item">
+    <div class="label">RANK</div>
+    <div class="value" id="rankHud">#-</div>
+  </div>
+  <div class="hud-item">
+    <div class="label">EATEN</div>
+    <div class="value" id="eatenHud">0</div>
+  </div>
+  <div class="hud-item">
+    <div class="label">TIME</div>
+    <div class="value" id="timerHud">0:00</div>
+  </div>
+</div>
+
+<div id="victoryBar" style="position:fixed;top:56px;left:50%;transform:translateX(-50%);width:200px;height:4px;background:rgba(255,255,255,0.05);z-index:10;pointer-events:none;border-radius:2px;">
+  <div id="victoryFill" style="height:100%;background:linear-gradient(90deg, rgba(0,255,255,0.4), rgba(255,0,128,0.7));width:0%;border-radius:2px;transition:width 0.3s;box-shadow:0 0 8px rgba(255,0,128,0.3);"></div>
+</div>
+<div style="position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:10;pointer-events:none;font-family:'Courier New',monospace;font-size:8px;letter-spacing:2px;color:rgba(255,255,255,0.2);" id="victoryLabel">DOMINANCE</div>
+
+<div id="leaderboard">
+  <div class="lb-title">LEADERBOARD</div>
+  <div id="lbList"></div>
+</div>
+
+<div id="gameover">
+  <h2>CONSUMED</h2>
+  <div class="sub">YOU WERE ABSORBED</div>
+  <div class="stats" id="finalStats"></div>
+  <button id="restart-btn" onclick="restartGame()">[ RESPAWN ]</button>
+</div>
+
+<div id="victory" style="
+  position:fixed;z-index:70;pointer-events:all;
+  top:0;left:0;right:0;bottom:0;
+  background:rgba(3,3,20,0.9);
+  display:none;flex-direction:column;
+  align-items:center;justify-content:center;
+  font-family:'Courier New',monospace;
+">
+  <h2 style="color:rgba(0,255,200,0.95);font-size:32px;letter-spacing:8px;text-shadow:0 0 60px rgba(0,255,200,0.5);margin-bottom:6px;">VOID MASTER</h2>
+  <div style="color:rgba(255,255,255,0.4);font-size:11px;letter-spacing:3px;margin-bottom:16px;">YOU DOMINATED THE VOID</div>
+  <div class="stats" id="victoryStats" style="color:rgba(255,255,255,0.5);font-size:12px;letter-spacing:2px;line-height:2;text-align:center;margin-bottom:20px;"></div>
+  <button id="restart-btn2" onclick="restartGame()" style="
+    background:transparent;border:1px solid rgba(0,255,200,0.4);
+    color:rgba(0,255,200,0.8);font-family:'Courier New',monospace;
+    font-size:13px;letter-spacing:4px;padding:10px 28px;
+    cursor:pointer;transition:all 0.2s;
+  " onmouseover="this.style.background='rgba(0,255,200,0.08)';this.style.boxShadow='0 0 20px rgba(0,255,200,0.2)'"
+  onmouseout="this.style.background='transparent';this.style.boxShadow='none'">[ ASCEND ]</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<canvas id="c"></canvas>
+
+<script>
+// ═══════════════════════════════════════════════
+//  VOID EATER
+//  Eat smaller, flee bigger, grow massive.
+// ═══════════════════════════════════════════════
+
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+
+// ── World ─────────────────────────────────────
+const WORLD_W = 4000;
+const WORLD_H = 4000;
+const VICTORY_SIZE = 250; // Size at which player fills screen and wins
+let camX = 0, camY = 0;
+let camZoom = 1.0;
+
+// ── Audio ────────────────────────────────────
+let audioCtx = null;
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+function sfx(freq, type='sine', vol=0.04, dur=0.12) {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(t); o.stop(t + dur);
+}
+function sfxEat(size) {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const pitch = 200 + size * 4;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(pitch, t);
+  o.frequency.exponentialRampToValueAtTime(pitch * 1.4, t + 0.1);
+  g.gain.setValueAtTime(0.06, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(t); o.stop(t + 0.2);
+}
+function sfxDeath() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  for (let i=0;i<4;i++) {
+    const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+    o.type='sawtooth';
+    o.frequency.setValueAtTime(80-i*15,t+i*0.06);
+    o.frequency.exponentialRampToValueAtTime(20,t+i*0.06+0.4);
+    g.gain.setValueAtTime(0.06,t+i*0.06);
+    g.gain.exponentialRampToValueAtTime(0.001,t+i*0.06+0.4);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t+i*0.06); o.stop(t+i*0.06+0.45);
+  }
+}
+
+// ── Game State ───────────────────────────────
+let gameOver = false;
+let eaten = 0;
+let gameTime = 0;
+
+// ── Player ───────────────────────────────────
+const player = {
+  x: WORLD_W/2, y: WORLD_H/2,
+  size: 12,        // visual radius = size
+  vx: 0, vy: 0,
+  color: [0, 255, 255],
+  name: 'YOU',
+};
+
+// ── Entities ─────────────────────────────────
+let foods = [];       // passive food pellets
+let entities = [];    // AI blobs
+let particles = [];
+
+// ── Input ────────────────────────────────────
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.key.toLowerCase()] = true;
+  initAudio();
+});
+window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+// ── Colors ───────────────────────────────────
+const ENTITY_COLORS = [
+  [255,60,80], [255,140,40], [255,200,40],
+  [80,220,100], [60,180,255], [140,80,255],
+  [255,80,180], [40,200,200], [220,180,60],
+  [100,255,150], [255,100,150], [80,150,255],
+];
+
+function randomColor() {
+  return ENTITY_COLORS[Math.floor(Math.random() * ENTITY_COLORS.length)];
+}
+
+// ── Spawn ────────────────────────────────────
+function spawnFood(count = 1) {
+  for (let i = 0; i < count; i++) {
+    foods.push({
+      x: Math.random() * WORLD_W,
+      y: Math.random() * WORLD_H,
+      size: 3 + Math.random() * 4,
+      color: [0, 255, Math.floor(150 + Math.random() * 105)],
+      pulse: Math.random() * Math.PI * 2,
+    });
+  }
+}
+
+function spawnEntity() {
+  // Spawn at edge of world
+  const side = Math.floor(Math.random() * 4);
+  let x, y;
+  const m = 120;
+  switch (side) {
+    case 0: x = Math.random() * WORLD_W; y = -m; break;
+    case 1: x = WORLD_W + m; y = Math.random() * WORLD_H; break;
+    case 2: x = Math.random() * WORLD_W; y = WORLD_H + m; break;
+    case 3: x = -m; y = Math.random() * WORLD_H; break;
+  }
+
+  // Size distribution: mostly small, some medium, rare large
+  const r = Math.random();
+  let size;
+  if (r < 0.55) size = 8 + Math.random() * 15;        // small: 8-23
+  else if (r < 0.85) size = 20 + Math.random() * 30;   // medium: 20-50
+  else if (r < 0.96) size = 40 + Math.random() * 50;   // large: 40-90
+  else size = 70 + Math.random() * 60;                  // huge: 70-130
+
+  const names = ['BLOB','VOID','NOVA','PULSE','DRIFT','NEXUS','WARP','ECHO','FLUX','ZEN','CUBE','DOT','ORB','SPARK','WISP','SHADE','GLINT','NEBULA','QUARK','PHASE'];
+  entities.push({
+    x, y, size,
+    vx: (Math.random()-0.5) * 0.5,
+    vy: (Math.random()-0.5) * 0.5,
+    color: randomColor(),
+    name: names[Math.floor(Math.random() * names.length)],
+    aiTimer: Math.random() * 120,
+    aiState: 'wander',
+    aiTarget: null,
+    wanderAngle: Math.random() * Math.PI * 2,
+    wanderTimer: 60 + Math.random() * 120,
+  });
+}
+
+// ── Particles ────────────────────────────────
+function spawnParticles(x, y, color, count, speed) {
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const s = Math.random() * speed;
+    particles.push({
+      x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s,
+      life: 30 + Math.random()*20, maxLife: 50,
+      color, size: 1 + Math.random()*2.5,
+    });
+  }
+}
+
+// ── Player Update ─────────────────────────────
+function updatePlayer() {
+  let dx = 0, dy = 0;
+  if (keys['w'] || keys['arrowup']) dy -= 1;
+  if (keys['s'] || keys['arrowdown']) dy += 1;
+  if (keys['a'] || keys['arrowleft']) dx -= 1;
+  if (keys['d'] || keys['arrowright']) dx += 1;
+
+  // Normalize
+  const len = Math.sqrt(dx*dx + dy*dy);
+  if (len > 0) { dx /= len; dy /= len; }
+
+  // Speed inversely proportional to size (bigger = slower, but not too slow)
+  const speed = 2.1 / Math.pow(player.size / 10, 0.35);
+
+  // Smooth acceleration
+  const targetVx = dx * speed;
+  const targetVy = dy * speed;
+  player.vx += (targetVx - player.vx) * 0.08;
+  player.vy += (targetVy - player.vy) * 0.08;
+
+  // Friction when no input
+  if (len === 0) {
+    player.vx *= 0.94;
+    player.vy *= 0.94;
+  }
+
+  player.x += player.vx;
+  player.y += player.vy;
+
+  // Clamp to world
+  player.x = Math.max(player.size, Math.min(WORLD_W - player.size, player.x));
+  player.y = Math.max(player.size, Math.min(WORLD_H - player.size, player.y));
+
+  // Slowly shrink over time (metabolism)
+  if (player.size > 10 && gameTime % 30 === 0) {
+    player.size -= 0.03;
+  }
+}
+
+// ── AI Update ────────────────────────────────
+function updateEntities() {
+  for (const e of entities) {
+    // AI decision making
+    e.aiTimer--;
+    if (e.aiTimer <= 0) {
+      e.aiTimer = 40 + Math.random() * 80;
+
+      // Find nearest smaller entity (prey)
+      let bestPrey = null, bestPreyDist = Infinity;
+      // Find nearest bigger entity (threat)
+      let bestThreat = null, bestThreatDist = Infinity;
+
+      for (const other of entities) {
+        if (other === e) continue;
+        const dx = other.x - e.x, dy = other.y - e.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (other.size < e.size * 0.85 && dist < bestPreyDist) {
+          bestPreyDist = dist; bestPrey = other;
+        }
+        if (other.size > e.size * 1.15 && dist < bestThreatDist) {
+          bestThreatDist = dist; bestThreat = other;
+        }
+      }
+
+      // Also consider player
+      const pdx = player.x - e.x, pdy = player.y - e.y;
+      const pdist = Math.sqrt(pdx*pdx + pdy*pdy);
+      if (player.size < e.size * 0.85 && pdist < bestPreyDist) {
+        bestPreyDist = pdist; bestPrey = { x: player.x, y: player.y, isPlayer: true };
+      }
+      if (player.size > e.size * 1.15 && pdist < bestThreatDist) {
+        bestThreatDist = pdist; bestThreat = { x: player.x, y: player.y, isPlayer: true };
+      }
+
+      // Decide: flee if threat is close, chase if prey is close, else wander
+      if (bestThreat && bestThreatDist < 350) {
+        e.aiState = 'flee';
+        e.aiTarget = bestThreat;
+      } else if (bestPrey && bestPreyDist < 400) {
+        e.aiState = 'chase';
+        e.aiTarget = bestPrey;
+      } else {
+        e.aiState = 'wander';
+        e.aiTarget = null;
+        e.wanderTimer = 80 + Math.random() * 160;
+      }
+    }
+
+    // Execute AI
+    let targetDx = 0, targetDy = 0;
+
+    if (e.aiState === 'chase' && e.aiTarget) {
+      targetDx = e.aiTarget.x - e.x;
+      targetDy = e.aiTarget.y - e.y;
+    } else if (e.aiState === 'flee' && e.aiTarget) {
+      targetDx = e.x - e.aiTarget.x;
+      targetDy = e.y - e.aiTarget.y;
+    } else {
+      e.wanderTimer--;
+      if (e.wanderTimer <= 0) {
+        e.wanderAngle = Math.random() * Math.PI * 2;
+        e.wanderTimer = 80 + Math.random() * 160;
+      }
+      targetDx = Math.cos(e.wanderAngle);
+      targetDy = Math.sin(e.wanderAngle);
+    }
+
+    // Normalize
+    const tlen = Math.sqrt(targetDx*targetDx + targetDy*targetDy);
+    if (tlen > 0) { targetDx /= tlen; targetDy /= tlen; }
+
+    // Speed inversely proportional to size
+    const speed = 1.3 / Math.pow(e.size / 10, 0.4);
+    e.vx += (targetDx * speed - e.vx) * 0.05;
+    e.vy += (targetDy * speed - e.vy) * 0.05;
+
+    // Clamp speed
+    const spd = Math.sqrt(e.vx*e.vx + e.vy*e.vy);
+    const maxSpd = speed * 1.5;
+    if (spd > maxSpd) { e.vx = (e.vx/spd)*maxSpd; e.vy = (e.vy/spd)*maxSpd; }
+
+    e.x += e.vx;
+    e.y += e.vy;
+
+    // Clamp to world
+    e.x = Math.max(e.size, Math.min(WORLD_W - e.size, e.x));
+    e.y = Math.max(e.size, Math.min(WORLD_H - e.size, e.y));
+
+    // Also shrink
+    if (e.size > 10 && gameTime % 30 === 0) {
+      e.size -= 0.02;
+    }
+  }
+}
+
+// ── Eating Logic ─────────────────────────────
+function checkEating() {
+  // Player eats food
+  for (let i = foods.length - 1; i >= 0; i--) {
+    const f = foods[i];
+    const dx = player.x - f.x, dy = player.y - f.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist < player.size + f.size - 2) {
+      player.size += f.size * 0.25;
+      spawnParticles(f.x, f.y, f.color, 3, 1.5);
+      sfx(600 + Math.random()*200, 'sine', 0.02, 0.06);
+      foods.splice(i,1);
+    }
+  }
+
+  // Player eats entities (player is bigger or similar size)
+  for (let i = entities.length - 1; i >= 0; i--) {
+    const e = entities[i];
+    const dx = player.x - e.x, dy = player.y - e.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    // Player can eat if they're >= 80% of entity's size
+    if (dist < player.size + e.size - 4 && player.size >= e.size * 0.8) {
+      eaten++;
+      player.size += e.size * 0.5;
+      spawnParticles(e.x, e.y, e.color, 15, 3);
+      sfxEat(e.size);
+      entities.splice(i,1);
+      continue;
+    }
+    // Entity eats player
+    if (dist < player.size + e.size - 4 && e.size > player.size * 1.2) {
+      endGame(e);
+      return;
+    }
+  }
+
+  // AI eats AI
+  for (let i = entities.length - 1; i >= 0; i--) {
+    for (let j = entities.length - 1; j >= 0; j--) {
+      if (i === j || i >= entities.length || j >= entities.length) continue;
+      const a = entities[i], b = entities[j];
+      if (!a || !b) continue;
+      const dx = a.x - b.x, dy = a.y - b.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < a.size + b.size - 4 && a.size >= b.size * 0.85) {
+        a.size += b.size * 0.4;
+        spawnParticles(b.x, b.y, b.color, 8, 2.5);
+        entities.splice(j,1);
+        if (i > j) i--;
+        break;
+      }
+    }
+  }
+
+  // AI eats food
+  for (const e of entities) {
+    for (let i = foods.length - 1; i >= 0; i--) {
+      const f = foods[i];
+      const dx = e.x - f.x, dy = e.y - f.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < e.size + f.size - 2) {
+        e.size += f.size * 0.2;
+        foods.splice(i,1);
+      }
+    }
+  }
+}
+
+// ── Camera ───────────────────────────────────
+function updateCamera() {
+  // Zoom: close when small, pulls out as you grow
+  // At VICTORY_SIZE, on-screen diameter ≈ screen height
+  const targetZoom = Math.max(0.4, Math.min(3.8, 38 / Math.sqrt(player.size)));
+  camZoom += (targetZoom - camZoom) * 0.04;
+
+  camX += (player.x - camX) * 0.08;
+  camY += (player.y - camY) * 0.08;
+}
+
+// ── Particles ────────────────────────────────
+function updateParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy;
+    p.life--;
+    if (p.life <= 0) particles.splice(i,1);
+  }
+}
+
+// ── Spawning ─────────────────────────────────
+let foodSpawnTimer = 0;
+let entitySpawnTimer = 0;
+function updateSpawning() {
+  // Keep ~200 food pellets
+  foodSpawnTimer--;
+  if (foodSpawnTimer <= 0 && foods.length < 200) {
+    foodSpawnTimer = 15;
+    spawnFood(2);
+  }
+
+  // Keep ~25 AI entities
+  entitySpawnTimer--;
+  if (entitySpawnTimer <= 0 && entities.length < 25) {
+    entitySpawnTimer = 90;
+    spawnEntity();
+  }
+
+  // Ensure minimum
+  if (foods.length < 50) spawnFood(30);
+  if (entities.length < 10) {
+    for (let i = 0; i < 5; i++) spawnEntity();
+  }
+}
+
+// ── Drawing ──────────────────────────────────
+function worldToScreen(wx, wy) {
+  return {
+    x: (wx - camX) * camZoom + c.width / 2,
+    y: (wy - camY) * camZoom + c.height / 2,
+    r: (r) => r * camZoom,
+  };
+}
+
+function drawBackground() {
+  // Dark bg
+  ctx.fillStyle = '#050510';
+  ctx.fillRect(0, 0, c.width, c.height);
+
+  // Grid (world-space)
+  const gridSize = 100;
+  const startX = Math.floor((camX - c.width/2/camZoom) / gridSize) * gridSize;
+  const startY = Math.floor((camY - c.height/2/camZoom) / gridSize) * gridSize;
+  const endX = camX + c.width/2/camZoom;
+  const endY = camY + c.height/2/camZoom;
+
+  ctx.strokeStyle = 'rgba(0,255,255,0.025)';
+  ctx.lineWidth = 0.5;
+  for (let x = startX; x <= endX; x += gridSize) {
+    const s = worldToScreen(x, 0);
+    ctx.beginPath();
+    ctx.moveTo(s.x, 0);
+    ctx.lineTo(s.x, c.height);
+    ctx.stroke();
+  }
+  for (let y = startY; y <= endY; y += gridSize) {
+    const s = worldToScreen(0, y);
+    ctx.beginPath();
+    ctx.moveTo(0, s.y);
+    ctx.lineTo(c.width, s.y);
+    ctx.stroke();
+  }
+
+  // World border
+  const tl = worldToScreen(0, 0);
+  const br = worldToScreen(WORLD_W, WORLD_H);
+  ctx.strokeStyle = 'rgba(255,0,80,0.15)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+}
+
+function drawBlob(x, y, size, color, name, isPlayer) {
+  const s = worldToScreen(x, y);
+  const r = s.r(size);
+
+  if (r < 1) return; // Too small to draw
+
+  // Glow
+  const glowR = r * 2.5;
+  const grad = ctx.createRadialGradient(s.x, s.y, r*0.3, s.x, s.y, glowR);
+  grad.addColorStop(0, `rgba(${color[0]},${color[1]},${color[2]},0.5)`);
+  grad.addColorStop(0.5, `rgba(${color[0]},${color[1]},${color[2]},0.12)`);
+  grad.addColorStop(1, `rgba(${color[0]},${color[1]},${color[2]},0)`);
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, glowR, 0, Math.PI*2);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Body
+  const bodyGrad = ctx.createRadialGradient(s.x - r*0.2, s.y - r*0.2, r*0.1, s.x, s.y, r);
+  bodyGrad.addColorStop(0, `rgba(${Math.min(255,color[0]+80)},${Math.min(255,color[1]+80)},${Math.min(255,color[2]+80)},0.9)`);
+  bodyGrad.addColorStop(0.7, `rgba(${color[0]},${color[1]},${color[2]},0.75)`);
+  bodyGrad.addColorStop(1, `rgba(${Math.max(0,color[0]-40)},${Math.max(0,color[1]-40)},${Math.max(0,color[2]-40)},0.6)`);
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, r, 0, Math.PI*2);
+  ctx.fillStyle = bodyGrad;
+  ctx.fill();
+
+  // Border
+  if (isPlayer) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = Math.max(1.5, r * 0.08);
+  } else {
+    ctx.strokeStyle = `rgba(${color[0]},${color[1]},${color[2]},0.3)`;
+    ctx.lineWidth = Math.max(1, r * 0.04);
+  }
+  ctx.stroke();
+
+  // Name
+  if (r > 15) {
+    const fontSize = Math.max(8, Math.min(r * 0.35, 22));
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.font = `${fontSize}px "Courier New", monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText(name, s.x, s.y + fontSize * 0.35);
+  }
+}
+
+function drawFood(f) {
+  const s = worldToScreen(f.x, f.y);
+  const r = s.r(f.size);
+  if (r < 0.5) return;
+  const pulse = 1 + Math.sin(gameTime * 0.06 + f.pulse) * 0.15;
+
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, r * pulse, 0, Math.PI*2);
+  ctx.fillStyle = `rgba(${f.color[0]},${f.color[1]},${f.color[2]},0.7)`;
+  ctx.fill();
+}
+
+function drawParticle(p) {
+  const alpha = p.life / p.maxLife;
+  const s = worldToScreen(p.x, p.y);
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, s.r(p.size) * alpha, 0, Math.PI*2);
+  ctx.fillStyle = `rgba(${p.color[0]},${p.color[1]},${p.color[2]},${alpha})`;
+  ctx.fill();
+}
+
+function drawMinimap() {
+  const mmSize = 130;
+  const mmX = c.width - mmSize - 16;
+  const mmY = c.height - mmSize - 16;
+
+  ctx.fillStyle = 'rgba(4,4,14,0.7)';
+  ctx.fillRect(mmX, mmY, mmSize, mmSize);
+  ctx.strokeStyle = 'rgba(0,255,255,0.2)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(mmX, mmY, mmSize, mmSize);
+
+  const scale = mmSize / WORLD_W;
+
+  // Draw entities on minimap
+  for (const e of entities) {
+    const ex = mmX + e.x * scale;
+    const ey = mmY + e.y * scale;
+    ctx.fillStyle = `rgba(${e.color[0]},${e.color[1]},${e.color[2]},0.6)`;
+    ctx.fillRect(ex - 1, ey - 1, 2, 2);
+  }
+
+  // Player on minimap
+  const px = mmX + player.x * scale;
+  const py = mmY + player.y * scale;
+  ctx.fillStyle = 'rgba(0,255,255,0.9)';
+  ctx.beginPath();
+  ctx.arc(px, py, 3, 0, Math.PI*2);
+  ctx.fill();
+
+  // Viewport rect
+  const vw = (c.width / camZoom) * scale;
+  const vh = (c.height / camZoom) * scale;
+  const vx = mmX + (camX - c.width/2/camZoom) * scale;
+  const vy = mmY + (camY - c.height/2/camZoom) * scale;
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(vx, vy, vw, vh);
+}
+
+function render() {
+  ctx.clearRect(0, 0, c.width, c.height);
+  drawBackground();
+
+  // Draw foods
+  for (const f of foods) drawFood(f);
+
+  // Draw entities
+  for (const e of entities) drawBlob(e.x, e.y, e.size, e.color, e.name, false);
+
+  // Draw player
+  drawBlob(player.x, player.y, player.size, player.color, player.name, true);
+
+  // Draw particles
+  for (const p of particles) drawParticle(p);
+
+  // Minimap
+  drawMinimap();
+}
+
+// ── HUD ──────────────────────────────────────
+function getLeaderboard() {
+  const all = [
+    { name: player.name, size: player.size, color: player.color, isPlayer: true },
+    ...entities.map(e => ({ name: e.name, size: e.size, color: e.color, isPlayer: false })),
+  ];
+  all.sort((a, b) => b.size - a.size);
+  return all.slice(0, 8);
+}
+
+function updateHud() {
+  document.getElementById('sizeHud').textContent = player.size.toFixed(1);
+  document.getElementById('eatenHud').textContent = eaten;
+
+  const mins = Math.floor(gameTime / 3600);
+  const secs = Math.floor((gameTime % 3600) / 60);
+  document.getElementById('timerHud').textContent = `${mins}:${secs.toString().padStart(2,'0')}`;
+
+  // Rank
+  const lb = getLeaderboard();
+  const rank = lb.findIndex(e => e.isPlayer) + 1;
+  document.getElementById('rankHud').textContent = rank > 0 ? `#${rank}` : '#-';
+
+  // Leaderboard panel
+  const lbList = document.getElementById('lbList');
+  lbList.innerHTML = lb.map((e, i) => {
+    const cls = e.isPlayer ? 'lb-row you' : 'lb-row';
+    return `<div class="${cls}"><span class="lb-rank">#${i+1}</span><span>${e.name}</span><span style="color:rgba(${e.color[0]},${e.color[1]},${e.color[2]},0.7)">${e.size.toFixed(1)}</span></div>`;
+  }).join('');
+
+  // Victory progress bar
+  const pct = Math.min(100, (player.size / VICTORY_SIZE) * 100);
+  document.getElementById('victoryFill').style.width = `${pct}%`;
+  if (pct > 80) {
+    document.getElementById('victoryFill').style.boxShadow = '0 0 14px rgba(255,0,128,0.7)';
+  }
+}
+
+// ── Victory ──────────────────────────────────
+function winGame() {
+  gameOver = true;
+  // Big particle burst
+  for (let i = 0; i < 8; i++) {
+    setTimeout(() => {
+      spawnParticles(player.x, player.y, [0,255,200], 40, 5);
+      spawnParticles(player.x, player.y, [255,0,128], 20, 3);
+      if (audioCtx) {
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(200 + i*80, audioCtx.currentTime);
+        o.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.8);
+        g.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
+        o.connect(g); g.connect(audioCtx.destination);
+        o.start(audioCtx.currentTime); o.stop(audioCtx.currentTime + 0.9);
+      }
+    }, i * 120);
+  }
+  document.getElementById('victory').style.display = 'flex';
+  document.getElementById('victoryStats').innerHTML = `
+    FINAL SIZE: <b>${player.size.toFixed(1)}</b><br>
+    RANK: <b>#1 — VOID MASTER</b><br>
+    TOTAL EATEN: <b>${eaten}</b><br>
+    TIME: <b>${document.getElementById('timerHud').textContent}</b>
+  `;
+}
+
+// ── Game Over ────────────────────────────────
+function endGame(killer) {
+  gameOver = true;
+  spawnParticles(player.x, player.y, player.color, 30, 4);
+  sfxDeath();
+  document.getElementById('gameover').style.display = 'flex';
+  document.getElementById('finalStats').innerHTML = `
+    FINAL SIZE: <b>${player.size.toFixed(1)}</b><br>
+    CONSUMED BY: <b>${killer ? killer.name : 'UNKNOWN'}</b><br>
+    TOTAL EATEN: <b>${eaten}</b><br>
+    TIME: <b>${document.getElementById('timerHud').textContent}</b>
+  `;
+}
+
+function restartGame() {
+  gameOver = false;
+  eaten = 0;
+  gameTime = 0;
+  player.x = WORLD_W/2; player.y = WORLD_H/2;
+  player.size = 12;
+  player.vx = 0; player.vy = 0;
+  foods = [];
+  entities = [];
+  particles = [];
+  foodSpawnTimer = 0;
+  entitySpawnTimer = 0;
+  spawnFood(80);
+  for (let i = 0; i < 15; i++) spawnEntity();
+  document.getElementById('gameover').style.display = 'none';
+  document.getElementById('victory').style.display = 'none';
+  updateHud();
+}
+
+// ── Toast ────────────────────────────────────
+let toastTimeout;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => { t.style.opacity = '0'; }, 2000);
+}
+
+// ── Resize ───────────────────────────────────
+function resize() {
+  c.width = window.innerWidth;
+  c.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+
+// ── Main Loop ────────────────────────────────
+function gameLoop() {
+  if (!gameOver) {
+    gameTime++;
+    updatePlayer();
+    updateEntities();
+    checkEating();
+    updateCamera();
+    updateParticles();
+    updateSpawning();
+    if (gameTime % 30 === 0) updateHud();
+
+    // Victory check
+    if (player.size >= VICTORY_SIZE) {
+      winGame();
+    }
+  }
+
+  render();
+  requestAnimationFrame(gameLoop);
+}
+
+// ── Init ─────────────────────────────────────
+function init() {
+  resize();
+  spawnFood(80);
+  for (let i = 0; i < 15; i++) spawnEntity();
+  updateHud();
+  showToast('WASD MOVE · EAT SMALLER · FLEE BIGGER');
+  requestAnimationFrame(gameLoop);
+}
+
+init();
+</script>
+</body>
+</html>

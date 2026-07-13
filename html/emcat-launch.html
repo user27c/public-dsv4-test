@@ -1,0 +1,1825 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>电磁弹射战斗机 - 福建舰</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root {
+  --hud-cyan: #00e5ff;
+  --hud-green: #00ff88;
+  --hud-amber: #ffab00;
+  --hud-red: #ff3d3d;
+  --hud-white: #e0e0e0;
+  --hud-dim: #1a2a3a;
+  --hud-bg: rgba(0, 10, 20, 0.85);
+  --hud-border: rgba(0, 229, 255, 0.3);
+  --hud-glow: 0 0 20px rgba(0, 229, 255, 0.3);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #000510;
+  overflow: hidden;
+  font-family: 'Share Tech Mono', monospace;
+  cursor: crosshair;
+  user-select: none;
+  -webkit-user-select: none;
+  height: 100vh;
+  width: 100vw;
+}
+
+#container {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+}
+
+#container canvas {
+  display: block;
+}
+
+/* ===== HUD OVERLAY ===== */
+#hud {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* Corner brackets */
+.corner-bracket {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-color: var(--hud-cyan);
+  border-style: solid;
+  opacity: 0.7;
+}
+.corner-bracket.tl { top: 16px; left: 16px; border-width: 2px 0 0 2px; }
+.corner-bracket.tr { top: 16px; right: 16px; border-width: 2px 2px 0 0; }
+.corner-bracket.bl { bottom: 16px; left: 16px; border-width: 0 0 2px 2px; }
+.corner-bracket.br { bottom: 16px; right: 16px; border-width: 0 2px 2px 0; }
+
+/* Top title bar */
+.hud-top {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+.hud-top .title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 6px;
+  color: var(--hud-cyan);
+  text-shadow: 0 0 30px rgba(0, 229, 255, 0.6);
+  text-transform: uppercase;
+}
+.hud-top .subtitle {
+  font-size: 9px;
+  letter-spacing: 4px;
+  color: rgba(0, 229, 255, 0.5);
+  margin-top: 2px;
+}
+
+/* Main HUD panels */
+.hud-panel {
+  position: absolute;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-border);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 14px 18px;
+  min-width: 180px;
+}
+.hud-panel::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 20px;
+  right: 20px;
+  height: 1px;
+  background: var(--hud-cyan);
+  box-shadow: var(--hud-glow);
+}
+
+.hud-left {
+  top: 100px;
+  left: 20px;
+}
+.hud-right {
+  top: 100px;
+  right: 20px;
+}
+
+.panel-label {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 8px;
+  letter-spacing: 3px;
+  color: rgba(0, 229, 255, 0.6);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.panel-value {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--hud-white);
+  line-height: 1;
+  text-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+}
+.panel-value.speed { font-size: 48px; color: #fff; }
+.panel-unit {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 2px;
+}
+.panel-bar {
+  margin-top: 8px;
+  height: 3px;
+  background: rgba(255,255,255,0.08);
+  position: relative;
+  border-radius: 1px;
+}
+.panel-bar-fill {
+  height: 100%;
+  background: var(--hud-cyan);
+  transition: width 0.1s linear;
+  border-radius: 1px;
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.5);
+}
+
+/* Bottom status bar */
+.hud-bottom {
+  position: absolute;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 40px;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-border);
+  padding: 10px 30px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.hud-bottom .stat {
+  text-align: center;
+}
+.hud-bottom .stat-label {
+  font-size: 7px;
+  letter-spacing: 2px;
+  color: rgba(0, 229, 255, 0.5);
+  text-transform: uppercase;
+}
+.hud-bottom .stat-value {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--hud-white);
+}
+
+/* Center reticle */
+.reticle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 60px;
+  height: 60px;
+}
+.reticle::before,
+.reticle::after {
+  content: '';
+  position: absolute;
+  background: rgba(0, 229, 255, 0.25);
+}
+.reticle::before {
+  width: 100%;
+  height: 1px;
+  top: 50%;
+}
+.reticle::after {
+  width: 1px;
+  height: 100%;
+  left: 50%;
+}
+
+/* Launch overlay */
+#launch-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+  transition: opacity 0.6s;
+}
+#launch-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+#launch-btn {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 8px;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgba(255, 61, 0, 0.15);
+  border: 2px solid rgba(255, 61, 0, 0.5);
+  padding: 18px 50px;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: all 0.3s;
+  position: relative;
+}
+#launch-btn:hover {
+  background: rgba(255, 61, 0, 0.3);
+  border-color: #ff3d3d;
+  box-shadow: 0 0 60px rgba(255, 61, 0, 0.4), inset 0 0 30px rgba(255, 61, 0, 0.1);
+  transform: scale(1.03);
+}
+#launch-btn:active {
+  transform: scale(0.97);
+}
+#launch-btn::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: 1px solid rgba(255, 61, 0, 0.2);
+  animation: pulse-ring 2s ease-out infinite;
+}
+@keyframes pulse-ring {
+  0% { inset: -4px; opacity: 1; }
+  100% { inset: -20px; opacity: 0; }
+}
+
+/* Status indicator */
+.status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 6px;
+  animation: status-pulse 1.5s infinite;
+}
+.status-dot.ready { background: var(--hud-green); box-shadow: 0 0 6px var(--hud-green); }
+.status-dot.active { background: var(--hud-amber); box-shadow: 0 0 6px var(--hud-amber); animation-duration: 0.3s; }
+.status-dot.armed { background: var(--hud-red); box-shadow: 0 0 8px var(--hud-red); animation-duration: 0.15s; }
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Scanline effect */
+#scanlines {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+}
+
+/* Vignette */
+#vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 14;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, 0.5) 100%);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .hud-panel { min-width: 130px; padding: 10px 14px; }
+  .panel-value { font-size: 24px; }
+  .panel-value.speed { font-size: 32px; }
+  .hud-bottom { gap: 20px; padding: 8px 20px; }
+  .hud-bottom .stat-value { font-size: 13px; }
+  #launch-btn { font-size: 16px; padding: 14px 36px; letter-spacing: 4px; }
+}
+</style>
+</head>
+<body>
+
+<div id="container"></div>
+
+<div id="scanlines"></div>
+<div id="vignette"></div>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="corner-bracket tl"></div>
+  <div class="corner-bracket tr"></div>
+  <div class="corner-bracket bl"></div>
+  <div class="corner-bracket br"></div>
+
+  <div class="hud-top">
+    <div class="title">电磁弹射系统</div>
+    <div class="subtitle">EMALS · CV-18 FUJIAN · 福建舰</div>
+  </div>
+
+  <div class="hud-panel hud-left">
+    <div class="panel-label">速度 SPD</div>
+    <div class="panel-value speed" id="val-speed">0</div>
+    <div class="panel-unit">KM/H</div>
+    <div class="panel-bar"><div class="panel-bar-fill" id="bar-speed" style="width:0%"></div></div>
+    <div style="margin-top:14px">
+      <div class="panel-label">高度 ALT</div>
+      <div class="panel-value" id="val-alt" style="font-size:28px">0</div>
+      <div class="panel-unit">M</div>
+      <div class="panel-bar"><div class="panel-bar-fill" id="bar-alt" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <div class="hud-panel hud-right">
+    <div class="panel-label">推力 THR</div>
+    <div class="panel-value" id="val-thrust" style="font-size:28px">0</div>
+    <div class="panel-unit">KN</div>
+    <div class="panel-bar"><div class="panel-bar-fill" id="bar-thrust" style="width:0%; background:#ffab00; box-shadow:0 0 8px rgba(255,171,0,0.5)"></div></div>
+    <div style="margin-top:14px">
+      <div class="panel-label">过载 G</div>
+      <div class="panel-value" id="val-gforce" style="font-size:28px">1.0</div>
+      <div class="panel-unit">G</div>
+      <div class="panel-bar"><div class="panel-bar-fill" id="bar-gforce" style="width:10%; background:#ff3d3d; box-shadow:0 0 8px rgba(255,61,61,0.5)"></div></div>
+    </div>
+  </div>
+
+  <div class="hud-bottom">
+    <div class="stat">
+      <div class="stat-label">弹射进度</div>
+      <div class="stat-value" id="stat-launch">就绪</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">攻角 AOA</div>
+      <div class="stat-value" id="stat-aoa">0.0°</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">航向 HDG</div>
+      <div class="stat-value" id="stat-hdg">090</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">弹射器</div>
+      <div class="stat-value" id="stat-catapult">CAT-1</div>
+    </div>
+  </div>
+
+  <div class="reticle"></div>
+</div>
+
+<!-- Launch overlay -->
+<div id="launch-overlay">
+  <button id="launch-btn">▶ 弹射起飞</button>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ==================== DOM ELEMENTS ====================
+const launchOverlay = document.getElementById('launch-overlay');
+const launchBtn = document.getElementById('launch-btn');
+const elSpeed = document.getElementById('val-speed');
+const elAlt = document.getElementById('val-alt');
+const elThrust = document.getElementById('val-thrust');
+const elGforce = document.getElementById('val-gforce');
+const barSpeed = document.getElementById('bar-speed');
+const barAlt = document.getElementById('bar-alt');
+const barThrust = document.getElementById('bar-thrust');
+const barGforce = document.getElementById('bar-gforce');
+const statLaunch = document.getElementById('stat-launch');
+const statAoa = document.getElementById('stat-aoa');
+const statHdg = document.getElementById('stat-hdg');
+const statCatapult = document.getElementById('stat-catapult');
+
+// ==================== SCENE SETUP ====================
+const container = document.getElementById('container');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a1628);
+scene.fog = new THREE.FogExp2(0x0a1628, 0.000025);
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 2000);
+camera.position.set(25, 8, 20);
+camera.lookAt(0, 2, 0);
+
+// Orbit controls (limited)
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 2, 8);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 10;
+controls.maxDistance = 80;
+controls.maxPolarAngle = Math.PI * 0.48;
+controls.minPolarAngle = 0.1;
+controls.update();
+
+// ==================== LIGHTING ====================
+const ambientLight = new THREE.AmbientLight(0x1a3050, 0.6);
+scene.add(ambientLight);
+
+const sunLight = new THREE.DirectionalLight(0xffeedd, 3.5);
+sunLight.position.set(80, 40, 30);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.width = 2048;
+sunLight.shadow.mapSize.height = 2048;
+sunLight.shadow.camera.near = 0.5;
+sunLight.shadow.camera.far = 300;
+sunLight.shadow.camera.left = -60;
+sunLight.shadow.camera.right = 60;
+sunLight.shadow.camera.top = 40;
+sunLight.shadow.camera.bottom = -40;
+sunLight.shadow.bias = -0.0001;
+scene.add(sunLight);
+
+const skyLight = new THREE.HemisphereLight(0x8899cc, 0x223344, 0.5);
+scene.add(skyLight);
+
+// ==================== SKY ====================
+const skyGeo = new THREE.SphereGeometry(400, 32, 32);
+const skyMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uTime: { value: 0 },
+    uSunPos: { value: new THREE.Vector3(0.6, 0.4, 0.3).normalize() }
+  },
+  vertexShader: /* glsl */ `
+    varying vec3 vWorldPos;
+    varying vec3 vNormal;
+    void main() {
+      vec4 worldPos = modelMatrix * vec4(position, 1.0);
+      vWorldPos = worldPos.xyz;
+      vNormal = normalize(mat3(modelMatrix) * normal);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    varying vec3 vWorldPos;
+    varying vec3 vNormal;
+    uniform vec3 uSunPos;
+    uniform float uTime;
+    void main() {
+      vec3 dir = normalize(vWorldPos);
+      float h = dir.y;
+      float sunAngle = max(dot(dir, uSunPos), 0.0);
+
+      // Sky gradient
+      vec3 topColor = vec3(0.05, 0.12, 0.28);
+      vec3 horizonColor = vec3(0.15, 0.28, 0.45);
+      vec3 lowColor = vec3(0.25, 0.35, 0.55);
+
+      float t = smoothstep(-0.05, 0.35, h);
+      vec3 sky = mix(lowColor, horizonColor, t);
+      sky = mix(sky, topColor, smoothstep(0.35, 0.9, h));
+
+      // Sun glow
+      sky += vec3(0.12, 0.10, 0.04) * pow(sunAngle, 40.0) * 3.0;
+      sky += vec3(0.06, 0.04, 0.01) * pow(sunAngle, 8.0) * 1.5;
+
+      // Subtle cloud-like variation
+      float cloud = smoothstep(0.2, 0.5, h) * 0.04;
+      sky += cloud;
+
+      gl_FragColor = vec4(sky, 1.0);
+    }
+  `,
+  side: THREE.BackSide,
+  depthWrite: false
+});
+const sky = new THREE.Mesh(skyGeo, skyMat);
+scene.add(sky);
+
+// ==================== OCEAN ====================
+const oceanGeo = new THREE.PlaneGeometry(300, 300, 120, 120);
+oceanGeo.rotateX(-Math.PI / 2);
+const oceanPositions = oceanGeo.attributes.position.array;
+
+const oceanMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uTime: { value: 0 },
+    uLightPos: { value: new THREE.Vector3(0.6, 0.4, 0.3).normalize() }
+  },
+  vertexShader: /* glsl */ `
+    varying vec3 vPos;
+    varying vec3 vNormal;
+    varying float vHeight;
+    uniform float uTime;
+    void main() {
+      vec3 pos = position;
+      float wave1 = sin(pos.x * 0.3 + uTime * 0.8) * cos(pos.z * 0.25 + uTime * 0.6) * 0.6;
+      float wave2 = sin(pos.x * 0.15 + uTime * 1.3) * cos(pos.z * 0.4 - uTime * 0.9) * 0.35;
+      float wave3 = sin(pos.x * 0.5 + pos.z * 0.45 + uTime * 1.1) * 0.25;
+      float wave4 = cos(pos.x * 0.08 + uTime * 0.4) * sin(pos.z * 0.12 + uTime * 0.5) * 1.2;
+      float h = wave1 + wave2 + wave3 + wave4;
+      pos.y += h;
+      vPos = pos;
+      vHeight = h;
+
+      // Approximate normal
+      float eps = 0.1;
+      float hx = (sin((pos.x+eps)*0.3 + uTime*0.8)*cos(pos.z*0.25 + uTime*0.6)*0.6
+                + sin((pos.x+eps)*0.15 + uTime*1.3)*cos(pos.z*0.4 - uTime*0.9)*0.35
+                + sin((pos.x+eps)*0.5 + pos.z*0.45 + uTime*1.1)*0.25
+                + cos((pos.x+eps)*0.08 + uTime*0.4)*sin(pos.z*0.12 + uTime*0.5)*1.2
+                - h) / eps;
+      float hz = (sin(pos.x*0.3 + uTime*0.8)*cos((pos.z+eps)*0.25 + uTime*0.6)*0.6
+                + sin(pos.x*0.15 + uTime*1.3)*cos((pos.z+eps)*0.4 - uTime*0.9)*0.35
+                + sin(pos.x*0.5 + (pos.z+eps)*0.45 + uTime*1.1)*0.25
+                + cos(pos.x*0.08 + uTime*0.4)*sin((pos.z+eps)*0.12 + uTime*0.5)*1.2
+                - h) / eps;
+      vNormal = normalize(vec3(-hx, 1.0, -hz));
+
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    varying vec3 vPos;
+    varying vec3 vNormal;
+    varying float vHeight;
+    uniform vec3 uLightPos;
+    uniform float uTime;
+    void main() {
+      vec3 lightDir = normalize(uLightPos);
+      float diff = max(dot(vNormal, lightDir), 0.0) * 0.6 + 0.4;
+      float spec = pow(max(dot(reflect(-lightDir, vNormal), normalize(vec3(0.0, 1.0, 0.0))), 0.0), 64.0) * 0.3;
+      vec3 deepColor = vec3(0.02, 0.08, 0.18);
+      vec3 shallowColor = vec3(0.05, 0.18, 0.35);
+      vec3 foamColor = vec3(0.7, 0.85, 0.95);
+      float hNorm = vHeight / 1.5;
+      vec3 baseColor = mix(deepColor, shallowColor, smoothstep(-0.3, 0.3, hNorm + 0.1));
+      baseColor = mix(baseColor, foamColor, smoothstep(0.5, 1.0, hNorm));
+      vec3 color = baseColor * diff + spec;
+      // Fresnel
+      float fresnel = pow(1.0 - abs(vNormal.y), 2.5);
+      color += vec3(0.05, 0.1, 0.15) * fresnel;
+      gl_FragColor = vec4(color, 0.92);
+    }
+  `,
+  transparent: true,
+  depthWrite: true
+});
+const ocean = new THREE.Mesh(oceanGeo, oceanMat);
+ocean.receiveShadow = true;
+ocean.renderOrder = 1;
+scene.add(ocean);
+
+// ==================== CARRIER MODEL ====================
+const carrier = new THREE.Group();
+scene.add(carrier);
+
+// Hull - below waterline
+const hullGeo = new THREE.BoxGeometry(8, 3, 36);
+const hullMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.7, metalness: 0.3 });
+const hull = new THREE.Mesh(hullGeo, hullMat);
+hull.position.y = -2.5;
+hull.castShadow = true;
+hull.receiveShadow = true;
+carrier.add(hull);
+
+// Hull bow taper (approximate)
+const bowGeoL = new THREE.CylinderGeometry(2.5, 4, 10, 8, 1, false, 0, Math.PI);
+const bowGeoR = new THREE.CylinderGeometry(2.5, 4, 10, 8, 1, false, Math.PI, Math.PI);
+const bowMatHull = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.7, metalness: 0.3 });
+const bowL = new THREE.Mesh(bowGeoL, bowMatHull);
+bowL.position.set(-2.8, -2.5, -22);
+bowL.castShadow = true;
+carrier.add(bowL);
+const bowR = new THREE.Mesh(bowGeoR, bowMatHull);
+bowR.position.set(2.8, -2.5, -22);
+bowR.castShadow = true;
+carrier.add(bowR);
+
+// Flight deck
+const deckGeo = new THREE.BoxGeometry(9.5, 0.4, 38);
+const deckMat = new THREE.MeshStandardMaterial({ color: 0x3d3d3d, roughness: 0.55, metalness: 0.15 });
+const deck = new THREE.Mesh(deckGeo, deckMat);
+deck.position.y = 1.2;
+deck.castShadow = true;
+deck.receiveShadow = true;
+carrier.add(deck);
+
+// Deck markings - landing strip
+const stripGeo = new THREE.PlaneGeometry(3, 24);
+stripGeo.rotateX(-Math.PI / 2);
+const stripMatLine = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.6, metalness: 0.1 });
+const stripLine = new THREE.Mesh(stripGeo, stripMatLine);
+stripLine.position.set(-2, 1.41, -2);
+stripLine.receiveShadow = true;
+carrier.add(stripLine);
+
+// Angled deck extension
+const angledGeo = new THREE.BoxGeometry(6, 0.38, 14);
+const angledMat = new THREE.MeshStandardMaterial({ color: 0x3b3b3b, roughness: 0.55, metalness: 0.15 });
+const angledDeck = new THREE.Mesh(angledGeo, angledMat);
+angledDeck.position.set(-1.5, 1.19, -16);
+angledDeck.rotation.y = -0.15;
+angledDeck.castShadow = true;
+angledDeck.receiveShadow = true;
+carrier.add(angledDeck);
+
+// Catapult tracks
+function createCatapultTrack(x, zStart, zEnd) {
+  const group = new THREE.Group();
+  const len = zEnd - zStart;
+  const trackGeo = new THREE.BoxGeometry(0.12, 0.05, len);
+  const trackMatEmissive = new THREE.MeshStandardMaterial({
+    color: 0x444444,
+    roughness: 0.3,
+    metalness: 0.8
+  });
+  const track = new THREE.Mesh(trackGeo, trackMatEmissive);
+  track.position.set(0, 1.41, (zStart + zEnd) / 2);
+  track.castShadow = true;
+  track.receiveShadow = true;
+  group.add(track);
+
+  // Glow strip
+  const glowGeo = new THREE.PlaneGeometry(0.08, len);
+  const glowMatGlow = new THREE.MeshBasicMaterial({
+    color: 0x4488cc,
+    transparent: true,
+    opacity: 0.4,
+    depthWrite: false
+  });
+  const glow = new THREE.Mesh(glowGeo, glowMatGlow);
+  glow.rotation.x = -Math.PI / 2;
+  glow.position.set(0, 1.44, (zStart + zEnd) / 2);
+  glow.renderOrder = 2;
+  group.add(glow);
+
+  group.position.x = x;
+  return { group, glow, track };
+}
+
+const catapult1 = createCatapultTrack(1.5, -14, 16);
+carrier.add(catapult1.group);
+
+const catapult2 = createCatapultTrack(-1.5, -14, 16);
+carrier.add(catapult2.group);
+
+// Island (command tower)
+const islandGroup = new THREE.Group();
+const islandBaseGeo = new THREE.BoxGeometry(3, 4, 6);
+const islandBaseMat = new THREE.MeshStandardMaterial({ color: 0x404040, roughness: 0.5, metalness: 0.2 });
+const islandBase = new THREE.Mesh(islandBaseGeo, islandBaseMat);
+islandBase.position.y = 3.4;
+islandBase.castShadow = true;
+islandBase.receiveShadow = true;
+islandGroup.add(islandBase);
+
+const islandTopGeo = new THREE.BoxGeometry(2.5, 2.5, 5);
+const islandTopMat = new THREE.MeshStandardMaterial({ color: 0x383838, roughness: 0.5, metalness: 0.3 });
+const islandTop = new THREE.Mesh(islandTopGeo, islandTopMat);
+islandTop.position.y = 6.6;
+islandTop.castShadow = true;
+islandGroup.add(islandTop);
+
+// Radar mast
+const mastGeo = new THREE.CylinderGeometry(0.15, 0.2, 3, 8);
+const mastMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.4, metalness: 0.5 });
+const mast = new THREE.Mesh(mastGeo, mastMat);
+mast.position.y = 9.2;
+mast.castShadow = true;
+islandGroup.add(mast);
+
+// Radar arrays (flat panels)
+for (let i = 0; i < 4; i++) {
+  const panelGeo = new THREE.BoxGeometry(1.2, 1.5, 0.15);
+  const panelMat = new THREE.MeshStandardMaterial({ color: 0x222233, roughness: 0.2, metalness: 0.6 });
+  const panel = new THREE.Mesh(panelGeo, panelMat);
+  panel.position.y = 8.5 + (i % 2) * 1.2;
+  const angle = (i * Math.PI) / 2;
+  panel.position.x = Math.cos(angle) * 1.2;
+  panel.position.z = Math.sin(angle) * 1.2;
+  panel.lookAt(new THREE.Vector3(panel.position.x * 2, 8.5, panel.position.z * 2));
+  islandGroup.add(panel);
+}
+
+islandGroup.position.set(5.5, 1.6, 2);
+carrier.add(islandGroup);
+
+// Carrier wake effect
+const wakeGroup = new THREE.Group();
+carrier.add(wakeGroup);
+
+// ==================== FIGHTER JET MODEL (J-35 Style Stealth) ====================
+const jet = new THREE.Group();
+scene.add(jet);
+
+// --- Materials ---
+const matFuselage = new THREE.MeshStandardMaterial({ color: 0x9ea4ab, roughness: 0.42, metalness: 0.12 });
+const matFuselageDark = new THREE.MeshStandardMaterial({ color: 0x80868c, roughness: 0.38, metalness: 0.15 });
+const matRadome = new THREE.MeshStandardMaterial({ color: 0x5a5e63, roughness: 0.35, metalness: 0.1 });
+const matCanopy = new THREE.MeshStandardMaterial({ color: 0x151a24, roughness: 0.08, metalness: 0.7 });
+const matNozzle = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.15, metalness: 0.85 });
+const matNozzleInner = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.3, metalness: 0.7 });
+const matIntake = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.5, metalness: 0.3 });
+const matWing = new THREE.MeshStandardMaterial({ color: 0x969da5, roughness: 0.4, metalness: 0.15 });
+const matGearStrut = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.3, metalness: 0.7 });
+const matWheel = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.55, metalness: 0.1 });
+
+// --- Fuselage: LatheGeometry for streamlined body ---
+const fuselageGroup = new THREE.Group();
+
+// Define fuselage profile curve (radius, z) from nose to tail
+const profilePoints = [
+  new THREE.Vector2(0.01, 5.5),   // nose tip
+  new THREE.Vector2(0.10, 5.2),   // radome start
+  new THREE.Vector2(0.20, 4.6),   // radome
+  new THREE.Vector2(0.30, 3.8),   // forward nose
+  new THREE.Vector2(0.38, 2.8),   // cockpit front
+  new THREE.Vector2(0.44, 1.5),   // canopy mid
+  new THREE.Vector2(0.46, 0.0),   // max width
+  new THREE.Vector2(0.44, -1.5),  // aft body
+  new THREE.Vector2(0.38, -2.6),  // engine bay
+  new THREE.Vector2(0.30, -3.3),  // pre-nozzle
+  new THREE.Vector2(0.24, -3.7),  // nozzle
+  new THREE.Vector2(0.18, -4.1),  // exhaust
+];
+const fuselageGeo = new THREE.LatheGeometry(profilePoints, 28, 20);
+// Flatten slightly vertically for stealth look
+const fuselagePos = fuselageGeo.attributes.position;
+for (let i = 0; i < fuselagePos.count; i++) {
+  const y = fuselagePos.getY(i);
+  fuselagePos.setY(i, y * 0.78);
+}
+fuselageGeo.computeVertexNormals();
+const fuselage = new THREE.Mesh(fuselageGeo, matFuselage);
+fuselage.castShadow = true;
+fuselage.receiveShadow = true;
+fuselageGroup.add(fuselage);
+
+// Radome (darker nose section)
+const radomeGeo = new THREE.LatheGeometry([
+  new THREE.Vector2(0.08, 5.5),
+  new THREE.Vector2(0.19, 4.8),
+  new THREE.Vector2(0.28, 4.0),
+], 24, 8);
+const radomePos = radomeGeo.attributes.position;
+for (let i = 0; i < radomePos.count; i++) {
+  radomePos.setY(i, radomePos.getY(i) * 0.78);
+}
+radomeGeo.computeVertexNormals();
+const radome = new THREE.Mesh(radomeGeo, matRadome);
+radome.castShadow = true;
+fuselageGroup.add(radome);
+
+// Side chines (angular stealth edges along the fuselage)
+for (let side = -1; side <= 1; side += 2) {
+  const chineGeo = new THREE.BoxGeometry(0.06, 0.16, 7.5);
+  const chine = new THREE.Mesh(chineGeo, matFuselageDark);
+  chine.position.set(side * 0.46, -0.06, -1.0);
+  chine.rotation.z = side * 0.45;
+  chine.castShadow = true;
+  fuselageGroup.add(chine);
+}
+
+// Cockpit (bubble canopy)
+const canopyGeo = new THREE.SphereGeometry(0.34, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.42);
+const canopy = new THREE.Mesh(canopyGeo, matCanopy);
+canopy.position.set(0, 0.28, 1.8);
+canopy.scale.set(0.82, 0.55, 1.15);
+fuselageGroup.add(canopy);
+
+// Canopy frame
+const frameGeo = new THREE.TorusGeometry(0.34, 0.025, 8, 20, Math.PI);
+const frame = new THREE.Mesh(frameGeo, matFuselageDark);
+frame.position.set(0, 0.22, 1.8);
+frame.rotation.x = Math.PI * 0.48;
+frame.scale.set(0.82, 0.55, 1.15);
+fuselageGroup.add(frame);
+
+// --- Intakes (DSI-style bumps) ---
+for (let side = -1; side <= 1; side += 2) {
+  const intakeGeo = new THREE.CylinderGeometry(0.22, 0.28, 2.2, 12, 6);
+  intakeGeo.rotateZ(Math.PI / 2);
+  const intake = new THREE.Mesh(intakeGeo, matIntake);
+  intake.position.set(side * 0.52, -0.2, 2.8);
+  intake.rotation.z = side * 0.3;
+  intake.rotation.y = -0.15;
+  intake.scale.set(0.5, 1, 1);
+  intake.castShadow = true;
+  fuselageGroup.add(intake);
+
+  // Intake lip
+  const lipGeo = new THREE.TorusGeometry(0.2, 0.04, 8, 12);
+  const lip = new THREE.Mesh(lipGeo, matFuselageDark);
+  lip.position.set(side * 0.56, -0.22, 3.7);
+  lip.rotation.y = Math.PI / 2;
+  lip.scale.set(0.6, 1, 1);
+  fuselageGroup.add(lip);
+}
+
+// --- Engine Nacelles (under rear fuselage) ---
+for (let side = -1; side <= 1; side += 2) {
+  // Nacelle body
+  const nacelleGeo = new THREE.CylinderGeometry(0.2, 0.26, 3.5, 14, 6);
+  nacelleGeo.rotateX(Math.PI / 2);
+  const nacelle = new THREE.Mesh(nacelleGeo, matFuselageDark);
+  nacelle.position.set(side * 0.4, -0.38, -2.0);
+  nacelle.castShadow = true;
+  fuselageGroup.add(nacelle);
+
+  // Outer nozzle
+  const nozzleGeo = new THREE.CylinderGeometry(0.22, 0.2, 0.7, 14, 1);
+  nozzleGeo.rotateX(Math.PI / 2);
+  const nozzle = new THREE.Mesh(nozzleGeo, matNozzle);
+  nozzle.position.set(side * 0.4, -0.38, -3.8);
+  nozzle.castShadow = true;
+  fuselageGroup.add(nozzle);
+
+  // Nozzle petals (serrated edge ring)
+  const petalRingGeo = new THREE.TorusGeometry(0.21, 0.03, 8, 16);
+  const petalRing = new THREE.Mesh(petalRingGeo, matNozzle);
+  petalRing.position.set(side * 0.4, -0.38, -4.15);
+  petalRing.rotation.x = Math.PI / 2;
+  fuselageGroup.add(petalRing);
+
+  // Inner nozzle (darker)
+  const innerNozzleGeo = new THREE.CylinderGeometry(0.18, 0.19, 0.35, 12, 1);
+  innerNozzleGeo.rotateX(Math.PI / 2);
+  const innerNozzle = new THREE.Mesh(innerNozzleGeo, matNozzleInner);
+  innerNozzle.position.set(side * 0.4, -0.38, -3.6);
+  fuselageGroup.add(innerNozzle);
+}
+
+// --- Wings Group ---
+const wingsGroup = new THREE.Group();
+
+// Helper to create an airfoil-shaped wing
+function createWingShape(rootChord, tipChord, semiSpan, sweepDist, trailSweep) {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0);                           // root LE
+  shape.lineTo(semiSpan, -sweepDist);            // tip LE
+  shape.lineTo(semiSpan - trailSweep, -sweepDist - tipChord); // tip TE
+  shape.lineTo(0, -rootChord);                   // root TE
+  shape.closePath();
+  // Leading edge curve for refinement
+  return shape;
+}
+
+// Main wings (trapezoidal, swept ~38°)
+for (let side = -1; side <= 1; side += 2) {
+  const wingShape = createWingShape(3.0, 0.7, 2.6, 2.0, 0.15);
+  const wingExtSettings = {
+    steps: 1, depth: 0.07,
+    bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 6
+  };
+  const wingGeo = new THREE.ExtrudeGeometry(wingShape, wingExtSettings);
+  wingGeo.translate(0, 0, -0.035);
+
+  const wing = new THREE.Mesh(wingGeo, matWing);
+  wing.position.set(side * 0.25, -0.08, 0.3);
+  wing.scale.x = side;
+  wing.castShadow = true;
+  wing.receiveShadow = true;
+  wingsGroup.add(wing);
+
+  // Wing leading edge (slightly lighter strip)
+  const leShape = new THREE.Shape();
+  leShape.moveTo(0, 0);
+  leShape.lineTo(2.6, -2.0);
+  leShape.lineTo(2.55, -1.98);
+  leShape.lineTo(0, 0.05);
+  leShape.closePath();
+  const leGeo = new THREE.ExtrudeGeometry(leShape, { steps: 1, depth: 0.02, bevelEnabled: false });
+  leGeo.translate(0, 0, -0.01);
+  const leMat = new THREE.MeshStandardMaterial({ color: 0xb0b6bc, roughness: 0.35, metalness: 0.2 });
+  const le = new THREE.Mesh(leGeo, leMat);
+  le.position.copy(wing.position);
+  le.scale.x = side;
+  le.position.y += 0.035;
+  wingsGroup.add(le);
+}
+
+// Horizontal stabilizers
+for (let side = -1; side <= 1; side += 2) {
+  const stabShape = createWingShape(1.4, 0.4, 1.3, 0.9, 0.1);
+  const stabGeo = new THREE.ExtrudeGeometry(stabShape, {
+    steps: 1, depth: 0.05,
+    bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 4
+  });
+  stabGeo.translate(0, 0, -0.025);
+  const stab = new THREE.Mesh(stabGeo, matWing);
+  stab.position.set(side * 0.25, 0.05, -2.8);
+  stab.scale.x = side;
+  stab.castShadow = true;
+  wingsGroup.add(stab);
+}
+
+// Vertical Stabilizers (twin canted outward tails)
+for (let side = -1; side <= 1; side += 2) {
+  const tailShape = new THREE.Shape();
+  tailShape.moveTo(0, 0);
+  tailShape.lineTo(1.4, 0.3);     // tip LE
+  tailShape.lineTo(1.1, 0.25);    // tip TE
+  tailShape.lineTo(0, -0.6);      // root TE
+  tailShape.closePath();
+  const tailGeo = new THREE.ExtrudeGeometry(tailShape, {
+    steps: 1, depth: 0.06,
+    bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 4
+  });
+  tailGeo.translate(0, 0, -0.03);
+  tailGeo.rotateX(Math.PI / 2);
+  const tail = new THREE.Mesh(tailGeo, matFuselageDark);
+  tail.position.set(side * 0.35, 0.25, -2.8);
+  tail.rotation.z = side * 0.3;   // outward cant
+  tail.rotation.y = side * 0.08;  // slight toe
+  tail.castShadow = true;
+  wingsGroup.add(tail);
+}
+
+// Tail hook (carrier landing)
+const hookArmGeo = new THREE.CylinderGeometry(0.03, 0.05, 2.0, 6);
+const hookArm = new THREE.Mesh(hookArmGeo, matGearStrut);
+hookArm.position.set(0, -0.35, -4.2);
+hookArm.rotation.x = 0.45;
+wingsGroup.add(hookArm);
+
+const hookTipGeo = new THREE.TorusGeometry(0.08, 0.025, 6, 8, Math.PI);
+const hookTip = new THREE.Mesh(hookTipGeo, matGearStrut);
+hookTip.position.set(0, -1.0, -3.2);
+hookTip.rotation.set(0, Math.PI / 2, 0);
+wingsGroup.add(hookTip);
+
+fuselageGroup.add(wingsGroup);
+jet.add(fuselageGroup);
+
+// --- Landing Gear ---
+const gearGroup = new THREE.Group();
+function createGearWheel(x, y, z, isNose) {
+  const group = new THREE.Group();
+  // Strut
+  const strutLen = isNose ? 0.55 : 0.7;
+  const strutGeo = new THREE.CylinderGeometry(0.04, 0.05, strutLen, 6);
+  const strut = new THREE.Mesh(strutGeo, matGearStrut);
+  strut.position.y = -strutLen / 2;
+  group.add(strut);
+
+  // Axle
+  const axleGeo = new THREE.CylinderGeometry(0.03, 0.03, isNose ? 0.35 : 0.5, 6);
+  axleGeo.rotateZ(Math.PI / 2);
+  const axle = new THREE.Mesh(axleGeo, matGearStrut);
+  axle.position.y = -strutLen;
+  group.add(axle);
+
+  // Wheel(s)
+  const wheelCount = isNose ? 1 : 2;
+  for (let w = 0; w < wheelCount; w++) {
+    const wheelGeo = new THREE.CylinderGeometry(0.11, 0.11, 0.06, 12);
+    wheelGeo.rotateZ(Math.PI / 2);
+    const wheel = new THREE.Mesh(wheelGeo, matWheel);
+    wheel.position.y = -strutLen - 0.02;
+    wheel.position.x = wheelCount > 1 ? (w - 0.5) * 0.25 : 0;
+    group.add(wheel);
+  }
+  group.position.set(x, y, z);
+  return group;
+}
+gearGroup.add(createGearWheel(0.32, -0.25, 1.0, false));   // right main
+gearGroup.add(createGearWheel(-0.32, -0.25, 1.0, false));  // left main
+gearGroup.add(createGearWheel(0, -0.3, 4.3, true));        // nose gear
+gearGroup.visible = true;
+jet.add(gearGroup);
+
+// --- Ordnance / Pylon details ---
+for (let side = -1; side <= 1; side += 2) {
+  for (let p = 0; p < 2; p++) {
+    const pylonGeo = new THREE.BoxGeometry(0.06, 0.15, 0.4);
+    const pylon = new THREE.Mesh(pylonGeo, matFuselageDark);
+    pylon.position.set(side * 0.8, -0.25, 0.2 + p * 1.5);
+    pylon.castShadow = true;
+    wingsGroup.add(pylon);
+  }
+}
+
+// Initial jet position on catapult
+jet.position.set(1.5, 2.0, -12);
+jet.rotation.y = 0;
+jet.rotation.x = 0;
+jet.rotation.z = 0;
+jet.scale.set(0.9, 0.9, 0.9);
+
+// ==================== PARTICLE SYSTEMS ====================
+// Catapult energy particles
+const catapultParticles = new THREE.Group();
+const catParticles = [];
+const catParticleGeo = new THREE.SphereGeometry(0.06, 4, 4);
+for (let i = 0; i < 200; i++) {
+  const mat = new THREE.MeshBasicMaterial({
+    color: new THREE.Color().setHSL(0.55 + Math.random() * 0.15, 1, 0.5 + Math.random() * 0.5),
+    transparent: true,
+    opacity: 0,
+    depthWrite: false
+  });
+  const particle = new THREE.Mesh(catParticleGeo, mat);
+  particle.visible = false;
+  particle.userData = {
+    life: 0,
+    maxLife: 0,
+    baseX: 0,
+    baseY: 1.5,
+    baseZ: 0,
+    vx: 0, vy: 0, vz: 0
+  };
+  catapultParticles.add(particle);
+  catParticles.push(particle);
+}
+carrier.add(catapultParticles);
+
+// Afterburner flames
+const flameGroup = new THREE.Group();
+jet.add(flameGroup);
+
+const flameParticles = [];
+const flameGeo = new THREE.SphereGeometry(0.08, 4, 4);
+for (let i = 0; i < 300; i++) {
+  const mat = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(),
+    transparent: true,
+    opacity: 0,
+    depthWrite: false
+  });
+  const particle = new THREE.Mesh(flameGeo, mat);
+  particle.visible = false;
+  particle.userData = {
+    life: 0, maxLife: 0,
+    engineIndex: Math.random() > 0.5 ? 1 : -1,
+    offsetX: 0, offsetY: 0, offsetZ: 0,
+    vx: 0, vy: 0, vz: 0
+  };
+  flameGroup.add(particle);
+  flameParticles.push(particle);
+}
+
+// Water spray
+const sprayGroup = new THREE.Group();
+scene.add(sprayGroup);
+const sprayParticles = [];
+const sprayGeo = new THREE.SphereGeometry(0.04, 3, 3);
+for (let i = 0; i < 150; i++) {
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xccddff,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false
+  });
+  const particle = new THREE.Mesh(sprayGeo, mat);
+  particle.visible = false;
+  particle.userData = { life: 0, maxLife: 0, vx: 0, vy: 0, vz: 0 };
+  sprayGroup.add(particle);
+  sprayParticles.push(particle);
+}
+
+// Contrails
+const contrailGroup = new THREE.Group();
+scene.add(contrailGroup);
+const contrailParticles = [];
+const contrailGeo = new THREE.SphereGeometry(0.15, 4, 4);
+for (let i = 0; i < 200; i++) {
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false
+  });
+  const particle = new THREE.Mesh(contrailGeo, mat);
+  particle.visible = false;
+  particle.userData = { life: 0, maxLife: 0 };
+  contrailGroup.add(particle);
+  contrailParticles.push(particle);
+}
+
+// ==================== SCENE DECORATION ====================
+// Cloud layer
+const cloudsGroup = new THREE.Group();
+scene.add(cloudsGroup);
+for (let i = 0; i < 30; i++) {
+  const cloudGroup = new THREE.Group();
+  const numPuffs = 3 + Math.floor(Math.random() * 5);
+  for (let j = 0; j < numPuffs; j++) {
+    const puffGeo = new THREE.SphereGeometry(0.8 + Math.random() * 2.5, 7, 5);
+    const puffMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.9,
+      metalness: 0,
+      transparent: true,
+      opacity: 0.25 + Math.random() * 0.15,
+      depthWrite: false
+    });
+    const puff = new THREE.Mesh(puffGeo, puffMat);
+    puff.position.set(
+      (Math.random() - 0.5) * 8,
+      (Math.random() - 0.5) * 1.5,
+      (Math.random() - 0.5) * 6
+    );
+    puff.scale.set(1, 1 + Math.random() * 0.5, 1);
+    cloudGroup.add(puff);
+  }
+  cloudGroup.position.set(
+    (Math.random() - 0.5) * 200,
+    25 + Math.random() * 40,
+    (Math.random() - 0.5) * 200
+  );
+  cloudGroup.userData = { speed: 0.02 + Math.random() * 0.06 };
+  cloudsGroup.add(cloudGroup);
+}
+
+// ==================== STATE MACHINE ====================
+const State = {
+  IDLE: 'idle',
+  CHARGING: 'charging',
+  LAUNCHING: 'launching',
+  TAKEOFF: 'takeoff',
+  CLIMBING: 'climbing',
+  CRUISING: 'cruising',
+  DONE: 'done'
+};
+
+let appState = State.IDLE;
+let stateTimer = 0;
+let launchProgress = 0;
+let jetSpeed = 0;
+let jetAltitude = 0;
+let jetThrust = 0;
+let jetGforce = 1.0;
+let jetAoa = 0;
+let jetHeading = 90;
+
+// Catapult parameters
+const CATAPULT_LENGTH = 28; // length of catapult run
+const CATAPULT_MAX_SPEED = 320; // km/h at end of catapult
+const CATAPULT_DURATION = 2.8; // seconds for catapult stroke
+const TAKEOFF_SPEED = 280; // km/h minimum takeoff speed
+
+// Jet position tracking
+let jetWorldPos = new THREE.Vector3();
+let prevJetPos = new THREE.Vector3();
+
+// Camera target
+let cameraTarget = new THREE.Vector3(0, 3, 0);
+let cameraLookTarget = new THREE.Vector3(0, 2, 5);
+
+// ==================== HELPER FUNCTIONS ====================
+function spawnCatapultParticle(x, z) {
+  for (const p of catParticles) {
+    if (p.userData.life <= 0) {
+      p.visible = true;
+      p.userData.life = 0.3 + Math.random() * 0.8;
+      p.userData.maxLife = p.userData.life;
+      p.userData.baseX = x + (Math.random() - 0.5) * 0.3;
+      p.userData.baseZ = z + (Math.random() - 0.5) * 0.3;
+      p.userData.baseY = 1.5;
+      p.userData.vx = (Math.random() - 0.5) * 1.5;
+      p.userData.vy = 0.5 + Math.random() * 3;
+      p.userData.vz = (Math.random() - 0.5) * 3;
+      p.position.set(p.userData.baseX, p.userData.baseY, p.userData.baseZ);
+      p.material.opacity = 1;
+      p.material.color.setHSL(0.55 + Math.random() * 0.2, 1, 0.5 + Math.random() * 0.5);
+      return;
+    }
+  }
+}
+
+function spawnFlameParticle(engineIndex) {
+  for (const p of flameParticles) {
+    if (p.userData.life <= 0) {
+      p.visible = true;
+      p.userData.life = 0.1 + Math.random() * 0.3;
+      p.userData.maxLife = p.userData.life;
+      p.userData.engineIndex = engineIndex;
+      p.userData.offsetX = (Math.random() - 0.5) * 0.15;
+      p.userData.offsetY = (Math.random() - 0.5) * 0.15;
+      p.userData.offsetZ = 0;
+      p.userData.vx = (Math.random() - 0.5) * 0.3;
+      p.userData.vy = (Math.random() - 0.5) * 0.3;
+      p.userData.vz = -2 - Math.random() * 6;
+      p.material.opacity = 1;
+      const t = Math.random();
+      p.material.color.setRGB(0.3 + t * 0.7, 0.15 + t * 0.3, 0.02 + t * 0.08);
+      return;
+    }
+  }
+}
+
+function spawnSprayParticle(x, y, z) {
+  for (const p of sprayParticles) {
+    if (p.userData.life <= 0) {
+      p.visible = true;
+      p.userData.life = 0.5 + Math.random() * 1.5;
+      p.userData.maxLife = p.userData.life;
+      p.userData.vx = (Math.random() - 0.5) * 4;
+      p.userData.vy = 1 + Math.random() * 5;
+      p.userData.vz = (Math.random() - 0.5) * 8;
+      p.position.set(x, y, z);
+      p.material.opacity = 0.7;
+      return;
+    }
+  }
+}
+
+function spawnContrailParticle(x, y, z) {
+  for (const p of contrailParticles) {
+    if (p.userData.life <= 0) {
+      p.visible = true;
+      p.userData.life = 1.5 + Math.random() * 3;
+      p.userData.maxLife = p.userData.life;
+      p.position.set(
+        x + (Math.random() - 0.5) * 0.5,
+        y + (Math.random() - 0.5) * 0.3,
+        z + (Math.random() - 0.5) * 0.5
+      );
+      p.material.opacity = 0.35;
+      p.scale.setScalar(0.5 + Math.random());
+      return;
+    }
+  }
+}
+
+// ==================== HUD UPDATE ====================
+function updateHUD() {
+  const speed = Math.round(jetSpeed);
+  const alt = Math.round(jetAltitude);
+  const thrust = Math.round(jetThrust);
+  const gforce = jetGforce.toFixed(1);
+
+  elSpeed.textContent = speed;
+  elAlt.textContent = alt;
+  elThrust.textContent = thrust;
+  elGforce.textContent = gforce;
+  statAoa.textContent = jetAoa.toFixed(1) + '°';
+  statHdg.textContent = String(Math.round(jetHeading)).padStart(3, '0');
+
+  barSpeed.style.width = Math.min(100, (speed / 1200) * 100) + '%';
+  barAlt.style.width = Math.min(100, (alt / 10000) * 100) + '%';
+  barThrust.style.width = Math.min(100, (thrust / 300) * 100) + '%';
+  barGforce.style.width = Math.min(100, (gforce / 10) * 100) + '%';
+
+  // Color speed based on value
+  if (speed > 800) {
+    elSpeed.style.color = '#ff6d6d';
+  } else if (speed > 300) {
+    elSpeed.style.color = '#ffab00';
+  } else {
+    elSpeed.style.color = '#ffffff';
+  }
+
+  switch (appState) {
+    case State.IDLE:
+      statLaunch.textContent = '就绪';
+      statCatapult.textContent = 'CAT-1';
+      break;
+    case State.CHARGING:
+      statLaunch.textContent = '储能中';
+      statCatapult.textContent = 'CAT-1 ⚡';
+      break;
+    case State.LAUNCHING:
+      statLaunch.textContent = '弹射中!';
+      statCatapult.textContent = 'CAT-1 ▸';
+      break;
+    case State.TAKEOFF:
+      statLaunch.textContent = '离舰!';
+      statCatapult.textContent = '---';
+      break;
+    case State.CLIMBING:
+      statLaunch.textContent = '爬升';
+      statCatapult.textContent = '---';
+      break;
+    case State.CRUISING:
+      statLaunch.textContent = '巡航';
+      statCatapult.textContent = '---';
+      break;
+    default:
+      statLaunch.textContent = '完成';
+  }
+}
+
+// ==================== LAUNCH SEQUENCE ====================
+function startLaunch() {
+  if (appState !== State.IDLE && appState !== State.DONE) return;
+  appState = State.CHARGING;
+  stateTimer = 0;
+  launchProgress = 0;
+  jetSpeed = 0;
+  jetAltitude = 0;
+  jetThrust = 0;
+  jetGforce = 1.0;
+  jetAoa = 0;
+  jetHeading = 90;
+
+  // Reset jet position
+  jet.position.set(1.5, 2.0, -12);
+  jet.rotation.set(0, 0, 0);
+  gearGroup.visible = true;
+
+  // Reset camera
+  cameraTarget.set(4, 3, -8);
+  cameraLookTarget.set(1.5, 2.0, -5);
+
+  launchOverlay.classList.add('hidden');
+  statLaunch.textContent = '储能中...';
+}
+
+function resetScene() {
+  appState = State.IDLE;
+  stateTimer = 0;
+  launchProgress = 0;
+  jetSpeed = 0;
+  jetAltitude = 0;
+  jetThrust = 0;
+  jetGforce = 1.0;
+  jetAoa = 0;
+  jetHeading = 90;
+
+  jet.position.set(1.5, 2.0, -12);
+  jet.rotation.set(0, 0, 0);
+  gearGroup.visible = true;
+
+  cameraTarget.set(10, 5, 0);
+  cameraLookTarget.set(0, 2, 2);
+
+  // Clear particles
+  for (const p of catParticles) { p.userData.life = 0; p.visible = false; }
+  for (const p of flameParticles) { p.userData.life = 0; p.visible = false; }
+  for (const p of sprayParticles) { p.userData.life = 0; p.visible = false; }
+  for (const p of contrailParticles) { p.userData.life = 0; p.visible = false; }
+
+  catapult1.glow.material.opacity = 0.4;
+  catapult2.glow.material.opacity = 0.4;
+
+  launchOverlay.classList.remove('hidden');
+  updateHUD();
+}
+
+// ==================== EVENT HANDLERS ====================
+launchBtn.addEventListener('click', startLaunch);
+
+window.addEventListener('keydown', (e) => {
+  switch (e.key.toLowerCase()) {
+    case ' ':
+    case 'enter':
+      e.preventDefault();
+      if (appState === State.IDLE || appState === State.DONE) startLaunch();
+      break;
+    case 'r':
+      resetScene();
+      break;
+    case 'c':
+      // Toggle camera mode
+      controls.target.set(0, 2, 8);
+      camera.position.set(25, 8, 20);
+      controls.update();
+      break;
+    case '1':
+      // View 1: Deck level
+      controls.target.set(1.5, 2, -8);
+      camera.position.set(8, 3.5, -5);
+      controls.update();
+      break;
+    case '2':
+      // View 2: Side view
+      controls.target.set(0, 5, 5);
+      camera.position.set(30, 8, -5);
+      controls.update();
+      break;
+    case '3':
+      // View 3: Top-down
+      controls.target.set(0, 5, 0);
+      camera.position.set(0, 40, 5);
+      controls.update();
+      break;
+    case 'f':
+      // Follow jet
+      controls.target.copy(jet.position);
+      controls.update();
+      break;
+  }
+});
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Touch support
+launchOverlay.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  startLaunch();
+});
+
+// ==================== ANIMATION LOOP ====================
+const clock = new THREE.Clock();
+
+function animate(timestamp) {
+  requestAnimationFrame(animate);
+
+  const dt = Math.min(clock.getDelta(), 0.1);
+  const elapsed = timestamp * 0.001;
+
+  stateTimer += dt;
+
+  // Update sky
+  skyMat.uniforms.uTime.value = elapsed;
+
+  // Update ocean
+  oceanMat.uniforms.uTime.value = elapsed;
+
+  // Animate clouds
+  for (const cloud of cloudsGroup.children) {
+    cloud.position.x += cloud.userData.speed * dt;
+    if (cloud.position.x > 120) cloud.position.x = -120;
+    if (cloud.position.x < -120) cloud.position.x = 120;
+  }
+
+  // ===== STATE MACHINE =====
+  switch (appState) {
+    case State.CHARGING: {
+      // Energy buildup: 1.5 seconds
+      const chargeProgress = Math.min(stateTimer / 1.5, 1.0);
+      const glowIntensity = 0.4 + chargeProgress * 2.5;
+      catapult1.glow.material.opacity = glowIntensity;
+      catapult2.glow.material.opacity = glowIntensity * 0.5;
+
+      // Charge particles along track
+      if (Math.random() < chargeProgress * 0.7) {
+        const z = -14 + chargeProgress * 30 + (Math.random() - 0.5) * 8;
+        spawnCatapultParticle(1.5, z);
+      }
+
+      // Camera zoom in during charge
+      const targetCam = new THREE.Vector3(4, 2.5, -10);
+      cameraTarget.lerp(targetCam, 2 * dt);
+      cameraLookTarget.lerp(new THREE.Vector3(1.5, 2.0, -8), 2 * dt);
+
+      jetThrust = chargeProgress * 50; // idle thrust buildup
+
+      if (chargeProgress >= 1.0) {
+        appState = State.LAUNCHING;
+        stateTimer = 0;
+        jetThrust = 280; // full afterburner
+      }
+      break;
+    }
+
+    case State.LAUNCHING: {
+      // Catapult stroke
+      const launchT = Math.min(stateTimer / CATAPULT_DURATION, 1.0);
+      // Ease-in acceleration curve (electromagnetic catapult ramps up)
+      const easedT = launchT < 0.2
+        ? (launchT / 0.2) * (launchT / 0.2) * 0.3
+        : 0.3 + 0.7 * ((launchT - 0.2) / 0.8);
+
+      const zPos = -12 + easedT * CATAPULT_LENGTH;
+      jet.position.z = zPos;
+      jet.position.x = 1.5;
+      jet.position.y = 2.0;
+      jet.rotation.set(0, 0, 0);
+
+      jetSpeed = easedT * CATAPULT_MAX_SPEED;
+      jetAltitude = 0;
+      jetThrust = 280 + easedT * 20;
+      jetGforce = 1.0 + easedT * 3.5;
+      jetAoa = 0;
+
+      // Intense catapult particles
+      for (let i = 0; i < 8; i++) {
+        spawnCatapultParticle(1.5, zPos + (Math.random() - 0.5) * 2);
+      }
+
+      // Sparks along track
+      catapult1.glow.material.opacity = 2.0 + Math.random() * 1.5;
+      catapult1.glow.material.color.setHSL(0.55 + Math.random() * 0.1, 1, 0.7 + Math.random() * 0.3);
+
+      // Start flame as speed builds
+      if (jetSpeed > 80) {
+        for (let i = 0; i < 3; i++) {
+          spawnFlameParticle(1);
+          spawnFlameParticle(-1);
+        }
+      }
+
+      // Water spray along carrier side
+      if (Math.random() < 0.5) {
+        const wx = 1.5 + (Math.random() - 0.5) * 3;
+        const wz = zPos - 2 + Math.random() * 3;
+        spawnSprayParticle(wx, 0, wz);
+      }
+
+      // Camera follows jet
+      cameraTarget.lerp(new THREE.Vector3(1.5, 2.5, zPos + 3), 5 * dt);
+      cameraLookTarget.lerp(new THREE.Vector3(1.5, 2.0, zPos + 6), 5 * dt);
+
+      if (launchT >= 1.0) {
+        appState = State.TAKEOFF;
+        stateTimer = 0;
+        gearGroup.visible = false; // retract gear
+      }
+      break;
+    }
+
+    case State.TAKEOFF: {
+      // Jet leaves the deck, pitch up
+      const takeoffT = Math.min(stateTimer / 2.5, 1.0);
+
+      jet.position.z += jetSpeed * 0.28 * dt; // speed to m/s approximate
+      jet.position.y += (6 + takeoffT * 25) * dt;
+      jet.position.x += (0.3 * dt);
+
+      // Pitch up rotation
+      const targetPitch = -0.35;
+      jet.rotation.x += (targetPitch - jet.rotation.x) * 3 * dt;
+
+      jetSpeed += (400 - jetSpeed) * 0.4 * dt;
+      jetAltitude = (jet.position.y - 2.0) * 3; // scale for display
+      jetThrust = 290;
+      jetGforce = 2.0 + takeoffT * 1.5;
+      jetAoa = Math.abs(jet.rotation.x) * 57.3;
+      jetHeading = 90 + takeoffT * 5;
+
+      // Heavy afterburner
+      for (let i = 0; i < 8; i++) {
+        spawnFlameParticle(1);
+        spawnFlameParticle(-1);
+      }
+
+      // Water spray behind
+      if (jet.position.y < 8) {
+        for (let i = 0; i < 3; i++) {
+          spawnSprayParticle(jet.position.x, 0.2, jet.position.z - 3 - Math.random() * 8);
+        }
+      }
+
+      // Camera: pull back and up
+      cameraTarget.lerp(new THREE.Vector3(8, jet.position.y + 5, jet.position.z - 5), 3 * dt);
+      cameraLookTarget.lerp(new THREE.Vector3(
+        jet.position.x, jet.position.y + 2, jet.position.z + 8
+      ), 3 * dt);
+
+      if (takeoffT >= 1.0 || jetAltitude > 150) {
+        appState = State.CLIMBING;
+        stateTimer = 0;
+      }
+      break;
+    }
+
+    case State.CLIMBING: {
+      // Rapid climb
+      const climbT = Math.min(stateTimer / 5.0, 1.0);
+
+      jet.position.z += jetSpeed * 0.28 * dt;
+      jet.position.y += (40 + climbT * 60) * dt;
+      jet.position.x += 0.5 * dt;
+
+      // Smooth pitch adjustment
+      const targetPitch = -0.5 + climbT * 0.35;
+      jet.rotation.x += (targetPitch - jet.rotation.x) * 2 * dt;
+
+      // Gentle bank
+      const targetRoll = Math.sin(elapsed * 0.3) * 0.08;
+      jet.rotation.z += (targetRoll - jet.rotation.z) * dt;
+
+      jetSpeed += (850 - jetSpeed) * 0.25 * dt;
+      jetAltitude = (jet.position.y - 2.0) * 4;
+      jetThrust = 295;
+      jetGforce = 2.5 + climbT * 2.0;
+      jetAoa = Math.abs(jet.rotation.x) * 57.3;
+      jetHeading = 95 + climbT * 15;
+
+      // Afterburner
+      for (let i = 0; i < 5; i++) {
+        spawnFlameParticle(1);
+        spawnFlameParticle(-1);
+      }
+
+      // Contrails at high altitude
+      if (jet.position.y > 25) {
+        const worldPos = new THREE.Vector3();
+        jet.getWorldPosition(worldPos);
+        for (let i = 0; i < 2; i++) {
+          spawnContrailParticle(worldPos.x, worldPos.y - 0.5, worldPos.z - 2 - Math.random() * 4);
+        }
+      }
+
+      // Camera: wide cinematic
+      cameraTarget.lerp(new THREE.Vector3(15, jet.position.y + 8, jet.position.z - 15), 1.5 * dt);
+      cameraLookTarget.lerp(new THREE.Vector3(
+        jet.position.x + 2, jet.position.y, jet.position.z + 10
+      ), 2 * dt);
+
+      if (climbT >= 1.0 || jetAltitude > 5000) {
+        appState = State.CRUISING;
+        stateTimer = 0;
+      }
+      break;
+    }
+
+    case State.CRUISING: {
+      // Level flight, high speed cruise
+      jet.position.z += jetSpeed * 0.28 * dt;
+      jet.position.y += Math.sin(elapsed * 0.2) * 2 * dt;
+      jet.position.x += Math.cos(elapsed * 0.15) * 3 * dt;
+
+      jet.rotation.x += (-0.08 - jet.rotation.x) * 0.5 * dt;
+      jet.rotation.z += (Math.sin(elapsed * 0.25) * 0.1 - jet.rotation.z) * 0.5 * dt;
+
+      jetSpeed += (950 - jetSpeed) * 0.15 * dt;
+      jetAltitude = 5000 + Math.sin(elapsed * 0.2) * 200;
+      jetThrust = 250 + Math.sin(elapsed * 0.5) * 20;
+      jetGforce = 1.0 + Math.abs(Math.sin(elapsed * 0.25)) * 1.5;
+      jetAoa = 2 + Math.sin(elapsed * 0.3) * 1.5;
+      jetHeading = 110 + Math.sin(elapsed * 0.15) * 10;
+
+      // Subtle afterburner
+      if (Math.random() < 0.3) {
+        spawnFlameParticle(1);
+        spawnFlameParticle(-1);
+      }
+
+      // Contrails
+      const worldPos = new THREE.Vector3();
+      jet.getWorldPosition(worldPos);
+      for (let i = 0; i < 3; i++) {
+        spawnContrailParticle(worldPos.x, worldPos.y - 0.5, worldPos.z - 2 - Math.random() * 6);
+      }
+
+      // Camera: cinematic orbit
+      const orbitAngle = elapsed * 0.2;
+      const orbitRadius = 25;
+      cameraTarget.lerp(new THREE.Vector3(
+        jet.position.x + Math.cos(orbitAngle) * orbitRadius,
+        jet.position.y + 10,
+        jet.position.z + Math.sin(orbitAngle) * orbitRadius
+      ), 0.8 * dt);
+      cameraLookTarget.lerp(new THREE.Vector3(
+        jet.position.x, jet.position.y, jet.position.z + 5
+      ), 2 * dt);
+
+      if (stateTimer > 30) {
+        appState = State.DONE;
+        launchOverlay.classList.remove('hidden');
+        launchBtn.textContent = '↻ 重新弹射';
+      }
+      break;
+    }
+
+    case State.DONE:
+      // Jet continues cruising
+      jet.position.z += 900 * 0.28 * dt;
+      jet.position.y += Math.sin(elapsed * 0.2) * 2 * dt;
+      jet.rotation.x += (-0.05 - jet.rotation.x) * 0.3 * dt;
+      break;
+  }
+
+  // ===== UPDATE PARTICLES =====
+  // Catapult particles
+  for (const p of catParticles) {
+    if (p.userData.life > 0) {
+      p.userData.life -= dt;
+      const progress = 1 - p.userData.life / p.userData.maxLife;
+      p.position.x = p.userData.baseX + p.userData.vx * progress * 3;
+      p.position.y = p.userData.baseY + p.userData.vy * progress * 2;
+      p.position.z = p.userData.baseZ + p.userData.vz * progress * 2;
+      p.material.opacity = Math.max(0, (1 - progress) * 1.2);
+      p.scale.setScalar(0.5 + progress * 2);
+      if (p.userData.life <= 0) p.visible = false;
+    }
+  }
+  // Fade catapult glow
+  if (appState !== State.CHARGING && appState !== State.LAUNCHING) {
+    catapult1.glow.material.opacity += (0.4 - catapult1.glow.material.opacity) * 2 * dt;
+    catapult2.glow.material.opacity += (0.4 - catapult2.glow.material.opacity) * 2 * dt;
+  }
+
+  // Flame particles
+  jet.getWorldPosition(jetWorldPos);
+  const jetQuat = new THREE.Quaternion();
+  jet.getWorldQuaternion(jetQuat);
+
+  for (const p of flameParticles) {
+    if (p.userData.life > 0) {
+      p.userData.life -= dt;
+      const progress = 1 - p.userData.life / p.userData.maxLife;
+      const engineX = p.userData.engineIndex * 0.4;
+      const localPos = new THREE.Vector3(
+        engineX + p.userData.offsetX + p.userData.vx * progress * 2,
+        -0.38 + p.userData.offsetY + p.userData.vy * progress * 1.5,
+        -3.8 + p.userData.offsetZ + p.userData.vz * progress * 1.5
+      );
+      localPos.applyQuaternion(jetQuat);
+      p.position.copy(jetWorldPos).add(localPos);
+      p.material.opacity = Math.max(0, (1 - progress) * 0.9);
+      p.scale.setScalar(0.3 + progress * 1.5);
+      if (p.userData.life <= 0) p.visible = false;
+    }
+  }
+
+  // Spray particles
+  for (const p of sprayParticles) {
+    if (p.userData.life > 0) {
+      p.userData.life -= dt;
+      p.position.x += p.userData.vx * dt;
+      p.position.y += p.userData.vy * dt;
+      p.position.z += p.userData.vz * dt;
+      p.userData.vy -= 4 * dt; // gravity
+      p.material.opacity = Math.max(0, p.userData.life / p.userData.maxLife * 0.6);
+      if (p.position.y < -1 || p.userData.life <= 0) {
+        p.userData.life = 0;
+        p.visible = false;
+      }
+    }
+  }
+
+  // Contrail particles
+  for (const p of contrailParticles) {
+    if (p.userData.life > 0) {
+      p.userData.life -= dt;
+      const progress = 1 - p.userData.life / p.userData.maxLife;
+      p.material.opacity = Math.max(0, (1 - progress) * 0.3);
+      p.scale.setScalar(p.scale.x + progress * 1.2 * dt);
+      p.position.y += 0.5 * dt;
+      if (p.userData.life <= 0) p.visible = false;
+    }
+  }
+
+  // ===== UPDATE CAMERA (smooth follow) =====
+  if (appState === State.LAUNCHING || appState === State.TAKEOFF ||
+      appState === State.CLIMBING || appState === State.CRUISING) {
+    controls.target.lerp(cameraLookTarget, 3 * dt);
+    // Smooth camera position approach
+    const camDir = new THREE.Vector3().subVectors(cameraTarget, camera.position);
+    const camDist = camDir.length();
+    if (camDist > 0.5) {
+      camera.position.lerp(cameraTarget, 2.5 * dt);
+    }
+  }
+
+  controls.update();
+
+  // ===== UPDATE HUD =====
+  updateHUD();
+
+  // ===== RENDER =====
+  renderer.render(scene, camera);
+
+  prevJetPos.copy(jetWorldPos);
+}
+
+// ==================== INITIAL CAMERA ====================
+camera.position.set(20, 8, 15);
+cameraLookTarget.set(1.5, 2.5, -8);
+controls.target.copy(cameraLookTarget);
+controls.update();
+
+// ==================== START ====================
+updateHUD();
+requestAnimationFrame(animate);
+
+console.log('🚀 电磁弹射战斗机 3D 场景已就绪');
+console.log('  点击 [弹射起飞] 按钮或按 空格键 开始');
+console.log('  按 R 重置场景');
+console.log('  按 1/2/3 切换视角');
+console.log('  按 F 跟随战机');
+console.log('  鼠标拖动/滚轮 自由旋转视角');
+
+// Show loading complete
+document.body.style.opacity = '1';
+</script>
+</body>
+</html>

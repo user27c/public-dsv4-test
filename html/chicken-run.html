@@ -1,0 +1,1450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Chicken Run: Dalí's Melting World</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Amatic+SC:wght@400;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    overflow: hidden;
+    background: #1a0a00;
+    font-family: 'Amatic SC', cursive;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #game-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  canvas { display: block; }
+
+  /* --- HUD --- */
+  #hud {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    pointer-events: none;
+    padding: 20px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    z-index: 10;
+  }
+
+  #score-panel {
+    background: rgba(20, 10, 0, 0.65);
+    backdrop-filter: blur(6px);
+    border: 2px solid rgba(218, 165, 32, 0.5);
+    border-radius: 16px;
+    padding: 8px 22px;
+    color: #daa520;
+    font-size: 2.2rem;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-shadow: 0 0 20px rgba(218, 165, 32, 0.6);
+  }
+
+  #score-panel span { font-size: 1rem; display: block; letter-spacing: 2px; opacity: 0.8; }
+
+  #speed-indicator {
+    background: rgba(20, 10, 0, 0.55);
+    backdrop-filter: blur(6px);
+    border: 2px solid rgba(200, 100, 50, 0.5);
+    border-radius: 12px;
+    padding: 6px 16px;
+    color: #c86432;
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+  }
+
+  /* --- Overlays --- */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    pointer-events: none;
+    transition: opacity 0.5s;
+  }
+  .overlay.hidden { opacity: 0; }
+
+  #start-screen { background: rgba(10, 5, 0, 0.75); }
+  #start-screen.hidden { pointer-events: none; }
+  #start-screen:not(.hidden) { pointer-events: all; }
+
+  #game-over-screen { background: rgba(30, 5, 5, 0.8); }
+  #game-over-screen.hidden { pointer-events: none; }
+  #game-over-screen:not(.hidden) { pointer-events: all; }
+
+  .title {
+    font-family: 'Amatic SC', cursive;
+    font-size: 5rem;
+    font-weight: 700;
+    color: #daa520;
+    text-shadow: 0 0 40px rgba(218, 165, 32, 0.7), 0 4px 8px rgba(0,0,0,0.6);
+    letter-spacing: 6px;
+    margin-bottom: 8px;
+    text-align: center;
+    line-height: 1;
+  }
+
+  .subtitle {
+    font-family: 'Amatic SC', cursive;
+    font-size: 1.6rem;
+    color: #c8a882;
+    letter-spacing: 4px;
+    margin-bottom: 30px;
+    text-align: center;
+    font-style: italic;
+  }
+
+  .btn {
+    font-family: 'Amatic SC', cursive;
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: 3px;
+    padding: 12px 48px;
+    border: 2px solid #daa520;
+    border-radius: 50px;
+    background: rgba(218, 165, 32, 0.25);
+    color: #daa520;
+    cursor: pointer;
+    transition: all 0.3s;
+    backdrop-filter: blur(4px);
+  }
+  .btn:hover {
+    background: rgba(218, 165, 32, 0.45);
+    box-shadow: 0 0 30px rgba(218, 165, 32, 0.5);
+    transform: scale(1.05);
+  }
+
+  .game-over-title {
+    font-size: 4.5rem;
+    color: #e04040;
+    text-shadow: 0 0 30px rgba(224, 64, 64, 0.6);
+    letter-spacing: 6px;
+    margin-bottom: 4px;
+  }
+
+  .final-score {
+    font-size: 3rem;
+    color: #daa520;
+    margin-bottom: 20px;
+    letter-spacing: 4px;
+  }
+
+  /* --- Mobile controls --- */
+  #mobile-controls {
+    position: absolute;
+    bottom: 20px;
+    left: 0; right: 0;
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    z-index: 15;
+    pointer-events: none;
+  }
+
+  .ctrl-btn {
+    pointer-events: all;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 2px solid rgba(218, 165, 32, 0.6);
+    background: rgba(20, 10, 0, 0.5);
+    backdrop-filter: blur(4px);
+    color: #daa520;
+    font-size: 1.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .ctrl-btn:active {
+    background: rgba(218, 165, 32, 0.4);
+    transform: scale(0.9);
+    box-shadow: 0 0 20px rgba(218,165,32,0.5);
+  }
+  .ctrl-btn.jump-btn {
+    width: 80px; height: 80px;
+    font-size: 2.2rem;
+    border-color: rgba(255,180,80,0.7);
+    color: #ffb450;
+  }
+
+  @media (min-width: 768px) {
+    #mobile-controls { display: none; }
+  }
+
+  /* Key hints */
+  #key-hints {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(200,180,160,0.7);
+    font-size: 1.1rem;
+    letter-spacing: 2px;
+    z-index: 10;
+    pointer-events: none;
+  }
+  @media (max-width: 767px) {
+    #key-hints { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <div id="hud">
+    <div id="score-panel">
+      <span>GRAINS</span>
+      <div id="score-value">0</div>
+    </div>
+    <div id="speed-indicator">🏃 ×<span id="speed-mult">1</span></div>
+  </div>
+
+  <div id="start-screen" class="overlay">
+    <div class="title">CHICKEN RUN</div>
+    <div class="subtitle">through Dalí's melting world</div>
+    <button class="btn" id="start-btn">START RUNNING</button>
+    <div id="key-hints">← → SWITCH LANES &nbsp;|&nbsp; ↑ JUMP &nbsp;|&nbsp; ↓ DUCK</div>
+  </div>
+
+  <div id="game-over-screen" class="overlay hidden">
+    <div class="game-over-title">PLUCKED!</div>
+    <div class="final-score"><span id="final-score">0</span> grains</div>
+    <button class="btn" id="restart-btn">RUN AGAIN</button>
+  </div>
+
+  <div id="mobile-controls">
+    <button class="ctrl-btn" id="btn-left">◀</button>
+    <button class="ctrl-btn jump-btn" id="btn-jump">▲</button>
+    <button class="ctrl-btn" id="btn-right">▶</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+// ==================== CHICKEN RUN: DALÍ'S MELTING WORLD ====================
+
+// ─── DOM ELEMENTS ────────────────────────────────────────────────────────
+const scoreValue     = document.getElementById('score-value');
+const speedMult      = document.getElementById('speed-mult');
+const startScreen    = document.getElementById('start-screen');
+const gameOverScreen = document.getElementById('game-over-screen');
+const finalScore     = document.getElementById('final-score');
+const startBtn       = document.getElementById('start-btn');
+const restartBtn     = document.getElementById('restart-btn');
+const btnLeft        = document.getElementById('btn-left');
+const btnRight       = document.getElementById('btn-right');
+const btnJump        = document.getElementById('btn-jump');
+
+// ─── THREE.JS SETUP ──────────────────────────────────────────────────────
+const WIDTH  = window.innerWidth;
+const HEIGHT = window.innerHeight;
+
+const scene    = new THREE.Scene();
+scene.background = new THREE.Color(0x1a2a3a);
+scene.fog = new THREE.FogExp2(0x2a1a0a, 0.00015);
+
+const camera = new THREE.PerspectiveCamera(65, WIDTH / HEIGHT, 0.5, 200);
+camera.position.set(0, 6, 10);
+camera.lookAt(0, 1.5, -5);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(WIDTH, HEIGHT);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+document.getElementById('game-container').appendChild(renderer.domElement);
+
+// ─── LIGHTING ────────────────────────────────────────────────────────────
+const ambientLight = new THREE.AmbientLight(0xffd8a0, 0.6);
+scene.add(ambientLight);
+
+const sunLight = new THREE.DirectionalLight(0xffe8c0, 4.5);
+sunLight.position.set(15, 25, 5);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.width  = 2048;
+sunLight.shadow.mapSize.height = 2048;
+sunLight.shadow.camera.near   = 1;
+sunLight.shadow.camera.far    = 80;
+sunLight.shadow.camera.left   = -20;
+sunLight.shadow.camera.right  = 20;
+sunLight.shadow.camera.top    = 20;
+sunLight.shadow.camera.bottom = -5;
+sunLight.shadow.bias = -0.0001;
+scene.add(sunLight);
+
+const rimLight = new THREE.DirectionalLight(0x8090ff, 2.0);
+rimLight.position.set(-8, 5, -5);
+scene.add(rimLight);
+
+// ─── SKY ─────────────────────────────────────────────────────────────────
+const skyGeom = new THREE.SphereGeometry(60, 32, 32);
+const skyMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide,
+  uniforms: {
+    uTime: { value: 0 },
+    uColor1: { value: new THREE.Color(0x3a1a0a) },
+    uColor2: { value: new THREE.Color(0x8a6a3a) },
+    uColor3: { value: new THREE.Color(0xd4a860) },
+  },
+  vertexShader: /*glsl*/`
+    varying vec3 vPos;
+    void main() {
+      vPos = position;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }`,
+  fragmentShader: /*glsl*/`
+    varying vec3 vPos;
+    uniform float uTime;
+    uniform vec3 uColor1, uColor2, uColor3;
+    void main() {
+      float h = normalize(vPos).y;
+      float t = smoothstep(-0.2, 1.0, h);
+      vec3 col = mix(uColor1, uColor2, t);
+      col = mix(col, uColor3, smoothstep(0.5, 1.0, t));
+      // subtle wave
+      float wave = sin(vPos.x * 0.3 + uTime * 0.1) * cos(vPos.z * 0.3 + uTime * 0.07) * 0.05;
+      col += wave;
+      gl_FragColor = vec4(col, 1.0);
+    }`
+});
+const sky = new THREE.Mesh(skyGeom, skyMat);
+sky.renderOrder = -1;
+scene.add(sky);
+
+// ─── GROUND ──────────────────────────────────────────────────────────────
+// Surreal wavy ground
+const groundGeom = new THREE.PlaneGeometry(60, 120, 80, 120);
+const groundPos = groundGeom.attributes.position;
+for (let i = 0; i < groundPos.count; i++) {
+  const x = groundPos.getX(i);
+  const y = groundPos.getY(i);
+  // Gentle surreal waves
+  const wave = Math.sin(x * 0.4) * Math.cos(y * 0.3) * 0.6
+             + Math.sin(x * 0.15 + y * 0.2) * 1.2
+             + Math.cos(y * 0.25) * 0.4;
+  groundPos.setZ(i, wave);
+}
+groundGeom.computeVertexNormals();
+
+const groundMat = new THREE.MeshStandardMaterial({
+  color: 0x9b7a5a,
+  roughness: 0.85,
+  metalness: 0.05,
+  flatShading: false,
+});
+const ground = new THREE.Mesh(groundGeom, groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.4;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Path / lanes (three lighter strips)
+function createLane(xPos) {
+  const geom = new THREE.PlaneGeometry(1.8, 120, 4, 60);
+  const pos = geom.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const px = pos.getX(i);
+    const py = pos.getY(i);
+    const wave = Math.sin(px * 0.4 + xPos) * Math.cos(py * 0.3) * 0.6
+               + Math.sin(px * 0.15 + py * 0.2 + xPos) * 1.2
+               + Math.cos(py * 0.25) * 0.4;
+    pos.setZ(i, wave + 0.05);
+  }
+  geom.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0xc8a870,
+    roughness: 0.7,
+    metalness: 0.1,
+  });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(xPos, -0.35, 0);
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+const lanes = [
+  createLane(-3),  // left
+  createLane(0),   // center
+  createLane(3),   // right
+];
+lanes.forEach(l => scene.add(l));
+
+// Lane divider lines
+function createDivider(xPos) {
+  const geom = new THREE.BoxGeometry(0.12, 0.02, 120);
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0xe8d5a0,
+    roughness: 0.3,
+    metalness: 0.4,
+    emissive: 0x221100,
+    emissiveIntensity: 0.3,
+  });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(xPos, -0.33, 0);
+  mesh.receiveShadow = true;
+  return mesh;
+}
+const dividerLeft  = createDivider(-1.5);
+const dividerRight = createDivider(1.5);
+scene.add(dividerLeft);
+scene.add(dividerRight);
+
+// ─── SURREAL SCENERY ────────────────────────────────────────────────────
+// Melting pillar things on the sides (Dalí-esque)
+function createSurrealPillar(x, z) {
+  const group = new THREE.Group();
+  const height = 2 + Math.random() * 4;
+  const geom = new THREE.CylinderGeometry(0.2, 0.5, height, 8, 4);
+  // Deform the pillar
+  const pos = geom.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const py = pos.getY(i);
+    const px = pos.getX(i);
+    const pz = pos.getZ(i);
+    const bend = Math.sin(py * 1.5) * 0.4;
+    pos.setX(i, px + bend);
+    pos.setZ(i, pz + bend * 0.7);
+  }
+  geom.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color().setHSL(0.1 + Math.random() * 0.08, 0.3, 0.3 + Math.random() * 0.3),
+    roughness: 0.7,
+    metalness: 0.2,
+  });
+  const pillar = new THREE.Mesh(geom, mat);
+  pillar.position.y = height / 2;
+  pillar.castShadow = true;
+  pillar.receiveShadow = true;
+  group.add(pillar);
+
+  // Small melting blob on top
+  const blobGeom = new THREE.SphereGeometry(0.3, 8, 6);
+  const blobPos = blobGeom.attributes.position;
+  for (let i = 0; i < blobPos.count; i++) {
+    const by = blobPos.getY(i);
+    if (by < 0) blobPos.setY(i, by * 1.6);
+    blobPos.setX(i, blobPos.getX(i) * (0.8 + Math.random() * 0.4));
+  }
+  blobGeom.computeVertexNormals();
+  const blob = new THREE.Mesh(blobGeom, mat);
+  blob.position.y = height;
+  blob.scale.set(1.2, 0.6, 1.2);
+  group.add(blob);
+
+  group.position.set(x, -0.3, z);
+  return group;
+}
+
+const sceneryObjects = [];
+for (let i = 0; i < 40; i++) {
+  const side = (Math.random() > 0.5 ? 1 : -1);
+  const x = side * (6 + Math.random() * 12);
+  const z = (Math.random() - 0.5) * 100;
+  const pillar = createSurrealPillar(x, z);
+  scene.add(pillar);
+  sceneryObjects.push({ mesh: pillar, x, z });
+}
+
+// ─── CHICKEN MODEL ───────────────────────────────────────────────────────
+function createChicken() {
+  const chicken = new THREE.Group();
+
+  // Body (egg shape)
+  const bodyGeom = new THREE.SphereGeometry(0.45, 24, 24);
+  const bodyPos = bodyGeom.attributes.position;
+  for (let i = 0; i < bodyPos.count; i++) {
+    bodyPos.setX(i, bodyPos.getX(i) * 0.75);
+    bodyPos.setY(i, bodyPos.getY(i) * 0.85);
+    bodyPos.setZ(i, bodyPos.getZ(i) * 0.9);
+  }
+  bodyGeom.computeVertexNormals();
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0xf5efe0,
+    roughness: 0.6,
+    metalness: 0.05,
+  });
+  const body = new THREE.Mesh(bodyGeom, bodyMat);
+  body.position.y = 0.55;
+  body.castShadow = true;
+  chicken.add(body);
+
+  // Head
+  const headGeom = new THREE.SphereGeometry(0.25, 20, 20);
+  const head = new THREE.Mesh(headGeom, bodyMat);
+  head.position.set(0, 0.95, 0.25);
+  head.castShadow = true;
+  chicken.add(head);
+
+  // Comb (red)
+  const combMat = new THREE.MeshStandardMaterial({
+    color: 0xcc2200,
+    roughness: 0.4,
+    metalness: 0.1,
+  });
+  for (let i = 0; i < 3; i++) {
+    const combGeom = new THREE.SphereGeometry(0.09, 8, 8);
+    combGeom.scale(1, 1.3, 0.6);
+    const comb = new THREE.Mesh(combGeom, combMat);
+    comb.position.set((i - 1) * 0.1, 1.15, 0.28);
+    comb.castShadow = true;
+    chicken.add(comb);
+  }
+
+  // Wattle
+  const wattleGeom = new THREE.SphereGeometry(0.07, 8, 8);
+  wattleGeom.scale(1, 1.4, 0.5);
+  const wattle = new THREE.Mesh(wattleGeom, combMat);
+  wattle.position.set(0, 0.78, 0.42);
+  chicken.add(wattle);
+
+  // Beak
+  const beakGeom = new THREE.ConeGeometry(0.07, 0.18, 8, 4);
+  const beakMat = new THREE.MeshStandardMaterial({
+    color: 0xff8c00,
+    roughness: 0.4,
+    metalness: 0.1,
+  });
+  const beak = new THREE.Mesh(beakGeom, beakMat);
+  beak.rotation.x = -Math.PI / 2;
+  beak.position.set(0, 0.9, 0.48);
+  beak.castShadow = true;
+  chicken.add(beak);
+
+  // Eyes
+  const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1 });
+  const eyePupilMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.1 });
+  for (let side = -1; side <= 1; side += 2) {
+    const eyeWhiteGeom = new THREE.SphereGeometry(0.06, 8, 8);
+    const eyeWhite = new THREE.Mesh(eyeWhiteGeom, eyeWhiteMat);
+    eyeWhite.position.set(side * 0.13, 1.0, 0.42);
+    chicken.add(eyeWhite);
+
+    const pupilGeom = new THREE.SphereGeometry(0.03, 6, 6);
+    const pupil = new THREE.Mesh(pupilGeom, eyePupilMat);
+    pupil.position.set(side * 0.13, 1.0, 0.47);
+    chicken.add(pupil);
+  }
+
+  // Wings
+  const wingGeom = new THREE.SphereGeometry(0.2, 12, 8);
+  wingGeom.scale(0.3, 0.6, 0.8);
+  const wingMat = new THREE.MeshStandardMaterial({
+    color: 0xe8dcc8,
+    roughness: 0.5,
+    metalness: 0.05,
+  });
+  for (let side = -1; side <= 1; side += 2) {
+    const wing = new THREE.Mesh(wingGeom, wingMat);
+    wing.position.set(side * 0.35, 0.55, -0.05);
+    wing.rotation.z = side * 0.6;
+    wing.castShadow = true;
+    wing.name = side === -1 ? 'wingL' : 'wingR';
+    chicken.add(wing);
+  }
+
+  // Tail feathers
+  const tailMat = new THREE.MeshStandardMaterial({
+    color: 0x9b8b70,
+    roughness: 0.5,
+    metalness: 0.05,
+  });
+  for (let i = -1; i <= 1; i++) {
+    const tailGeom = new THREE.ConeGeometry(0.08, 0.35, 6, 4);
+    const tail = new THREE.Mesh(tailGeom, tailMat);
+    tail.position.set(i * 0.1, 0.75, -0.42);
+    tail.rotation.x = -0.5;
+    tail.rotation.y = i * 0.5;
+    tail.castShadow = true;
+    chicken.add(tail);
+  }
+
+  // Legs
+  const legMat = new THREE.MeshStandardMaterial({
+    color: 0xff8c00,
+    roughness: 0.4,
+    metalness: 0.1,
+  });
+  const upperLegGeom = new THREE.CylinderGeometry(0.04, 0.05, 0.35, 8);
+  const lowerLegGeom = new THREE.CylinderGeometry(0.03, 0.04, 0.35, 8);
+  const footGeom = new THREE.BoxGeometry(0.06, 0.03, 0.12);
+
+  const legPairs = [];
+  for (let side = -1; side <= 1; side += 2) {
+    const legGroup = new THREE.Group();
+
+    const upperLeg = new THREE.Mesh(upperLegGeom, legMat);
+    upperLeg.position.y = -0.15;
+    upperLeg.castShadow = true;
+    legGroup.add(upperLeg);
+
+    const lowerPivot = new THREE.Group();
+    lowerPivot.position.y = -0.32;
+    const lowerLeg = new THREE.Mesh(lowerLegGeom, legMat);
+    lowerLeg.position.y = -0.15;
+    lowerLeg.castShadow = true;
+    lowerPivot.add(lowerLeg);
+
+    const foot = new THREE.Mesh(footGeom, legMat);
+    foot.position.set(0, -0.34, 0.05);
+    foot.castShadow = true;
+    lowerPivot.add(foot);
+
+    legGroup.add(lowerPivot);
+    legGroup.position.set(side * 0.18, 0.15, 0);
+    legGroup.name = side === -1 ? 'legL' : 'legR';
+    chicken.add(legGroup);
+    legPairs.push({ upper: upperLeg, lowerPivot, group: legGroup, side });
+  }
+
+  chicken.userData = { legPairs, body };
+  return chicken;
+}
+
+const chicken = createChicken();
+chicken.position.set(0, 0, 0);
+scene.add(chicken);
+
+// Shadow disc under chicken
+const shadowGeom = new THREE.CircleGeometry(0.4, 16);
+const shadowMat = new THREE.MeshBasicMaterial({
+  color: 0x000000,
+  transparent: true,
+  opacity: 0.35,
+  depthWrite: false,
+});
+const shadowDisc = new THREE.Mesh(shadowGeom, shadowMat);
+shadowDisc.rotation.x = -Math.PI / 2;
+shadowDisc.position.y = -0.32;
+shadowDisc.renderOrder = 1;
+scene.add(shadowDisc);
+
+// ─── COLLECTIBLES (CORN) ─────────────────────────────────────────────────
+const cornGeom = new THREE.SphereGeometry(0.12, 8, 8);
+cornGeom.scale(0.7, 1.3, 0.7);
+const cornMat = new THREE.MeshStandardMaterial({
+  color: 0xffcc00,
+  roughness: 0.3,
+  metalness: 0.2,
+  emissive: 0x331100,
+  emissiveIntensity: 0.4,
+});
+
+const collectibles = [];
+const COLLECTIBLE_POOL_SIZE = 30;
+for (let i = 0; i < COLLECTIBLE_POOL_SIZE; i++) {
+  const corn = new THREE.Mesh(cornGeom, cornMat);
+  corn.visible = false;
+  corn.castShadow = true;
+  corn.userData = { active: false, lane: 0, z: 0 };
+  scene.add(corn);
+  collectibles.push(corn);
+}
+
+// ─── OBSTACLES ───────────────────────────────────────────────────────────
+const obstacles = [];
+const OBSTACLE_POOL_SIZE = 25;
+
+// -- Melting Clock --
+function createMeltingClock() {
+  const group = new THREE.Group();
+
+  // Deformed torus (clock rim melting)
+  const torusGeom = new THREE.TorusGeometry(0.5, 0.12, 16, 32);
+  const tPos = torusGeom.attributes.position;
+  for (let i = 0; i < tPos.count; i++) {
+    let x = tPos.getX(i);
+    let y = tPos.getY(i);
+    let z = tPos.getZ(i);
+    const droop = Math.max(0, x + 0.1) * 1.5;
+    y -= droop;
+    if (x > 0) z *= (1 + x * 0.8);
+    tPos.setY(i, y);
+    tPos.setZ(i, z);
+  }
+  torusGeom.computeVertexNormals();
+  const clockMat = new THREE.MeshStandardMaterial({
+    color: 0xdaa520,
+    roughness: 0.35,
+    metalness: 0.7,
+  });
+  const rim = new THREE.Mesh(torusGeom, clockMat);
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = 0.55;
+  rim.castShadow = true;
+  group.add(rim);
+
+  // Clock face
+  const faceGeom = new THREE.CylinderGeometry(0.4, 0.4, 0.03, 32);
+  const faceMat = new THREE.MeshStandardMaterial({
+    color: 0xfff8e8,
+    roughness: 0.3,
+    metalness: 0.2,
+  });
+  const face = new THREE.Mesh(faceGeom, faceMat);
+  face.position.y = 0.53;
+  face.castShadow = true;
+  group.add(face);
+
+  // Clock hands
+  const handMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1a1a,
+    roughness: 0.5,
+    metalness: 0.6,
+  });
+  const minuteHandGeom = new THREE.BoxGeometry(0.03, 0.02, 0.28);
+  const minuteHand = new THREE.Mesh(minuteHandGeom, handMat);
+  minuteHand.position.set(0, 0.56, 0.08);
+  minuteHand.rotation.z = 0.3;
+  group.add(minuteHand);
+
+  const hourHandGeom = new THREE.BoxGeometry(0.04, 0.02, 0.18);
+  const hourHand = new THREE.Mesh(hourHandGeom, handMat);
+  hourHand.position.set(0, 0.56, -0.04);
+  hourHand.rotation.z = -0.5;
+  group.add(hourHand);
+
+  // Center dot
+  const dotGeom = new THREE.SphereGeometry(0.04, 8, 8);
+  const dot = new THREE.Mesh(dotGeom, handMat);
+  dot.position.y = 0.56;
+  group.add(dot);
+
+  // Melting drips
+  const dripMat = new THREE.MeshStandardMaterial({
+    color: 0xdaa520,
+    roughness: 0.3,
+    metalness: 0.7,
+  });
+  for (let i = 0; i < 3; i++) {
+    const dripGeom = new THREE.CylinderGeometry(0.04, 0.07, 0.3 + Math.random() * 0.5, 8);
+    const drip = new THREE.Mesh(dripGeom, dripMat);
+    drip.position.set(0.3 + Math.random() * 0.3, 0.2 - Math.random() * 0.2, (Math.random() - 0.5) * 0.4);
+    drip.castShadow = true;
+    group.add(drip);
+  }
+
+  group.userData = { type: 'clock' };
+  return group;
+}
+
+// -- Farmer --
+function createFarmer() {
+  const group = new THREE.Group();
+
+  const skinMat = new THREE.MeshStandardMaterial({
+    color: 0xd4a574,
+    roughness: 0.6,
+    metalness: 0.05,
+  });
+  const clothesMat = new THREE.MeshStandardMaterial({
+    color: 0x4a6a3a,
+    roughness: 0.7,
+    metalness: 0.05,
+  });
+  const hatMat = new THREE.MeshStandardMaterial({
+    color: 0x5c3a1e,
+    roughness: 0.5,
+    metalness: 0.1,
+  });
+
+  // Legs
+  for (let s = -1; s <= 1; s += 2) {
+    const legGeom = new THREE.CylinderGeometry(0.08, 0.1, 0.5, 8);
+    const leg = new THREE.Mesh(legGeom, clothesMat);
+    leg.position.set(s * 0.15, 0.25, 0);
+    leg.castShadow = true;
+    group.add(leg);
+  }
+
+  // Body
+  const bodyGeom = new THREE.CylinderGeometry(0.25, 0.3, 0.7, 12);
+  const body = new THREE.Mesh(bodyGeom, clothesMat);
+  body.position.y = 0.7;
+  body.castShadow = true;
+  group.add(body);
+
+  // Arms
+  for (let s = -1; s <= 1; s += 2) {
+    const armGeom = new THREE.CylinderGeometry(0.06, 0.07, 0.55, 8);
+    const arm = new THREE.Mesh(armGeom, skinMat);
+    arm.position.set(s * 0.35, 0.75, 0);
+    arm.rotation.z = s * 0.4;
+    arm.castShadow = true;
+    group.add(arm);
+  }
+
+  // Head
+  const headGeom = new THREE.SphereGeometry(0.18, 12, 12);
+  const head = new THREE.Mesh(headGeom, skinMat);
+  head.position.y = 1.15;
+  head.castShadow = true;
+  group.add(head);
+
+  // Hat
+  const hatBrimGeom = new THREE.CylinderGeometry(0.22, 0.22, 0.04, 16);
+  const hatBrim = new THREE.Mesh(hatBrimGeom, hatMat);
+  hatBrim.position.y = 1.25;
+  group.add(hatBrim);
+
+  const hatTopGeom = new THREE.CylinderGeometry(0.12, 0.16, 0.25, 16);
+  const hatTop = new THREE.Mesh(hatTopGeom, hatMat);
+  hatTop.position.y = 1.38;
+  group.add(hatTop);
+
+  group.userData = { type: 'farmer' };
+  return group;
+}
+
+// -- Food Bin --
+function createFoodBin() {
+  const group = new THREE.Group();
+
+  const binMat = new THREE.MeshStandardMaterial({
+    color: 0x7a7a80,
+    roughness: 0.4,
+    metalness: 0.7,
+  });
+
+  // Main bin body
+  const bodyGeom = new THREE.CylinderGeometry(0.35, 0.3, 0.8, 16);
+  const body = new THREE.Mesh(bodyGeom, binMat);
+  body.position.y = 0.4;
+  body.castShadow = true;
+  group.add(body);
+
+  // Rim
+  const rimGeom = new THREE.TorusGeometry(0.35, 0.04, 8, 16);
+  const rim = new THREE.Mesh(rimGeom, binMat);
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = 0.8;
+  group.add(rim);
+
+  // Food inside (corn)
+  const foodGeom = new THREE.SphereGeometry(0.15, 8, 8);
+  const foodMat = new THREE.MeshStandardMaterial({
+    color: 0xffcc00,
+    roughness: 0.3,
+    metalness: 0.2,
+  });
+  const food = new THREE.Mesh(foodGeom, foodMat);
+  food.position.y = 0.65;
+  food.scale.set(0.8, 0.5, 0.8);
+  group.add(food);
+
+  // Label
+  const labelGeom = new THREE.PlaneGeometry(0.3, 0.2);
+  const labelMat = new THREE.MeshStandardMaterial({
+    color: 0xff4444,
+    roughness: 0.5,
+    metalness: 0.1,
+    side: THREE.DoubleSide,
+  });
+  const label = new THREE.Mesh(labelGeom, labelMat);
+  label.position.set(0, 0.5, 0.36);
+  group.add(label);
+
+  group.userData = { type: 'foodbin' };
+  return group;
+}
+
+// Obstacle pool
+for (let i = 0; i < OBSTACLE_POOL_SIZE; i++) {
+  let obs;
+  const r = Math.random();
+  if (r < 0.35) {
+    obs = createMeltingClock();
+  } else if (r < 0.7) {
+    obs = createFarmer();
+  } else {
+    obs = createFoodBin();
+  }
+  obs.visible = false;
+  obs.userData.active = false;
+  obs.userData.lane = 0;
+  obs.userData.z = 0;
+  obs.userData.isTall = (obs.userData.type === 'farmer'); // farmers are tall (duck under)
+  obs.userData.isLow = (obs.userData.type !== 'farmer');   // others are low (jump over)
+  scene.add(obs);
+  obstacles.push(obs);
+}
+
+// ─── PARTICLE SYSTEM ─────────────────────────────────────────────────────
+const particleCount = 200;
+const particleGeom = new THREE.BufferGeometry();
+const particlePositions = new Float32Array(particleCount * 3);
+const particleSizes = new Float32Array(particleCount);
+for (let i = 0; i < particleCount; i++) {
+  particlePositions[i * 3]     = (Math.random() - 0.5) * 30;
+  particlePositions[i * 3 + 1] = Math.random() * 12;
+  particlePositions[i * 3 + 2] = (Math.random() - 0.5) * 60;
+  particleSizes[i] = Math.random() * 3 + 1;
+}
+particleGeom.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+particleGeom.setAttribute('size', new THREE.BufferAttribute(particleSizes, 1));
+const particleMat = new THREE.PointsMaterial({
+  color: 0xd4a860,
+  size: 0.08,
+  transparent: true,
+  opacity: 0.5,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+const particles = new THREE.Points(particleGeom, particleMat);
+scene.add(particles);
+
+// ─── GAME STATE ──────────────────────────────────────────────────────────
+const LANES = [-3, 0, 3];
+const PLAYER_Z = 0;
+const SPAWN_Z = -55;
+const DESPAWN_Z = 12;
+
+let gameState = 'start'; // 'start' | 'playing' | 'gameover'
+let score = 0;
+let gameSpeed = 18; // units per second
+let baseSpeed = 18;
+let maxSpeed = 55;
+let speedIncrement = 0.5; // per second
+let currentLane = 1; // index: 0=left, 1=center, 2=right
+let targetLaneX = LANES[currentLane];
+let isJumping = false;
+let jumpVelocity = 0;
+let jumpY = 0;
+let isDucking = false;
+let duckTimer = 0;
+const GRAVITY = 30;
+const JUMP_FORCE = 11;
+const LANE_SWITCH_SPEED = 18;
+const DUCK_DURATION = 0.6;
+
+let spawnTimer = 0;
+let spawnInterval = 1.2;
+let collectSpawnTimer = 0;
+let elapsedTime = 0;
+let screenShake = 0;
+
+// Input state
+const keys = {};
+let swipeStartX = 0;
+let swipeStartY = 0;
+
+// ─── INPUT HANDLING ──────────────────────────────────────────────────────
+window.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if (gameState === 'start' && e.key === ' ') startGame();
+  if (gameState === 'gameover' && e.key === ' ') restartGame();
+  e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+// Touch / swipe
+window.addEventListener('touchstart', e => {
+  if (e.target.tagName === 'BUTTON') return;
+  swipeStartX = e.touches[0].clientX;
+  swipeStartY = e.touches[0].clientY;
+});
+window.addEventListener('touchend', e => {
+  if (e.target.tagName === 'BUTTON') return;
+  const dx = e.changedTouches[0].clientX - swipeStartX;
+  const dy = e.changedTouches[0].clientY - swipeStartY;
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+
+  if (Math.max(absDx, absDy) < 25) return; // too small
+
+  if (absDx > absDy) {
+    // Horizontal swipe
+    if (dx > 0) moveRight();
+    else moveLeft();
+  } else {
+    // Vertical swipe
+    if (dy < 0) jump(); // swipe up
+    else duck();        // swipe down
+  }
+});
+
+// Button handlers
+btnLeft.addEventListener('click', moveLeft);
+btnRight.addEventListener('click', moveRight);
+btnJump.addEventListener('click', jump);
+btnLeft.addEventListener('touchstart', e => { e.preventDefault(); moveLeft(); });
+btnRight.addEventListener('touchstart', e => { e.preventDefault(); moveRight(); });
+btnJump.addEventListener('touchstart', e => { e.preventDefault(); jump(); });
+
+startBtn.addEventListener('click', startGame);
+restartBtn.addEventListener('click', restartGame);
+
+// Keyboard game actions
+function handleKeyboardInput() {
+  if (gameState !== 'playing') return;
+  if (keys['ArrowLeft'] || keys['a'] || keys['A']) { moveLeft(); keys['ArrowLeft'] = false; keys['a'] = false; keys['A'] = false; }
+  if (keys['ArrowRight'] || keys['d'] || keys['D']) { moveRight(); keys['ArrowRight'] = false; keys['d'] = false; keys['D'] = false; }
+  if (keys['ArrowUp'] || keys['w'] || keys['W'] || keys[' ']) { jump(); keys['ArrowUp'] = false; keys['w'] = false; keys['W'] = false; keys[' '] = false; }
+  if (keys['ArrowDown'] || keys['s'] || keys['S']) { duck(); keys['ArrowDown'] = false; keys['s'] = false; keys['S'] = false; }
+}
+
+// ─── PLAYER ACTIONS ─────────────────────────────────────────────────────
+function moveLeft() {
+  if (gameState !== 'playing') return;
+  if (currentLane > 0) currentLane--;
+  targetLaneX = LANES[currentLane];
+}
+function moveRight() {
+  if (gameState !== 'playing') return;
+  if (currentLane < 2) currentLane++;
+  targetLaneX = LANES[currentLane];
+}
+function jump() {
+  if (gameState !== 'playing') return;
+  if (!isJumping && jumpY < 0.05) {
+    isJumping = true;
+    jumpVelocity = JUMP_FORCE;
+  }
+}
+function duck() {
+  if (gameState !== 'playing') return;
+  if (!isJumping && !isDucking) {
+    isDucking = true;
+    duckTimer = DUCK_DURATION;
+  }
+}
+
+// ─── GAME FLOW ───────────────────────────────────────────────────────────
+function startGame() {
+  gameState = 'playing';
+  score = 0;
+  gameSpeed = baseSpeed;
+  currentLane = 1;
+  targetLaneX = LANES[currentLane];
+  isJumping = false;
+  jumpVelocity = 0;
+  jumpY = 0;
+  isDucking = false;
+  duckTimer = 0;
+  spawnTimer = 0;
+  collectSpawnTimer = 0;
+  elapsedTime = 0;
+  screenShake = 0;
+  chicken.position.set(0, 0, 0);
+  chicken.rotation.set(0, 0, 0);
+  chicken.scale.set(1, 1, 1);
+  clearAllObjects();
+  startScreen.classList.add('hidden');
+  gameOverScreen.classList.add('hidden');
+  updateUI();
+}
+
+function restartGame() {
+  startGame();
+}
+
+function gameOver() {
+  gameState = 'gameover';
+  screenShake = 0.5;
+  finalScore.textContent = score;
+  gameOverScreen.classList.remove('hidden');
+}
+
+function clearAllObjects() {
+  obstacles.forEach(o => { o.visible = false; o.userData.active = false; });
+  collectibles.forEach(c => { c.visible = false; c.userData.active = false; });
+}
+
+// ─── SPAWNING ────────────────────────────────────────────────────────────
+function spawnObstacle() {
+  // Find inactive obstacle
+  let obs = null;
+  for (const o of obstacles) {
+    if (!o.userData.active) { obs = o; break; }
+  }
+  if (!obs) return;
+
+  // Randomize obstacle type
+  const r = Math.random();
+  let newObs;
+  if (r < 0.35) newObs = createMeltingClock();
+  else if (r < 0.7) newObs = createFarmer();
+  else newObs = createFoodBin();
+
+  // Replace the pooled object's children with new geometry
+  while (obs.children.length > 0) {
+    obs.remove(obs.children[0]);
+  }
+  while (newObs.children.length > 0) {
+    obs.add(newObs.children[0]);
+  }
+  obs.userData.type = newObs.userData.type;
+  obs.userData.isTall = (obs.userData.type === 'farmer');
+  obs.userData.isLow = (obs.userData.type !== 'farmer');
+
+  // Pick a random lane
+  const laneIdx = Math.floor(Math.random() * 3);
+  obs.userData.lane = laneIdx;
+  obs.userData.z = SPAWN_Z + Math.random() * 10;
+  obs.userData.active = true;
+  obs.position.set(LANES[laneIdx], 0, obs.userData.z);
+  obs.visible = true;
+
+  // Random rotation for variety
+  obs.rotation.y = (Math.random() - 0.5) * 0.6;
+}
+
+function spawnCollectible() {
+  let corn = null;
+  for (const c of collectibles) {
+    if (!c.userData.active) { corn = c; break; }
+  }
+  if (!corn) return;
+
+  const laneIdx = Math.floor(Math.random() * 3);
+  corn.userData.lane = laneIdx;
+  corn.userData.z = SPAWN_Z + Math.random() * 15;
+  corn.userData.active = true;
+  corn.position.set(LANES[laneIdx], 0.6 + Math.random() * 0.3, corn.userData.z);
+  corn.visible = true;
+}
+
+// ─── COLLISION DETECTION ─────────────────────────────────────────────────
+function checkCollision(obs) {
+  if (!obs.userData.active || !obs.visible) return false;
+
+  const oz = obs.position.z;
+  // Only check obstacles near the player
+  if (Math.abs(oz - PLAYER_Z) > 2.5) return false;
+
+  const ox = obs.position.x;
+  const chickenX = chicken.position.x;
+  const chickenY = jumpY;
+
+  // Horizontal overlap (same lane check with tolerance)
+  const laneTolerance = 1.2;
+  if (Math.abs(ox - chickenX) > laneTolerance) return false;
+
+  // Vertical check
+  const obsIsTall = obs.userData.isTall; // farmer = tall, duck under
+  const obsIsLow = obs.userData.isLow;   // clock/bin = low, jump over
+
+  if (obsIsLow) {
+    // Low obstacle: must jump over
+    if (chickenY < 0.7) return true; // not jumping high enough
+    return false;
+  }
+
+  if (obsIsTall) {
+    // Tall obstacle: must duck under
+    if (!isDucking) return true;
+    return false;
+  }
+
+  return false;
+}
+
+function checkCollectibleCollision(corn) {
+  if (!corn.userData.active || !corn.visible) return false;
+  const cz = corn.position.z;
+  if (Math.abs(cz - PLAYER_Z) > 1.8) return false;
+  const cx = corn.position.x;
+  const chickenX = chicken.position.x;
+  if (Math.abs(cx - chickenX) > 1.0) return false;
+  return true;
+}
+
+// ─── UPDATE ──────────────────────────────────────────────────────────────
+function update(delta) {
+  if (gameState !== 'playing') return;
+
+  // Clamp delta to avoid huge jumps
+  const dt = Math.min(delta, 0.1);
+  elapsedTime += dt;
+
+  // Increase speed
+  gameSpeed = Math.min(baseSpeed + elapsedTime * speedIncrement, maxSpeed);
+  const speedMultVal = Math.round(gameSpeed / baseSpeed * 10) / 10;
+  speedMult.textContent = speedMultVal;
+
+  // Handle input
+  handleKeyboardInput();
+
+  // Smooth lane switching
+  const currentX = chicken.position.x;
+  const diff = targetLaneX - currentX;
+  if (Math.abs(diff) > 0.05) {
+    chicken.position.x += Math.sign(diff) * LANE_SWITCH_SPEED * dt;
+    if (Math.abs(diff) < 0.1) chicken.position.x = targetLaneX;
+  } else {
+    chicken.position.x = targetLaneX;
+  }
+
+  // Jump physics
+  if (isJumping) {
+    jumpY += jumpVelocity * dt;
+    jumpVelocity -= GRAVITY * dt;
+    if (jumpY <= 0) {
+      jumpY = 0;
+      jumpVelocity = 0;
+      isJumping = false;
+    }
+  }
+  chicken.position.y = jumpY;
+
+  // Duck
+  if (isDucking) {
+    duckTimer -= dt;
+    const duckProgress = 1 - (duckTimer / DUCK_DURATION);
+    const scaleY = 1 - Math.sin(duckProgress * Math.PI) * 0.5;
+    chicken.scale.set(1, scaleY, 1);
+    chicken.position.y = jumpY - (1 - scaleY) * 0.5;
+    if (duckTimer <= 0) {
+      isDucking = false;
+      chicken.scale.set(1, 1, 1);
+      chicken.position.y = jumpY;
+    }
+  }
+
+  // Update shadow
+  shadowDisc.position.set(chicken.position.x, -0.32, chicken.position.z);
+  const shadowScale = 1 - Math.min(jumpY / 3, 0.7);
+  shadowDisc.scale.setScalar(Math.max(0.3, shadowScale));
+
+  // Running animation
+  const runCycle = elapsedTime * gameSpeed * 0.8;
+  const legPairs = chicken.userData.legPairs;
+  if (legPairs) {
+    legPairs.forEach((lp, i) => {
+      const phase = i * Math.PI;
+      const swing = Math.sin(runCycle + phase) * 0.7;
+      lp.lowerPivot.rotation.x = swing;
+      lp.group.position.y = 0.15 + Math.abs(Math.sin(runCycle + phase)) * 0.04;
+    });
+    // Body bob
+    chicken.userData.body.position.y = 0.55 + Math.abs(Math.sin(runCycle)) * 0.03;
+  }
+
+  // Wing flap
+  const wingL = chicken.getObjectByName('wingL');
+  const wingR = chicken.getObjectByName('wingR');
+  if (wingL) wingL.rotation.z = 0.6 + Math.sin(runCycle * 1.3) * 0.3;
+  if (wingR) wingR.rotation.z = -0.6 + Math.sin(runCycle * 1.3 + 0.5) * 0.3;
+
+  // Move obstacles toward player
+  for (const obs of obstacles) {
+    if (!obs.userData.active) continue;
+    obs.userData.z += gameSpeed * dt;
+    obs.position.z = obs.userData.z;
+
+    // Rotate melting clocks slowly
+    if (obs.userData.type === 'clock') {
+      obs.children[0]?.rotateY?.(dt * 0.8);
+    }
+
+    // Despawn
+    if (obs.userData.z > DESPAWN_Z) {
+      obs.userData.active = false;
+      obs.visible = false;
+      obs.position.z = 999;
+    }
+
+    // Collision
+    if (checkCollision(obs)) {
+      gameOver();
+      return;
+    }
+  }
+
+  // Move collectibles
+  for (const corn of collectibles) {
+    if (!corn.userData.active) continue;
+    corn.userData.z += gameSpeed * dt;
+    corn.position.z = corn.userData.z;
+    corn.rotation.y += dt * 3;
+    corn.rotation.x += dt * 1.5;
+
+    if (corn.userData.z > DESPAWN_Z) {
+      corn.userData.active = false;
+      corn.visible = false;
+    }
+
+    if (checkCollectibleCollision(corn)) {
+      corn.userData.active = false;
+      corn.visible = false;
+      score += 10;
+      // Particle burst
+      spawnCollectParticles(corn.position);
+    }
+  }
+
+  // Score increases with distance
+  score += Math.floor(gameSpeed * dt * 2);
+  updateUI();
+
+  // Spawn obstacles
+  spawnTimer -= dt;
+  if (spawnTimer <= 0) {
+    spawnObstacle();
+    spawnInterval = Math.max(0.4, 1.2 - elapsedTime * 0.02);
+    spawnTimer = spawnInterval + (Math.random() - 0.5) * 0.3;
+  }
+
+  // Spawn collectibles
+  collectSpawnTimer -= dt;
+  if (collectSpawnTimer <= 0) {
+    spawnCollectible();
+    collectSpawnTimer = 0.7 + Math.random() * 0.8;
+  }
+
+  // Move scenery
+  for (const s of sceneryObjects) {
+    s.mesh.position.z += gameSpeed * dt;
+    if (s.mesh.position.z > DESPAWN_Z + 10) {
+      s.mesh.position.z -= 100;
+      s.mesh.position.x = (Math.random() > 0.5 ? 1 : -1) * (6 + Math.random() * 12);
+    }
+  }
+
+  // Move ground & lanes backward (scroll), reset when past threshold
+  const scrollOffset = (elapsedTime * gameSpeed) % 120;
+  ground.position.z = -scrollOffset;
+  lanes.forEach(l => { l.position.z = -scrollOffset; });
+  dividerLeft.position.z = -scrollOffset;
+  dividerRight.position.z = -scrollOffset;
+
+  // Update particles
+  const pPos = particles.geometry.attributes.position;
+  for (let i = 0; i < particleCount; i++) {
+    pPos.array[i * 3 + 2] += gameSpeed * dt * 0.5;
+    if (pPos.array[i * 3 + 2] > 30) pPos.array[i * 3 + 2] -= 60;
+    pPos.array[i * 3 + 1] += Math.sin(elapsedTime * 2 + i) * dt * 0.5;
+  }
+  particles.geometry.attributes.position.needsUpdate = true;
+
+  // Update sky
+  skyMat.uniforms.uTime.value = elapsedTime;
+
+  // Screen shake decay
+  if (screenShake > 0) {
+    screenShake = Math.max(0, screenShake - dt * 3);
+    camera.position.x = Math.sin(elapsedTime * 40) * screenShake * 0.3;
+    camera.position.y = 6 + Math.cos(elapsedTime * 35) * screenShake * 0.2;
+  }
+
+  // Update camera smoothly
+  const targetCamX = chicken.position.x * 0.5;
+  const targetCamY = 6 + jumpY * 0.4;
+  if (screenShake <= 0.001) {
+    camera.position.x += (targetCamX - camera.position.x) * 4 * dt;
+    camera.position.y += (targetCamY - camera.position.y) * 4 * dt;
+  }
+  camera.lookAt(chicken.position.x * 0.5, 1.5 + jumpY * 0.5, chicken.position.z - 6);
+}
+
+function spawnCollectParticles(pos) {
+  // Quick burst using the existing particle system — just move some particles to this position
+  const pPos = particles.geometry.attributes.position;
+  const burstCount = 15;
+  for (let i = 0; i < burstCount; i++) {
+    const idx = Math.floor(Math.random() * particleCount);
+    pPos.array[idx * 3]     = pos.x + (Math.random() - 0.5) * 0.5;
+    pPos.array[idx * 3 + 1] = pos.y + (Math.random() - 0.5) * 0.5;
+    pPos.array[idx * 3 + 2] = pos.z + (Math.random() - 0.5) * 0.5;
+  }
+  particles.geometry.attributes.position.needsUpdate = true;
+}
+
+function updateUI() {
+  scoreValue.textContent = score;
+}
+
+// ─── RENDER LOOP ─────────────────────────────────────────────────────────
+let lastTime = performance.now();
+let gameTimeAccum = 0;
+
+function animate(now) {
+  requestAnimationFrame(animate);
+
+  let dt = (now - lastTime) / 1000;
+  lastTime = now;
+
+  // Don't advance game logic on start/gameover screens (but still render)
+  if (gameState === 'playing') {
+    gameTimeAccum += dt;
+    // Fixed timestep updates for physics stability
+    const fixedDt = 1 / 60;
+    while (gameTimeAccum >= fixedDt) {
+      update(fixedDt);
+      gameTimeAccum -= fixedDt;
+    }
+  } else {
+    // Still update visuals while waiting
+    gameTimeAccum = 0;
+    // Gentle idle animation
+    const idleTime = performance.now() / 1000;
+    const legPairs = chicken.userData.legPairs;
+    if (legPairs && gameState === 'start') {
+      legPairs.forEach((lp, i) => {
+        lp.lowerPivot.rotation.x = Math.sin(idleTime * 3 + i * Math.PI) * 0.15;
+      });
+    }
+    // Rotate chicken slightly on start screen
+    if (gameState === 'start') {
+      chicken.rotation.y = Math.sin(idleTime * 0.5) * 0.3;
+    }
+    // Decay screen shake
+    if (screenShake > 0) {
+      screenShake = Math.max(0, screenShake - 0.016);
+      camera.position.x = Math.sin(idleTime * 40) * screenShake * 0.3;
+      camera.position.y = 6 + Math.cos(idleTime * 35) * screenShake * 0.2;
+    }
+    if (screenShake <= 0.001 && gameState !== 'playing') {
+      camera.position.x += (0 - camera.position.x) * 4 * 0.016;
+      camera.position.y += (6 - camera.position.y) * 4 * 0.016;
+      camera.lookAt(0, 1.5, -6);
+    }
+  }
+
+  renderer.render(scene, camera);
+}
+
+// ─── RESIZE HANDLER ──────────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+});
+
+// ─── INIT ────────────────────────────────────────────────────────────────
+// Hide game over screen initially
+gameOverScreen.classList.add('hidden');
+
+// Start the render loop
+requestAnimationFrame(animate);
+
+// Log welcome
+console.log('🐔 Chicken Run: Dalí\'s Melting World');
+console.log('Controls: ← → switch lanes | ↑ jump | ↓ duck');
+console.log('Avoid farmers (duck under) and clocks/bins (jump over)');
+console.log('Collect golden corn for bonus points!');
+</script>
+</body>
+</html>

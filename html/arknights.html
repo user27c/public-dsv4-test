@@ -1,0 +1,2035 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>明日方舟 Demo - Arknights Tower Defense</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --panel: #12121a;
+    --border: #2a2a3a;
+    --text: #c8c8d4;
+    --text-dim: #6a6a7a;
+    --accent: #4a9eff;
+    --accent-glow: rgba(74,158,255,0.3);
+    --danger: #e04040;
+    --success: #40c060;
+    --warning: #e0a040;
+    --dp-color: #ffcc00;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #08080e;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  #game-container {
+    position: relative;
+    width: 1060px;
+    height: 720px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 0 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03);
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  #level-select {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(4,4,10,0.95);
+    z-index: 10;
+    gap: 8px;
+  }
+
+  #level-select.hidden { display: none; }
+
+  #level-select h1 {
+    font-size: 36px;
+    color: #e8e8f0;
+    margin-bottom: 4px;
+    letter-spacing: 4px;
+    text-shadow: 0 0 30px rgba(150,180,255,0.3);
+  }
+
+  #level-select .subtitle {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 32px;
+    letter-spacing: 2px;
+  }
+
+  #level-select .level-btn {
+    width: 340px;
+    padding: 14px 24px;
+    margin: 5px 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    letter-spacing: 1px;
+  }
+
+  #level-select .level-btn:hover {
+    border-color: var(--accent);
+    background: #1a1a28;
+    box-shadow: 0 0 20px var(--accent-glow);
+  }
+
+  #level-select .level-btn .stars {
+    color: var(--warning);
+    font-size: 18px;
+    letter-spacing: 2px;
+  }
+
+  #level-select .level-btn .diff {
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: #1a1a24;
+  }
+
+  #game-over-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(4,4,10,0.9);
+    z-index: 10;
+    gap: 12px;
+  }
+
+  #game-over-overlay.show { display: flex; }
+
+  #game-over-overlay .result {
+    font-size: 42px;
+    font-weight: bold;
+    letter-spacing: 4px;
+  }
+
+  #game-over-overlay .result.win { color: #e0c040; text-shadow: 0 0 40px rgba(224,192,64,0.5); }
+  #game-over-overlay .result.lose { color: #e04040; text-shadow: 0 0 40px rgba(224,64,64,0.5); }
+
+  #game-over-overlay .detail { color: var(--text-dim); font-size: 14px; letter-spacing: 2px; }
+
+  #game-over-overlay button {
+    margin-top: 16px;
+    padding: 10px 32px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 14px;
+    cursor: pointer;
+    letter-spacing: 2px;
+    transition: all 0.2s;
+  }
+
+  #game-over-overlay button:hover {
+    border-color: var(--accent);
+    background: #1a1a28;
+  }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <canvas id="game"></canvas>
+  <div id="level-select">
+    <h1>明日方舟</h1>
+    <div class="subtitle">A R K N I G H T S · D E M O</div>
+    <button class="level-btn" data-level="0">
+      <span>演习 · 基础训练</span>
+      <span style="display:flex;align-items:center;gap:8px;">
+        <span class="diff">简单</span>
+        <span class="stars">★</span>
+      </span>
+    </button>
+    <button class="level-btn" data-level="1">
+      <span>防守 · 交叉战线</span>
+      <span style="display:flex;align-items:center;gap:8px;">
+        <span class="diff">普通</span>
+        <span class="stars">★★</span>
+      </span>
+    </button>
+    <button class="level-btn" data-level="2">
+      <span>决战 · 钢铁洪流</span>
+      <span style="display:flex;align-items:center;gap:8px;">
+        <span class="diff">困难</span>
+        <span class="stars">★★★</span>
+      </span>
+    </button>
+  </div>
+  <div id="game-over-overlay">
+    <div class="result" id="result-text"></div>
+    <div class="detail" id="result-detail"></div>
+    <button id="btn-restart">重新挑战</button>
+    <button id="btn-menu">返回菜单</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ==================== CANVAS SETUP ====================
+const container = document.getElementById("game-container");
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const W = 1060, H = 720;
+canvas.width = W;
+canvas.height = H;
+
+// ==================== CONSTANTS ====================
+const TILE = 56;
+const GRID_X = 9, GRID_Y = 7;
+const MAP_OX = Math.floor((W - GRID_X * TILE) / 2);
+const MAP_OY = 115;
+const HP_BAR_H = 5;
+
+const TILE_COLORS = {
+  path:   "#3a3a30",
+  ground: "#2a2a38",
+  ranged: "#2a2838",
+  blocked:"#181820",
+  spawn:  "#1a3020",
+  goal:   "#301a1a"
+};
+
+const TILE_BORDER = {
+  path:   "#5a5a40",
+  ground: "#4a4a60",
+  ranged: "#5a5080",
+  blocked:"#222230",
+  spawn:  "#2a4a30",
+  goal:   "#4a2a2a"
+};
+
+// ==================== OPERATOR DEFINITIONS ====================
+const OPERATORS = {
+  fang: {
+    id: "fang", name: "芬", className: "先锋", classEn: "Vanguard",
+    tileType: "ground", block: 2, cost: 8,
+    hp: 1200, atk: 300, def: 200, res: 0,
+    atkSpeed: 1.5, rangeType: "melee",
+    skill: { name: "冲锋号令·α", sp: 20, spType: "auto", desc: "立即获得6点部署费用", effect: "dp", value: 6 },
+    color: "#4a90d9", icon: "V"
+  },
+  melantha: {
+    id: "melantha", name: "玫兰莎", className: "近卫", classEn: "Guard",
+    tileType: "ground", block: 1, cost: 12,
+    hp: 1500, atk: 550, def: 100, res: 0,
+    atkSpeed: 1.2, rangeType: "melee",
+    skill: { name: "攻击力强化·α", sp: 25, spType: "auto", desc: "攻击力+50%，持续10秒", effect: "buff", stat: "atk", value: 0.5, duration: 10 },
+    color: "#e05050", icon: "G"
+  },
+  noir: {
+    id: "noir", name: "黑角", className: "重装", classEn: "Defender",
+    tileType: "ground", block: 3, cost: 14,
+    hp: 2800, atk: 250, def: 400, res: 0,
+    atkSpeed: 1.8, rangeType: "melee",
+    skill: { name: "防御力强化", sp: 22, spType: "auto", desc: "防御力+80%，持续15秒", effect: "buff", stat: "def", value: 0.8, duration: 15 },
+    color: "#6060a0", icon: "D"
+  },
+  kroos: {
+    id: "kroos", name: "克洛丝", className: "狙击", classEn: "Sniper",
+    tileType: "ranged", block: 1, cost: 10,
+    hp: 800, atk: 360, def: 80, res: 0,
+    atkSpeed: 1.0, rangeType: "sniper",
+    skill: { name: "二连击", sp: 16, spType: "offensive", desc: "每次攻击造成两次伤害，持续10秒", effect: "double", duration: 10 },
+    color: "#40b860", icon: "S"
+  },
+  lava: {
+    id: "lava", name: "炎熔", className: "术师", classEn: "Caster",
+    tileType: "ranged", block: 1, cost: 16,
+    hp: 900, atk: 480, def: 100, res: 15,
+    atkSpeed: 2.2, rangeType: "caster",
+    skill: { name: "炎爆", sp: 30, spType: "auto", desc: "对目标及其周围造成200%攻击力的法术伤害", effect: "aoe", value: 2.0 },
+    color: "#e08030", icon: "C"
+  },
+  hibiscus: {
+    id: "hibiscus", name: "芙蓉", className: "医疗", classEn: "Medic",
+    tileType: "ranged", block: 1, cost: 12,
+    hp: 700, atk: 360, def: 80, res: 0,
+    atkSpeed: 2.5, rangeType: "medic",
+    skill: { name: "治疗强化", sp: 20, spType: "auto", desc: "治疗量+50%，持续10秒", effect: "buff", stat: "atk", value: 0.5, duration: 10 },
+    color: "#f0d0d0", icon: "M"
+  }
+};
+
+const OPERATOR_LIST = ["fang","melantha","noir","kroos","lava","hibiscus"];
+
+// ==================== ENEMY DEFINITIONS ====================
+const ENEMY_TYPES = {
+  slug: {
+    id: "slug", name: "源石虫", hp: 450, atk: 120, def: 0, res: 0,
+    speed: 90, atkSpeed: 1.8, reward: 1,
+    color: "#a040c0", size: 14, isRanged: false
+  },
+  soldier: {
+    id: "soldier", name: "士兵", hp: 1400, atk: 220, def: 60, res: 0,
+    speed: 70, atkSpeed: 1.6, reward: 2,
+    color: "#8899aa", size: 18, isRanged: false
+  },
+  heavy: {
+    id: "heavy", name: "重装士兵", hp: 3500, atk: 320, def: 250, res: 0,
+    speed: 45, atkSpeed: 2.0, reward: 3,
+    color: "#556070", size: 22, isRanged: false
+  },
+  caster: {
+    id: "caster", name: "术师", hp: 900, atk: 420, def: 50, res: 25,
+    speed: 50, atkSpeed: 2.5, reward: 3,
+    color: "#e05080", size: 18, isRanged: true, range: 2.5
+  },
+  bigbob: {
+    id: "bigbob", name: "大鲍勃", hp: 18000, atk: 650, def: 350, res: 20,
+    speed: 30, atkSpeed: 2.2, reward: 10,
+    color: "#cc3030", size: 30, isRanged: false, isBoss: true
+  }
+};
+
+// ==================== LEVEL DEFINITIONS ====================
+const LEVELS = [
+  { // Level 0: Tutorial - Simple S-curve
+    name: "演习 · 基础训练",
+    description: "学习基础部署与战斗",
+    grid: [
+      // 0    1    2    3    4    5    6    7    8
+      ["X", "X", "R", "X", "X", "X", "R", "X", "X"], // row 0
+      ["X", "R", "P", "P", "P", "P", "P", "X", "X"], // row 1
+      ["S", "P", "P", "X", "X", "X", "P", "P", "E"], // row 2
+      ["X", "X", "X", "X", "X", "X", "R", "X", "X"], // row 3
+      ["X", "X", "X", "X", "X", "X", "X", "X", "X"], // row 4
+      ["X", "X", "X", "X", "X", "X", "X", "X", "X"], // row 5
+      ["X", "X", "X", "X", "X", "X", "X", "X", "X"], // row 6
+    ],
+    waypoints: [
+      {x:0,y:2},{x:1,y:2},{x:2,y:2},{x:2,y:1},{x:3,y:1},{x:4,y:1},{x:5,y:1},{x:6,y:1},{x:6,y:2},{x:7,y:2},{x:8,y:2}
+    ],
+    initialDP: 10,
+    lives: 5,
+    waves: [
+      { type:"slug", count:5, interval:2.5, delay:3 },
+      { type:"soldier", count:3, interval:3.5, delay:6 },
+      { type:"slug", count:6, interval:2.0, delay:4 },
+      { type:"soldier", count:5, interval:3.0, delay:5 },
+    ]
+  },
+  { // Level 1: Defense - Two lanes merging at center
+    name: "防守 · 交叉战线",
+    description: "多条路线同时进攻",
+    grid: [
+      // 0    1    2    3    4    5    6    7    8
+      ["S", "P", "P", "X", "R", "X", "P", "P", "S"], // row 0
+      ["X", "P", "X", "X", "X", "X", "X", "P", "X"], // row 1
+      ["X", "P", "P", "P", "E", "P", "P", "P", "X"], // row 2
+      ["X", "R", "X", "X", "X", "X", "X", "R", "X"], // row 3
+      ["X", "X", "X", "X", "X", "X", "X", "X", "X"], // row 4
+      ["X", "X", "X", "X", "X", "X", "X", "X", "X"], // row 5
+      ["X", "X", "X", "X", "X", "X", "X", "X", "X"], // row 6
+    ],
+    waypoints: [
+      // Path 0: left spawn → merge → exit at center
+      [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:1,y:2},{x:2,y:2},{x:3,y:2},{x:4,y:2}],
+      // Path 1: right spawn → merge → exit at center
+      [{x:8,y:0},{x:7,y:0},{x:7,y:1},{x:7,y:2},{x:6,y:2},{x:5,y:2},{x:4,y:2}]
+    ],
+    initialDP: 12,
+    lives: 5,
+    waves: [
+      { type:"slug", count:3, interval:2.2, delay:3, path:0 },
+      { type:"slug", count:3, interval:2.2, delay:1, path:1 },
+      { type:"soldier", count:4, interval:3.0, delay:5, path:0 },
+      { type:"heavy", count:2, interval:5.0, delay:4, path:0 },
+      { type:"soldier", count:4, interval:3.0, delay:2, path:1 },
+      { type:"caster", count:2, interval:6.0, delay:5, path:1 },
+      { type:"heavy", count:2, interval:5.0, delay:3, path:1 },
+    ]
+  },
+  { // Level 2: Showdown - V-shaped merge to bottom exit
+    name: "决战 · 钢铁洪流",
+    description: "面对敌方精锐部队和首领",
+    grid: [
+      // 0    1    2    3    4    5    6    7    8
+      ["S", "P", "P", "R", "X", "R", "P", "P", "S"], // row 0
+      ["X", "X", "P", "X", "X", "X", "P", "X", "X"], // row 1
+      ["X", "X", "P", "P", "P", "P", "P", "X", "X"], // row 2
+      ["X", "X", "X", "P", "R", "P", "X", "X", "X"], // row 3
+      ["X", "X", "X", "P", "P", "P", "X", "X", "X"], // row 4
+      ["X", "X", "X", "X", "P", "E", "X", "X", "X"], // row 5
+      ["X", "X", "X", "X", "X", "X", "X", "X", "X"], // row 6
+    ],
+    waypoints: [
+      // Path 0: from left spawn, down-right to exit
+      [{x:0,y:0},{x:1,y:0},{x:2,y:0},{x:2,y:1},{x:2,y:2},{x:3,y:2},{x:4,y:2},{x:4,y:3},{x:4,y:4},{x:4,y:5},{x:5,y:5}],
+      // Path 1: from right spawn, down-left to exit
+      [{x:8,y:0},{x:7,y:0},{x:6,y:0},{x:6,y:1},{x:6,y:2},{x:5,y:2},{x:4,y:2},{x:4,y:3},{x:4,y:4},{x:4,y:5},{x:5,y:5}]
+    ],
+    initialDP: 15,
+    lives: 5,
+    waves: [
+      { type:"soldier", count:4, interval:2.5, delay:3, path:0 },
+      { type:"soldier", count:4, interval:2.5, delay:1, path:1 },
+      { type:"heavy", count:2, interval:4.5, delay:5, path:0 },
+      { type:"heavy", count:2, interval:4.5, delay:2, path:1 },
+      { type:"caster", count:2, interval:5.5, delay:6, path:0 },
+      { type:"caster", count:2, interval:5.5, delay:3, path:1 },
+      { type:"slug", count:8, interval:1.5, delay:5, path:0 },
+      { type:"slug", count:8, interval:1.5, delay:2, path:1 },
+      { type:"bigbob", count:1, interval:0, delay:8, path:0 },
+    ]
+  }
+];
+
+// ==================== GAME STATE ====================
+let state = {
+  levelIdx: 0,
+  level: null,
+  dp: 10,
+  maxDp: 99,
+  dpTimer: 0,
+  dpRegenRate: 1.0, // DP per second
+  lives: 5,
+  enemies: [],
+  operators: [],
+  waves: [],
+  currentWave: 0,
+  waveTimer: 0,
+  waveEnemyIdx: 0,
+  waveSpawnTimer: 0,
+  totalEnemies: 0,
+  killedEnemies: 0,
+  phase: "menu", // "menu" | "playing" | "win" | "lose" | "paused"
+  speed: 1,
+  selectedCard: null, // operator id from card selection
+  selectedOp: null,   // deployed operator instance
+  particles: [],
+  gameTime: 0,
+  shakeTimer: 0,
+  shakeIntensity: 0,
+  hoverTile: null,    // {gx, gy} or null
+};
+
+// ==================== CLASSES ====================
+
+class Operator {
+  constructor(template, gx, gy) {
+    const t = template;
+    this.id = t.id;
+    this.name = t.name;
+    this.className = t.className;
+    this.tileType = t.tileType;
+    this.block = t.block;
+    this.cost = t.cost;
+    this.maxHp = t.hp; this.hp = t.hp;
+    this.baseAtk = t.atk; this.atk = t.atk;
+    this.baseDef = t.def; this.def = t.def;
+    this.res = t.res;
+    this.atkSpeed = t.atkSpeed;
+    this.atkTimer = 0;
+    this.rangeType = t.rangeType;
+    this.skill = { ...t.skill, currentSp: 0, active: false, timer: 0 };
+    this.color = t.color;
+    this.icon = t.icon;
+    this.gx = gx; this.gy = gy; // grid position
+    this.blockedEnemies = [];
+    this.target = null;
+    this.healTarget = null;
+    this.deployAnim = 0.4;
+    this.flashTimer = 0;
+    this.isMedic = t.rangeType === "medic";
+    // For skill buff tracking
+    this.buffAtk = 0;
+    this.buffDef = 0;
+    this.buffTimer = 0;
+    this.doubleAttack = false;
+    this.doubleTimer = 0;
+  }
+
+  get isGround() { return this.tileType === "ground"; }
+
+  getRange() {
+    // Returns array of {gx, gy} for range display and targeting
+    const r = [];
+    switch (this.rangeType) {
+      case "melee":
+        // Attacks adjacent tiles (4-directional) and own tile
+        r.push({gx:this.gx, gy:this.gy});
+        if (this.gx > 0) r.push({gx:this.gx-1, gy:this.gy});
+        if (this.gx < GRID_X-1) r.push({gx:this.gx+1, gy:this.gy});
+        if (this.gy > 0) r.push({gx:this.gx, gy:this.gy-1});
+        if (this.gy < GRID_Y-1) r.push({gx:this.gx, gy:this.gy+1});
+        break;
+      case "sniper":
+        // 3-tile radius (manhattan distance <= 3)
+        for (let dx = -3; dx <= 3; dx++) {
+          for (let dy = -3; dy <= 3; dy++) {
+            if (Math.abs(dx) + Math.abs(dy) <= 3) {
+              const nx = this.gx + dx, ny = this.gy + dy;
+              if (nx >= 0 && nx < GRID_X && ny >= 0 && ny < GRID_Y) r.push({gx:nx, gy:ny});
+            }
+          }
+        }
+        break;
+      case "caster":
+        // 2-tile radius (chebyshev), more compact
+        for (let dx = -2; dx <= 2; dx++) {
+          for (let dy = -2; dy <= 2; dy++) {
+            if (Math.abs(dx) <= 2 && Math.abs(dy) <= 2) {
+              const nx = this.gx + dx, ny = this.gy + dy;
+              if (nx >= 0 && nx < GRID_X && ny >= 0 && ny < GRID_Y) r.push({gx:nx, gy:ny});
+            }
+          }
+        }
+        break;
+      case "medic":
+        // Extended range for healing
+        for (let dx = -3; dx <= 3; dx++) {
+          for (let dy = -3; dy <= 3; dy++) {
+            if (Math.abs(dx) + Math.abs(dy) <= 3 && !(dx === 0 && dy === 0)) {
+              const nx = this.gx + dx, ny = this.gy + dy;
+              if (nx >= 0 && nx < GRID_X && ny >= 0 && ny < GRID_Y) r.push({gx:nx, gy:ny});
+            }
+          }
+        }
+        break;
+    }
+    return r;
+  }
+
+  getCurrentAtk() { return this.atk + this.buffAtk; }
+  getCurrentDef() { return this.def + this.buffDef; }
+
+  canBlock() { return this.blockedEnemies.length < this.block; }
+
+  blockEnemy(enemy) {
+    if (!this.canBlock()) return false;
+    this.blockedEnemies.push(enemy);
+    enemy.blockedBy = this;
+    enemy.state = "blocked";
+    return true;
+  }
+
+  unblockEnemy(enemy) {
+    const idx = this.blockedEnemies.indexOf(enemy);
+    if (idx >= 0) this.blockedEnemies.splice(idx, 1);
+    if (enemy.blockedBy === this) {
+      enemy.blockedBy = null;
+      enemy.state = "moving";
+    }
+  }
+
+  update(dt, speed, enemies, operators) {
+    if (this.deployAnim > 0) { this.deployAnim -= dt * speed; return; }
+    if (this.flashTimer > 0) this.flashTimer -= dt * speed;
+
+    // Update skill buff timers
+    if (this.buffTimer > 0) {
+      this.buffTimer -= dt * speed;
+      if (this.buffTimer <= 0) {
+        this.buffAtk = 0;
+        this.buffDef = 0;
+      }
+    }
+    if (this.doubleTimer > 0) {
+      this.doubleTimer -= dt * speed;
+      if (this.doubleTimer <= 0) this.doubleAttack = false;
+    }
+
+    // Update skill SP (real-time recovery rate, 1 SP/s)
+    if (!this.skill.active && this.skill.currentSp < this.skill.sp) {
+      if (this.skill.spType === "auto") {
+        this.skill.currentSp += dt * speed;
+      }
+    }
+
+    // Skill active timer (counts down during skill)
+    if (this.skill.active) {
+      this.skill.timer -= dt * speed;
+      if (this.skill.timer <= 0) {
+        if (this.skill.effect === "buff") { this.buffAtk = 0; this.buffDef = 0; }
+        if (this.skill.effect === "double") { this.doubleAttack = false; }
+        this.skill.active = false;
+      }
+    }
+
+    // Attack timer
+    this.atkTimer += dt * speed;
+    if (this.atkTimer < this.atkSpeed) return;
+
+    if (this.isMedic) {
+      this.healTick(operators);
+    } else {
+      this.attackTick(enemies);
+    }
+  }
+
+  healTick(operators) {
+    // Find damaged operator in range
+    const range = this.getRange();
+    let best = null; let lowestHpPct = 1.0;
+    for (const op of operators) {
+      if (op === this) continue;
+      if (op.hp >= op.maxHp) continue;
+      if (!range.some(r => r.gx === op.gx && r.gy === op.gy)) continue;
+      const pct = op.hp / op.maxHp;
+      if (pct < lowestHpPct) { lowestHpPct = pct; best = op; }
+    }
+    if (best) {
+      this.atkTimer = 0;
+      const healAmt = this.getCurrentAtk() * (this.skill.active && this.skill.effect === "buff" ? (1 + this.skill.value) : 1);
+      best.hp = Math.min(best.maxHp, best.hp + healAmt);
+      spawnParticles(this.gx, this.gy, best.gx, best.gy, "#80ff80", 4);
+      best.flashTimer = 0.15;
+    } else {
+      this.atkTimer = this.atkSpeed * 0.8; // idle, check sooner
+    }
+  }
+
+  attackTick(enemies) {
+    const range = this.getRange();
+    // First check blocked enemies, then enemies in range
+    let target = null;
+    // Prefer blocked enemies
+    for (const e of this.blockedEnemies) {
+      if (e.hp > 0) { target = e; break; }
+    }
+    // Otherwise find nearest enemy in range
+    if (!target && enemies.length > 0) {
+      let bestDist = Infinity;
+      for (const e of enemies) {
+        if (e.hp <= 0) continue;
+        const inRange = range.some(r => r.gx === e.gx && r.gy === e.gy);
+        if (!inRange) continue;
+        // For ranged operators, also check if enemy is within their grid-range
+        const dist = Math.abs(e.gx - this.gx) + Math.abs(e.gy - this.gy);
+        if (dist < bestDist) { bestDist = dist; target = e; }
+      }
+    }
+
+    if (!target) {
+      this.atkTimer = this.atkSpeed * 0.8;
+      return;
+    }
+
+    this.atkTimer = 0;
+    const atkVal = this.getCurrentAtk();
+    const defVal = target.def;
+    const isArts = this.rangeType === "caster";
+    let dmg;
+    if (isArts) {
+      dmg = atkVal * (1 - target.res / 100);
+    } else {
+      dmg = Math.max(atkVal - defVal, atkVal * 0.05);
+    }
+
+    // Skill effects
+    if (this.skill.active && this.skill.effect === "aoe") {
+      // AoE around target
+      dmg = atkVal * this.skill.value * (1 - target.res / 100);
+      for (const e of enemies) {
+        if (e.hp <= 0) continue;
+        const dist = Math.abs(e.gx - target.gx) + Math.abs(e.gy - target.gy);
+        if (dist <= 1) {
+          e.hp -= (dist === 0 ? dmg : dmg * 0.5);
+          e.flashTimer = 0.15;
+        }
+      }
+      spawnParticles(this.gx, this.gy, target.gx, target.gy, "#ff8030", 10);
+      if (this.skill.effect === "aoe") this.skill.active = false; // One-shot skill
+      state.shakeTimer = 0.15; state.shakeIntensity = 3;
+    } else {
+      target.hp -= dmg;
+      target.flashTimer = 0.1;
+      spawnParticles(this.gx, this.gy, target.gx, target.gy, isArts ? "#ffaa30" : "#ffffff", isArts ? 5 : 3);
+
+      if (this.doubleAttack) {
+        target.hp -= dmg;
+        spawnParticles(this.gx, this.gy, target.gx, target.gy, "#ffff80", 2);
+      }
+    }
+
+    // Offensive SP recovery
+    if (!this.skill.active && this.skill.spType === "offensive") {
+      this.skill.currentSp = Math.min(this.skill.sp, this.skill.currentSp + 1);
+      if (this.doubleAttack) {
+        this.skill.currentSp = Math.min(this.skill.sp, this.skill.currentSp + 1);
+      }
+    }
+  }
+
+  activateSkill() {
+    if (this.skill.currentSp < this.skill.sp) return;
+    this.skill.currentSp = 0;
+    this.skill.active = true;
+
+    switch (this.skill.effect) {
+      case "dp":
+        state.dp = Math.min(state.maxDp, state.dp + this.skill.value);
+        spawnParticles(this.gx, this.gy, this.gx, this.gy - 1, "#ffcc00", 12);
+        this.skill.active = false; // instant effect
+        break;
+      case "buff":
+        if (this.skill.stat === "atk") this.buffAtk = this.baseAtk * this.skill.value;
+        if (this.skill.stat === "def") this.buffDef = this.def * this.skill.value;
+        this.buffTimer = this.skill.duration;
+        this.skill.timer = this.skill.duration;
+        spawnParticles(this.gx, this.gy, this.gx, this.gy, "#ffffff", 8);
+        break;
+      case "double":
+        this.doubleAttack = true;
+        this.doubleTimer = this.skill.duration;
+        this.skill.timer = this.skill.duration;
+        spawnParticles(this.gx, this.gy, this.gx, this.gy, "#ffff40", 8);
+        break;
+      case "aoe":
+        // AoE is handled on next attack; timeout fallback in game loop
+        this.skill.timer = 5;
+        spawnParticles(this.gx, this.gy, this.gx, this.gy, "#ff6020", 8);
+        break;
+    }
+  }
+
+  takeDamage(dmg) {
+    const actualDmg = Math.max(dmg - this.getCurrentDef(), dmg * 0.05);
+    this.hp -= actualDmg;
+    this.flashTimer = 0.15;
+    // Defensive SP recovery (not used by these ops but structure is here)
+    return actualDmg;
+  }
+}
+
+// ==================== ENEMY CLASS ====================
+class Enemy {
+  constructor(template, waypoints, pathIdx) {
+    const t = template;
+    this.typeId = t.id;
+    this.name = t.name;
+    this.maxHp = t.hp; this.hp = t.hp;
+    this.atk = t.atk;
+    this.def = t.def;
+    this.res = t.res;
+    this.speed = t.speed;
+    this.atkSpeed = t.atkSpeed;
+    this.atkTimer = 0;
+    this.reward = t.reward;
+    this.color = t.color;
+    this.size = t.size;
+    this.isRanged = t.isRanged || false;
+    this.range = t.range || 0;
+    this.isBoss = t.isBoss || false;
+    this.flashTimer = 0;
+
+    // Path following
+    this.waypoints = waypoints;
+    this.wpIdx = 0;
+    this.gx = waypoints[0].x;
+    this.gy = waypoints[0].y;
+    this.x = this.gxToWorld(this.gx);
+    this.y = this.gyToWorld(this.gy);
+    this.state = "moving"; // "moving" | "blocked" | "attacking"
+    this.blockedBy = null;
+
+    this.dead = false;
+    this.reachedGoal = false;
+    this.pathIdx = pathIdx;
+
+    // Ranged attack target
+    this.rangedTarget = null;
+  }
+
+  gxToWorld(gx) { return MAP_OX + gx * TILE + TILE/2; }
+  gyToWorld(gy) { return MAP_OY + gy * TILE + TILE/2; }
+
+  update(dt, speed, operators) {
+    if (this.flashTimer > 0) this.flashTimer -= dt * speed;
+
+    if (this.state === "moving") {
+      // Move toward next waypoint
+      const wp = this.waypoints[this.wpIdx];
+      const tx = this.gxToWorld(wp.x);
+      const ty = this.gyToWorld(wp.y);
+      const dx = tx - this.x;
+      const dy = ty - this.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+
+      if (dist < 2) {
+        // Reached waypoint
+        this.gx = wp.x; this.gy = wp.y;
+        this.x = tx; this.y = ty;
+        this.wpIdx++;
+        if (this.wpIdx >= this.waypoints.length) {
+          this.reachedGoal = true;
+          return;
+        }
+        // Check if this tile has a blocking operator
+        this.checkBlocking(operators);
+      } else {
+        const moveSpeed = this.speed * speed * dt;
+        const ratio = Math.min(moveSpeed / dist, 1);
+        this.x += dx * ratio;
+        this.y += dy * ratio;
+        // Update grid position approximation
+        this.gx = Math.round((this.x - MAP_OX - TILE/2) / TILE);
+        this.gy = Math.round((this.y - MAP_OY - TILE/2) / TILE);
+      }
+    } else if (this.state === "blocked") {
+      // Attack blocking operator
+      if (!this.blockedBy || this.blockedBy.hp <= 0) {
+        this.state = "moving";
+        this.blockedBy = null;
+        return;
+      }
+      this.atkTimer += dt * speed;
+      if (this.atkTimer >= this.atkSpeed) {
+        this.atkTimer = 0;
+        this.blockedBy.takeDamage(this.atk);
+        spawnParticles(this.gx, this.gy, this.blockedBy.gx, this.blockedBy.gy, "#ff4040", 2);
+      }
+    }
+  }
+
+  checkBlocking(operators) {
+    for (const op of operators) {
+      if (!op.isGround) continue;
+      if (op.gx === this.gx && op.gy === this.gy && op.canBlock()) {
+        op.blockEnemy(this);
+        this.atkTimer = this.atkSpeed * 0.5; // First attack sooner
+        return;
+      }
+    }
+  }
+
+  die() {
+    this.dead = true;
+    if (this.blockedBy) {
+      this.blockedBy.unblockEnemy(this);
+    }
+    state.dp = Math.min(state.maxDp, state.dp + this.reward);
+    state.killedEnemies++;
+    spawnParticles(this.gx, this.gy, this.gx, this.gy, this.color, 8);
+  }
+}
+
+// ==================== PARTICLES ====================
+function spawnParticles(fromGx, fromGy, toGx, toGy, color, count) {
+  const fx = MAP_OX + fromGx * TILE + TILE/2;
+  const fy = MAP_OY + fromGy * TILE + TILE/2;
+  const tx = MAP_OX + toGx * TILE + TILE/2;
+  const ty = MAP_OY + toGy * TILE + TILE/2;
+  for (let i = 0; i < count; i++) {
+    state.particles.push({
+      x: fx, y: fy,
+      tx: tx + (Math.random() - 0.5) * 20,
+      ty: ty + (Math.random() - 0.5) * 20,
+      life: 0.3 + Math.random() * 0.3,
+      maxLife: 0.3 + Math.random() * 0.3,
+      color: color,
+      size: 2 + Math.random() * 2,
+    });
+  }
+}
+
+// ==================== GAME FUNCTIONS ====================
+
+function startLevel(idx) {
+  state.levelIdx = idx;
+  state.level = JSON.parse(JSON.stringify(LEVELS[idx]));
+  state.dp = state.level.initialDP;
+  state.lives = state.level.lives;
+  state.enemies = [];
+  state.operators = [];
+  state.waves = state.level.waves;
+  state.currentWave = -1;
+  state.waveTimer = 0;
+  state.waveEnemyIdx = 0;
+  state.waveSpawnTimer = 0;
+  state.totalEnemies = 0;
+  state.killedEnemies = 0;
+  state.phase = "playing";
+  state.dpTimer = 0;
+  state.selectedCard = null;
+  state.selectedOp = null;
+  state.particles = [];
+  state.gameTime = 0;
+  state.shakeTimer = 0;
+  state.shakeIntensity = 0;
+
+  // Count total enemies
+  for (const w of state.waves) {
+    state.totalEnemies += (w.count || 0);
+  }
+
+  document.getElementById("level-select").classList.add("hidden");
+  document.getElementById("game-over-overlay").classList.remove("show");
+}
+
+function spawnEnemy(typeId, pathIdx) {
+  const tmpl = ENEMY_TYPES[typeId];
+  if (!tmpl) return;
+  const paths = state.level.waypoints;
+  let waypoints;
+  // Detect multi-path: if paths[0] is an array, we have multiple paths
+  if (Array.isArray(paths[0])) {
+    waypoints = paths[pathIdx || 0];
+  } else {
+    waypoints = paths;
+  }
+  const enemy = new Enemy(tmpl, waypoints, pathIdx || 0);
+  state.enemies.push(enemy);
+}
+
+function deployOperator(opId, gx, gy) {
+  const tmpl = OPERATORS[opId];
+  if (!tmpl) return false;
+  if (state.dp < tmpl.cost) return false;
+
+  // Check tile validity
+  const tile = state.level.grid[gy]?.[gx];
+  if (!tile) return false;
+  const validTiles = tmpl.tileType === "ground" ? ["P","G","S"] : ["R"];
+  if (!validTiles.includes(tile)) return false;
+
+  // Check no operator already on this tile
+  for (const op of state.operators) {
+    if (op.gx === gx && op.gy === gy) return false;
+  }
+
+  state.dp -= tmpl.cost;
+  const op = new Operator(tmpl, gx, gy);
+  state.operators.push(op);
+
+  // Check if any moving enemy is on this tile and can be blocked
+  if (op.isGround) {
+    for (const e of state.enemies) {
+      if (e.state === "moving" && e.gx === gx && e.gy === gy && op.canBlock()) {
+        op.blockEnemy(e);
+      }
+    }
+  }
+  return true;
+}
+
+function retreatOperator(op) {
+  const refund = Math.floor(op.cost / 2);
+  state.dp = Math.min(state.maxDp, state.dp + refund);
+  // Unblock all enemies
+  for (const e of [...op.blockedEnemies]) {
+    op.unblockEnemy(e);
+  }
+  const idx = state.operators.indexOf(op);
+  if (idx >= 0) state.operators.splice(idx, 1);
+  if (state.selectedOp === op) state.selectedOp = null;
+}
+
+function activateSkill(op) {
+  if (op.skill.currentSp < op.skill.sp) return;
+  op.activateSkill();
+}
+
+function getTileAt(mx, my) {
+  const gx = Math.floor((mx - MAP_OX) / TILE);
+  const gy = Math.floor((my - MAP_OY) / TILE);
+  if (gx < 0 || gx >= GRID_X || gy < 0 || gy >= GRID_Y) return null;
+  return { gx, gy, type: state.level.grid[gy][gx] };
+}
+
+function getOpAt(gx, gy) {
+  return state.operators.find(op => op.gx === gx && op.gy === gy) || null;
+}
+
+function isValidDeployTile(gx, gy, opId) {
+  const tile = state.level.grid[gy]?.[gx];
+  if (!tile || tile === "X") return false;
+  if (getOpAt(gx, gy)) return false;
+  const opDef = OPERATORS[opId];
+  if (opDef.tileType === "ground") return tile === "P" || tile === "G" || tile === "S";
+  return tile === "R";
+}
+
+// ==================== UPDATE ====================
+function update(dt) {
+  if (state.phase !== "playing") return;
+
+  const speed = state.speed;
+  state.gameTime += dt * speed;
+
+  // DP regen
+  state.dpTimer += dt * speed;
+  if (state.dpTimer >= 1.0 / state.dpRegenRate) {
+    state.dpTimer -= 1.0 / state.dpRegenRate;
+    state.dp = Math.min(state.maxDp, state.dp + 1);
+  }
+
+  // Wave spawning
+  updateWaves(dt, speed);
+
+  // Update operators
+  for (const op of state.operators) {
+    op.update(dt, speed, state.enemies, state.operators);
+  }
+
+  // Update enemies
+  for (const e of state.enemies) {
+    if (e.dead || e.reachedGoal) continue;
+    e.update(dt, speed, state.operators);
+  }
+
+  // Process dead enemies and goal-reaching
+  const deadEnemies = [];
+  for (const e of state.enemies) {
+    if (e.reachedGoal) {
+      // Enemy escaped - lives lost
+      state.lives--;
+      e.dead = true;
+      deadEnemies.push(e);
+      spawnParticles(e.gx, e.gy, e.gx, e.gy, "#ff0000", 6);
+      state.shakeTimer = 0.2;
+      state.shakeIntensity = 5;
+    } else if (e.hp <= 0 && !e.dead) {
+      // Enemy killed
+      e.die();
+      deadEnemies.push(e);
+    }
+  }
+  // Remove dead
+  state.enemies = state.enemies.filter(e => !e.dead && !e.reachedGoal);
+
+  // Update particles
+  for (const p of state.particles) {
+    p.life -= dt * speed;
+  }
+  state.particles = state.particles.filter(p => p.life > 0);
+
+  // Shake timer
+  if (state.shakeTimer > 0) state.shakeTimer -= dt;
+
+  // Check win/lose
+  if (state.lives <= 0) {
+    state.phase = "lose";
+    showGameOver(false);
+    return;
+  }
+
+  // Win condition: all waves done and no enemies left
+  const allWavesSpawned = state.currentWave >= state.waves.length;
+  if (allWavesSpawned && state.enemies.length === 0 && state.killedEnemies >= state.totalEnemies) {
+    state.phase = "win";
+    showGameOver(true);
+  }
+}
+
+function updateWaves(dt, speed) {
+  // Start first wave
+  if (state.currentWave === -1) {
+    state.currentWave = 0;
+    state.waveTimer = state.waves[0].delay || 0;
+    state.waveEnemyIdx = 0;
+    state.waveSpawnTimer = 0;
+    return;
+  }
+
+  if (state.currentWave >= state.waves.length) return;
+
+  const wave = state.waves[state.currentWave];
+
+  // Wait for wave delay
+  if (state.waveTimer > 0) {
+    state.waveTimer -= dt * speed;
+    return;
+  }
+
+  // Spawn enemies
+  const pathIdx = wave.path !== undefined ? wave.path : 0;
+  if (state.waveEnemyIdx < wave.count) {
+    state.waveSpawnTimer += dt * speed;
+    const interval = wave.interval || 2;
+    while (state.waveSpawnTimer >= interval && state.waveEnemyIdx < wave.count) {
+      state.waveSpawnTimer -= interval;
+      spawnEnemy(wave.type, pathIdx);
+      state.waveEnemyIdx++;
+    }
+  } else {
+    // Move to next wave
+    state.currentWave++;
+    if (state.currentWave < state.waves.length) {
+      state.waveTimer = state.waves[state.currentWave].delay || 0;
+      state.waveEnemyIdx = 0;
+      state.waveSpawnTimer = 0;
+    }
+  }
+}
+
+function showGameOver(won) {
+  const overlay = document.getElementById("game-over-overlay");
+  overlay.classList.add("show");
+  const resultText = document.getElementById("result-text");
+  const resultDetail = document.getElementById("result-detail");
+
+  if (won) {
+    resultText.textContent = "作战胜利";
+    resultText.className = "result win";
+    resultDetail.textContent = `击杀 ${state.killedEnemies}/${state.totalEnemies} · 剩余生命 ${state.lives}`;
+  } else {
+    resultText.textContent = "作战失败";
+    resultText.className = "result lose";
+    resultDetail.textContent = `生命值耗尽 · 击杀 ${state.killedEnemies}/${state.totalEnemies}`;
+  }
+}
+
+// ==================== RENDER ====================
+function render() {
+  ctx.clearRect(0, 0, W, H);
+
+  // Screen shake
+  let shakeX = 0, shakeY = 0;
+  if (state.shakeTimer > 0) {
+    shakeX = (Math.random() - 0.5) * state.shakeIntensity * 2;
+    shakeY = (Math.random() - 0.5) * state.shakeIntensity * 2;
+  }
+
+  ctx.save();
+  ctx.translate(shakeX, shakeY);
+
+  if (state.phase === "menu") {
+    // Menu is handled by HTML overlay
+  } else {
+    drawMap();
+    drawEnemies();
+    drawOperators();
+    drawParticles();
+    drawRangeOverlay();
+  }
+
+  ctx.restore();
+
+  if (state.phase !== "menu") {
+    drawTopBar();
+    drawOperatorPanel();
+    drawSelectedOpInfo();
+    drawTooltip();
+  }
+}
+
+function drawMap() {
+  // Map background
+  ctx.fillStyle = "#0d0d18";
+  ctx.fillRect(MAP_OX - 4, MAP_OY - 4, GRID_X * TILE + 8, GRID_Y * TILE + 8);
+  ctx.strokeStyle = "#1a1a30";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(MAP_OX - 4, MAP_OY - 4, GRID_X * TILE + 8, GRID_Y * TILE + 8);
+
+  for (let gy = 0; gy < GRID_Y; gy++) {
+    for (let gx = 0; gx < GRID_X; gx++) {
+      const tile = state.level.grid[gy][gx];
+      const x = MAP_OX + gx * TILE;
+      const y = MAP_OY + gy * TILE;
+
+      // Tile fill
+      let fillColor = "#111118";
+      if (tile === "P") fillColor = TILE_COLORS.path;
+      else if (tile === "G") fillColor = TILE_COLORS.ground;
+      else if (tile === "R") fillColor = TILE_COLORS.ranged;
+      else if (tile === "X") fillColor = TILE_COLORS.blocked;
+      else if (tile === "S") fillColor = TILE_COLORS.spawn;
+      else if (tile === "E") fillColor = TILE_COLORS.goal;
+
+      ctx.fillStyle = fillColor;
+      ctx.fillRect(x + 1, y + 1, TILE - 2, TILE - 2);
+
+      // Tile border
+      let borderColor = "#1a1a24";
+      if (tile === "P") borderColor = TILE_BORDER.path;
+      else if (tile === "G") borderColor = TILE_BORDER.ground;
+      else if (tile === "R") borderColor = TILE_BORDER.ranged;
+      else if (tile === "S") borderColor = TILE_BORDER.spawn;
+      else if (tile === "E") borderColor = TILE_BORDER.goal;
+
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 1, y + 1, TILE - 2, TILE - 2);
+
+      // Tile symbols
+      if (tile === "S") {
+        ctx.fillStyle = "#40ff6040";
+        ctx.fillRect(x + 1, y + 1, TILE - 2, TILE - 2);
+        ctx.fillStyle = "#80ff80";
+        ctx.font = "bold 11px 'PingFang SC','Microsoft YaHei',sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("出", x + TILE/2, y + TILE/2 + 4);
+      } else if (tile === "E") {
+        ctx.fillStyle = "#ff404040";
+        ctx.fillRect(x + 1, y + 1, TILE - 2, TILE - 2);
+        ctx.fillStyle = "#ff8080";
+        ctx.font = "bold 11px 'PingFang SC','Microsoft YaHei',sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("守", x + TILE/2, y + TILE/2 + 4);
+      } else if (tile === "R") {
+        // Small indicator triangle for ranged tiles
+        ctx.fillStyle = "#6a609040";
+        ctx.beginPath();
+        ctx.moveTo(x + TILE - 8, y + 8);
+        ctx.lineTo(x + TILE - 4, y + 4);
+        ctx.lineTo(x + TILE - 4, y + 12);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // Hover highlight
+      if (state.hoverTile && state.hoverTile.gx === gx && state.hoverTile.gy === gy) {
+        if (state.selectedCard && isValidDeployTile(gx, gy, state.selectedCard)) {
+          ctx.fillStyle = "rgba(74,158,255,0.3)";
+          ctx.fillRect(x + 1, y + 1, TILE - 2, TILE - 2);
+          ctx.strokeStyle = "rgba(74,158,255,0.8)";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x, y, TILE, TILE);
+        } else if (state.selectedCard) {
+          ctx.fillStyle = "rgba(224,64,64,0.2)";
+          ctx.fillRect(x + 1, y + 1, TILE - 2, TILE - 2);
+        }
+      }
+
+      // Selected op highlight
+      if (state.selectedOp && state.selectedOp.gx === gx && state.selectedOp.gy === gy) {
+        ctx.strokeStyle = "#ffe060";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([4, 2]);
+        ctx.strokeRect(x, y, TILE, TILE);
+        ctx.setLineDash([]);
+      }
+    }
+  }
+
+  // Draw path with arrows
+  if (state.level.waypoints) {
+    const paths = Array.isArray(state.level.waypoints[0])
+      ? state.level.waypoints : [state.level.waypoints];
+    for (const waypoints of paths) {
+      for (let i = 0; i < waypoints.length - 1; i++) {
+        const a = waypoints[i], b = waypoints[i + 1];
+        const ax = MAP_OX + a.x * TILE + TILE/2;
+        const ay = MAP_OY + a.y * TILE + TILE/2;
+        const bx = MAP_OX + b.x * TILE + TILE/2;
+        const by = MAP_OY + b.y * TILE + TILE/2;
+
+        // Path line
+        ctx.strokeStyle = "rgba(200,200,180,0.2)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(bx, by);
+        ctx.stroke();
+
+        // Arrowhead
+        const angle = Math.atan2(by - ay, bx - ax);
+        const arrowLen = 8;
+        ctx.fillStyle = "rgba(200,200,180,0.4)";
+        ctx.beginPath();
+        ctx.moveTo(
+          bx - arrowLen * Math.cos(angle - 0.5),
+          by - arrowLen * Math.sin(angle - 0.5)
+        );
+        ctx.lineTo(bx, by);
+        ctx.lineTo(
+          bx - arrowLen * Math.cos(angle + 0.5),
+          by - arrowLen * Math.sin(angle + 0.5)
+        );
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  }
+}
+
+function drawEnemies() {
+  for (const e of state.enemies) {
+    if (e.dead) continue;
+    const x = e.x, y = e.y;
+    const s = e.size;
+
+    // Shadow
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.beginPath();
+    ctx.ellipse(x, y + s * 0.7, s * 0.7, s * 0.25, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Body
+    const flashColor = e.flashTimer > 0 && Math.floor(e.flashTimer * 30) % 2 === 0 ? "#ffffff" : e.color;
+    ctx.fillStyle = flashColor;
+    ctx.beginPath();
+    if (e.isBoss) {
+      // Boss shape: large hexagon
+      drawHexagon(x, y, s);
+    } else if (e.isRanged) {
+      // Caster shape: diamond
+      ctx.moveTo(x, y - s);
+      ctx.lineTo(x + s * 0.8, y);
+      ctx.lineTo(x, y + s);
+      ctx.lineTo(x - s * 0.8, y);
+    } else {
+      // Normal: circle or rounded rect
+      ctx.arc(x, y, s, 0, Math.PI * 2);
+    }
+    ctx.fill();
+
+    // Border
+    ctx.strokeStyle = "rgba(0,0,0,0.5)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Boss special: glowing border
+    if (e.isBoss) {
+      ctx.strokeStyle = "rgba(255,60,30,0.6)";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+
+    // HP bar
+    const hpPct = e.hp / e.maxHp;
+    const barW = s * 2;
+    const barY = y - s - 10;
+    ctx.fillStyle = "rgba(0,0,0,0.7)";
+    ctx.fillRect(x - barW/2 - 1, barY - 1, barW + 2, HP_BAR_H + 2);
+    const hpColor = hpPct > 0.6 ? "#40c060" : hpPct > 0.3 ? "#e0a040" : "#e04040";
+    ctx.fillStyle = hpColor;
+    ctx.fillRect(x - barW/2, barY, barW * hpPct, HP_BAR_H);
+
+    // Name label (only for boss/special)
+    if (e.isBoss || e.isRanged) {
+      ctx.fillStyle = "#ffffffcc";
+      ctx.font = "10px 'PingFang SC','Microsoft YaHei',sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(e.name, x, barY - 4);
+    }
+
+    // Blocked indicator
+    if (e.state === "blocked") {
+      ctx.strokeStyle = "#ff6060";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, s + 4, 0, Math.PI * 2);
+      ctx.setLineDash([3, 3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+}
+
+function drawHexagon(x, y, s) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const angle = Math.PI / 3 * i - Math.PI / 6;
+    const hx = x + s * Math.cos(angle);
+    const hy = y + s * Math.sin(angle);
+    if (i === 0) ctx.moveTo(hx, hy);
+    else ctx.lineTo(hx, hy);
+  }
+  ctx.closePath();
+}
+
+function drawOperators() {
+  for (const op of state.operators) {
+    if (op.deployAnim > 0) {
+      // Deployment animation
+      const progress = 1 - op.deployAnim / 0.4;
+      const x = MAP_OX + op.gx * TILE + TILE/2;
+      const y = MAP_OY + op.gy * TILE + TILE/2;
+      const s = TILE * 0.35 * progress;
+
+      ctx.globalAlpha = progress;
+      drawOperatorSprite(op, x, y, s);
+      ctx.globalAlpha = 1;
+
+      // Ring expanding
+      ctx.strokeStyle = "rgba(200,200,255,0.5)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, TILE * 0.5 * progress, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      const x = MAP_OX + op.gx * TILE + TILE/2;
+      const y = MAP_OY + op.gy * TILE + TILE/2;
+      drawOperatorSprite(op, x, y, TILE * 0.35);
+    }
+  }
+}
+
+function drawOperatorSprite(op, x, y, s) {
+  // Base shape
+  const flashColor = op.flashTimer > 0 && Math.floor(op.flashTimer * 30) % 2 === 0 ? "#ffffff" : op.color;
+  ctx.fillStyle = flashColor;
+  ctx.beginPath();
+
+  if (op.isGround) {
+    // Square with rounded corners for ground ops
+    const r = s * 0.2;
+    ctx.moveTo(x - s + r, y - s);
+    ctx.lineTo(x + s - r, y - s);
+    ctx.arcTo(x + s, y - s, x + s, y - s + r, r);
+    ctx.lineTo(x + s, y + s - r);
+    ctx.arcTo(x + s, y + s, x + s - r, y + s, r);
+    ctx.lineTo(x - s + r, y + s);
+    ctx.arcTo(x - s, y + s, x - s, y + s - r, r);
+    ctx.lineTo(x - s, y - s + r);
+    ctx.arcTo(x - s, y - s, x - s + r, y - s, r);
+  } else {
+    // Circle with "pedestal" for ranged ops
+    // Pedestal
+    ctx.fillStyle = "#2a2a38";
+    ctx.beginPath();
+    ctx.arc(x, y, s * 0.85, 0, Math.PI * 2);
+    ctx.fill();
+    // Operator circle
+    ctx.fillStyle = flashColor;
+    ctx.beginPath();
+    ctx.arc(x, y, s * 0.7, 0, Math.PI * 2);
+  }
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.5)";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Class icon / letter
+  ctx.fillStyle = "#ffffff";
+  ctx.font = `bold ${s*1.2}px 'PingFang SC','Microsoft YaHei',sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(op.icon, x, y);
+
+  // HP bar
+  const hpPct = op.hp / op.maxHp;
+  const barW = s * 2;
+  const barY = y - s - 10;
+  ctx.fillStyle = "rgba(0,0,0,0.7)";
+  ctx.fillRect(x - barW/2 - 1, barY - 1, barW + 2, HP_BAR_H + 2);
+  const hpColor = hpPct > 0.6 ? "#40c060" : hpPct > 0.3 ? "#e0a040" : "#e04040";
+  ctx.fillStyle = hpColor;
+  ctx.fillRect(x - barW/2, barY, barW * hpPct, HP_BAR_H);
+
+  // Skill ready indicator
+  if (op.skill.currentSp >= op.skill.sp) {
+    const glowY = y - s - 16;
+    ctx.fillStyle = "#ffe040";
+    ctx.beginPath();
+    ctx.arc(x, glowY, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#ffe04080";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, glowY, 6, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Skill active glow
+  if (op.skill.active && (op.skill.effect === "buff" || op.skill.effect === "double")) {
+    ctx.strokeStyle = "rgba(255,224,64,0.6)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.arc(x, y, s + 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function drawParticles() {
+  for (const p of state.particles) {
+    const progress = 1 - p.life / p.maxLife;
+    const px = p.x + (p.tx - p.x) * progress;
+    const py = p.y + (p.ty - p.y) * progress;
+    const alpha = Math.max(0, 1 - progress);
+    // Parse hex color to rgba
+    let r, g, b;
+    if (p.color.startsWith("#")) {
+      const hex = p.color.slice(1);
+      if (hex.length === 6) {
+        r = parseInt(hex.slice(0,2), 16);
+        g = parseInt(hex.slice(2,4), 16);
+        b = parseInt(hex.slice(4,6), 16);
+      } else if (hex.length === 3) {
+        r = parseInt(hex[0]+hex[0], 16);
+        g = parseInt(hex[1]+hex[1], 16);
+        b = parseInt(hex[2]+hex[2], 16);
+      } else { r=g=b=255; }
+    } else { r=g=b=255; }
+    ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+    ctx.beginPath();
+    ctx.arc(px, py, p.size * (1 - progress * 0.5), 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawRangeOverlay() {
+  // Draw range overlay for selected card
+  if (state.selectedCard && state.hoverTile) {
+    const opDef = OPERATORS[state.selectedCard];
+    if (!opDef) return;
+    const gx = state.hoverTile.gx, gy = state.hoverTile.gy;
+    if (!isValidDeployTile(gx, gy, state.selectedCard)) return;
+
+    // Create temp op to get range
+    const tempOp = { gx, gy, rangeType: opDef.rangeType, tileType: opDef.tileType };
+    const range = getRangeFor(tempOp);
+
+    for (const r of range) {
+      const rx = MAP_OX + r.gx * TILE;
+      const ry = MAP_OY + r.gy * TILE;
+      ctx.fillStyle = "rgba(74,158,255,0.15)";
+      ctx.fillRect(rx + 1, ry + 1, TILE - 2, TILE - 2);
+      ctx.strokeStyle = "rgba(74,158,255,0.4)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(rx, ry, TILE, TILE);
+    }
+  }
+
+  // Draw range for selected deployed operator
+  if (state.selectedOp) {
+    const range = state.selectedOp.getRange();
+    for (const r of range) {
+      const rx = MAP_OX + r.gx * TILE;
+      const ry = MAP_OY + r.gy * TILE;
+      ctx.fillStyle = "rgba(255,224,96,0.12)";
+      ctx.fillRect(rx + 1, ry + 1, TILE - 2, TILE - 2);
+      ctx.strokeStyle = "rgba(255,224,96,0.35)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(rx, ry, TILE, TILE);
+    }
+  }
+}
+
+function getRangeFor(op) {
+  const r = [];
+  const gx = op.gx, gy = op.gy;
+  switch (op.rangeType) {
+    case "melee":
+      r.push({gx,gy});
+      if (gx>0) r.push({gx:gx-1,gy});
+      if (gx<GRID_X-1) r.push({gx:gx+1,gy});
+      if (gy>0) r.push({gx,gy:gy-1});
+      if (gy<GRID_Y-1) r.push({gx,gy:gy+1});
+      break;
+    case "sniper":
+      for (let dx=-3;dx<=3;dx++) for(let dy=-3;dy<=3;dy++)
+        if(Math.abs(dx)+Math.abs(dy)<=3&&(dx!==0||dy!==0))
+          {const nx=gx+dx,ny=gy+dy;if(nx>=0&&nx<GRID_X&&ny>=0&&ny<GRID_Y)r.push({gx:nx,gy:ny});}
+      break;
+    case "caster":
+      for(let dx=-2;dx<=2;dx++) for(let dy=-2;dy<=2;dy++)
+        if(!(dx===0&&dy===0))
+          {const nx=gx+dx,ny=gy+dy;if(nx>=0&&nx<GRID_X&&ny>=0&&ny<GRID_Y)r.push({gx:nx,gy:ny});}
+      break;
+    case "medic":
+      for(let dx=-3;dx<=3;dx++) for(let dy=-3;dy<=3;dy++)
+        if(Math.abs(dx)+Math.abs(dy)<=3&&!(dx===0&&dy===0))
+          {const nx=gx+dx,ny=gy+dy;if(nx>=0&&nx<GRID_X&&ny>=0&&ny<GRID_Y)r.push({gx:nx,gy:ny});}
+      break;
+  }
+  return r;
+}
+
+function drawTopBar() {
+  // Background
+  ctx.fillStyle = "rgba(8,8,16,0.95)";
+  ctx.fillRect(0, 0, W, 100);
+  ctx.strokeStyle = "#1a1a30";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, 100);
+  ctx.lineTo(W, 100);
+  ctx.stroke();
+
+  // Level name
+  ctx.fillStyle = "#e8e8f0";
+  ctx.font = "bold 16px 'PingFang SC','Microsoft YaHei',sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText(state.level.name, 20, 35);
+
+  // DP counter
+  const dpX = 20, dpY = 62;
+  ctx.fillStyle = "#1a1a28";
+  ctx.fillRect(dpX, dpY, 100, 30);
+  ctx.strokeStyle = "#4a4a60";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(dpX, dpY, 100, 30);
+  ctx.fillStyle = "#e0c040";
+  ctx.font = "bold 18px 'PingFang SC','Microsoft YaHei',sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText(`⚡ ${state.dp}`, dpX + 10, dpY + 22);
+
+  // Enemy count
+  const ecX = 140;
+  ctx.fillStyle = "#1a1a28";
+  ctx.fillRect(ecX, dpY, 120, 30);
+  ctx.strokeStyle = "#4a4a60";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(ecX, dpY, 120, 30);
+  const remaining = state.totalEnemies - state.killedEnemies;
+  ctx.fillStyle = "#e0a0a0";
+  ctx.fillText(`👾 ${Math.max(0, remaining)}`, ecX + 10, dpY + 22);
+
+  // Lives
+  const livesX = 280;
+  ctx.fillStyle = "#1a1a28";
+  ctx.fillRect(livesX, dpY, 80, 30);
+  ctx.strokeStyle = "#4a4a60";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(livesX, dpY, 80, 30);
+  ctx.fillStyle = "#ff6060";
+  ctx.fillText(`❤ ${state.lives}`, livesX + 10, dpY + 22);
+
+  // Wave info
+  ctx.fillStyle = "#8a8a9a";
+  ctx.font = "12px 'PingFang SC','Microsoft YaHei',sans-serif";
+  ctx.textAlign = "right";
+  const waveNum = Math.min(state.currentWave + 1, state.waves.length);
+  ctx.fillText(`波次 ${waveNum}/${state.waves.length}`, W - 20, 30);
+
+  // Speed button
+  const spdX = W - 100, spdY = 55;
+  ctx.fillStyle = state.speed === 2 ? "#3a3a20" : "#1a1a28";
+  ctx.fillRect(spdX, spdY, 80, 30);
+  ctx.strokeStyle = state.speed === 2 ? "#a0a040" : "#4a4a60";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(spdX, spdY, 80, 30);
+  ctx.fillStyle = state.speed === 2 ? "#ffe040" : "#8a8a9a";
+  ctx.font = "bold 12px 'PingFang SC','Microsoft YaHei',sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(`⏩ ${state.speed}×`, spdX + 40, spdY + 20);
+
+  // Pause button
+  const pauseX = W - 190, pauseY = 55;
+  ctx.fillStyle = "#1a1a28";
+  ctx.fillRect(pauseX, pauseY, 80, 30);
+  ctx.strokeStyle = "#4a4a60";
+  ctx.strokeRect(pauseX, pauseY, 80, 30);
+  ctx.fillStyle = "#8a8a9a";
+  ctx.fillText("⏸ 暂停", pauseX + 40, pauseY + 20);
+
+  // Back to menu
+  ctx.fillStyle = "#8a8a9a";
+  ctx.font = "12px 'PingFang SC','Microsoft YaHei',sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillText("ESC 返回菜单", W - 20, 70);
+}
+
+function drawOperatorPanel() {
+  const panelY = H - 100;
+  // Panel background
+  ctx.fillStyle = "rgba(8,8,16,0.95)";
+  ctx.fillRect(0, panelY, W, 100);
+  ctx.strokeStyle = "#1a1a30";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, panelY);
+  ctx.lineTo(W, panelY);
+  ctx.stroke();
+
+  const cardW = 90, cardH = 80;
+  const startX = (W - OPERATOR_LIST.length * (cardW + 10) + 10) / 2;
+  const cardY = panelY + 10;
+
+  for (let i = 0; i < OPERATOR_LIST.length; i++) {
+    const opId = OPERATOR_LIST[i];
+    const opDef = OPERATORS[opId];
+    const cx = startX + i * (cardW + 10);
+
+    // Card background
+    const isSelected = state.selectedCard === opId;
+    const canAfford = state.dp >= opDef.cost;
+
+    ctx.fillStyle = isSelected ? "#1a2a3a" : "#12121e";
+    ctx.fillRect(cx, cardY, cardW, cardH);
+    ctx.strokeStyle = isSelected ? "#4a9eff" : (canAfford ? "#3a3a50" : "#2a2a30");
+    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.strokeRect(cx, cardY, cardW, cardH);
+
+    // Operator icon
+    const iconX = cx + cardW/2, iconY = cardY + 22;
+    ctx.fillStyle = canAfford ? opDef.color : "#555560";
+    ctx.beginPath();
+    if (opDef.tileType === "ground") {
+      ctx.arc(iconX, iconY, 12, 0, Math.PI * 2);
+    } else {
+      // Small pedestal
+      ctx.fillStyle = canAfford ? "#2a2a38" : "#333340";
+      ctx.beginPath();
+      ctx.arc(iconX, iconY, 11, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = canAfford ? opDef.color : "#555560";
+      ctx.beginPath();
+      ctx.arc(iconX, iconY, 8, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 11px 'PingFang SC','Microsoft YaHei',sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(opDef.icon, iconX, iconY);
+
+    // Name & class
+    ctx.fillStyle = canAfford ? "#d0d0e0" : "#6a6a7a";
+    ctx.font = "11px 'PingFang SC','Microsoft YaHei',sans-serif";
+    ctx.fillText(opDef.name, cx + cardW/2, cardY + 42);
+    ctx.fillStyle = "#6a6a7a";
+    ctx.font = "9px 'PingFang SC','Microsoft YaHei',sans-serif";
+    ctx.fillText(opDef.className, cx + cardW/2, cardY + 54);
+
+    // Cost
+    ctx.fillStyle = canAfford ? "#e0c040" : "#6a6a40";
+    ctx.font = "bold 12px 'PingFang SC','Microsoft YaHei',sans-serif";
+    ctx.fillText(`⚡${opDef.cost}`, cx + cardW/2, cardY + 72);
+  }
+}
+
+function drawSelectedOpInfo() {
+  if (!state.selectedOp) return;
+  const op = state.selectedOp;
+  const panelY = H - 100;
+
+  // Info box above the panel
+  const infoW = 280, infoH = 130;
+  const infoX = W - infoW - 20, infoY = panelY - infoH - 10;
+
+  ctx.fillStyle = "rgba(8,8,18,0.95)";
+  ctx.fillRect(infoX, infoY, infoW, infoH);
+  ctx.strokeStyle = "#ffe060";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(infoX, infoY, infoW, infoH);
+
+  // Name and class
+  ctx.fillStyle = "#ffe060";
+  ctx.font = "bold 14px 'PingFang SC','Microsoft YaHei',sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText(`${op.name} · ${op.className}`, infoX + 12, infoY + 22);
+
+  // Stats
+  ctx.fillStyle = "#c0c0d0";
+  ctx.font = "11px 'PingFang SC','Microsoft YaHei',sans-serif";
+  const statsY = infoY + 42;
+  ctx.fillText(`HP ${Math.ceil(op.hp)}/${op.maxHp}`, infoX + 12, statsY);
+  ctx.fillText(`ATK ${Math.ceil(op.getCurrentAtk())}`, infoX + 130, statsY);
+  ctx.fillText(`DEF ${Math.ceil(op.getCurrentDef())}`, infoX + 12, statsY + 16);
+  ctx.fillText(`RES ${op.res}`, infoX + 130, statsY + 16);
+  ctx.fillText(`阻挡 ${op.blockedEnemies.length}/${op.block}`, infoX + 12, statsY + 32);
+
+  // Skill info
+  const skillY = infoY + 82;
+  const spPct = op.skill.currentSp / op.skill.sp;
+  ctx.fillStyle = "#3a3a48";
+  ctx.fillRect(infoX + 12, skillY, infoW - 24, 10);
+  ctx.fillStyle = spPct >= 1 ? "#ffe040" : "#4a90d9";
+  ctx.fillRect(infoX + 12, skillY, (infoW - 24) * spPct, 10);
+  ctx.fillStyle = "#c0c0d0";
+  ctx.font = "10px 'PingFang SC','Microsoft YaHei',sans-serif";
+  ctx.fillText(`${op.skill.name} SP ${Math.floor(op.skill.currentSp)}/${op.skill.sp}`, infoX + 12, skillY - 4);
+
+  // Skill button
+  const sBtnX = infoX + 12, sBtnY = skillY + 16;
+  const sReady = op.skill.currentSp >= op.skill.sp;
+  ctx.fillStyle = sReady ? "#4a3020" : "#1a1a28";
+  ctx.fillRect(sBtnX, sBtnY, 100, 26);
+  ctx.strokeStyle = sReady ? "#e08040" : "#3a3a40";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(sBtnX, sBtnY, 100, 26);
+  ctx.fillStyle = sReady ? "#ffe080" : "#6a6a7a";
+  ctx.font = "bold 11px 'PingFang SC','Microsoft YaHei',sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(sReady ? "⚡ 发动技能" : "技能充能中", sBtnX + 50, sBtnY + 18);
+
+  // Retreat button
+  const rBtnX = infoX + 124, rBtnY = skillY + 16;
+  ctx.fillStyle = "#2a1a1a";
+  ctx.fillRect(rBtnX, rBtnY, 70, 26);
+  ctx.strokeStyle = "#4a3030";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(rBtnX, rBtnY, 70, 26);
+  ctx.fillStyle = "#e08080";
+  ctx.fillText("撤退", rBtnX + 35, rBtnY + 18);
+
+  // Close hint
+  ctx.fillStyle = "#6a6a7a";
+  ctx.font = "9px 'PingFang SC','Microsoft YaHei',sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillText("右键/Esc关闭", infoX + infoW - 12, infoY + infoH - 8);
+}
+
+function drawTooltip() {
+  if (!state.hoverTile || state.selectedOp) return;
+  const { gx, gy } = state.hoverTile;
+
+  // Show tile info on hover
+  const opOnTile = getOpAt(gx, gy);
+  if (opOnTile && state.phase === "playing" && !state.selectedCard) {
+    const tx = MAP_OX + gx * TILE + TILE/2;
+    const ty = MAP_OY + gy * TILE - 8;
+    ctx.fillStyle = "rgba(0,0,0,0.85)";
+    const labelW = 80;
+    ctx.fillRect(tx - labelW/2, ty - 16, labelW, 18);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "10px 'PingFang SC','Microsoft YaHei',sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`点击查看 ${opOnTile.name}`, tx, ty - 2);
+  }
+}
+
+// ==================== INPUT HANDLING ====================
+function handleClick(mx, my) {
+  if (state.phase === "playing") {
+    // Check top bar buttons
+    if (my < 100) {
+      // Pause button: x = W-190 to W-110, y = 55 to 85
+      if (mx > W - 195 && mx < W - 105 && my > 55 && my < 85) {
+        if (state.phase === "playing") state.phase = "paused";
+        else if (state.phase === "paused") state.phase = "playing";
+        return;
+      }
+      // Speed button: x = W-100 to W-20, y = 55 to 85
+      if (mx > W - 105 && mx < W - 15 && my > 55 && my < 85) {
+        state.speed = state.speed === 1 ? 2 : 1;
+        return;
+      }
+      return;
+    }
+
+    // Check operator panel
+    const panelY = H - 100;
+    if (my > panelY) {
+      const cardW = 90, cardGap = 10;
+      const totalW = OPERATOR_LIST.length * (cardW + cardGap) - cardGap;
+      const startX = (W - totalW) / 2;
+
+      for (let i = 0; i < OPERATOR_LIST.length; i++) {
+        const cx = startX + i * (cardW + cardGap);
+        if (mx >= cx && mx <= cx + cardW && my >= panelY + 10 && my <= panelY + 90) {
+          const opId = OPERATOR_LIST[i];
+          if (state.selectedCard === opId) {
+            state.selectedCard = null;
+          } else {
+            if (state.dp >= OPERATORS[opId].cost) {
+              state.selectedCard = opId;
+              state.selectedOp = null;
+            }
+          }
+          return;
+        }
+      }
+      return;
+    }
+
+    // Check selected op info panel buttons
+    if (state.selectedOp) {
+      const infoX = W - 300, infoY = panelY - 140;
+      const sBtnX = infoX + 12, sBtnY = infoY + 82 + 16;
+      if (mx >= sBtnX && mx <= sBtnX + 100 && my >= sBtnY && my <= sBtnY + 26) {
+        activateSkill(state.selectedOp);
+        return;
+      }
+      const rBtnX = infoX + 124;
+      if (mx >= rBtnX && mx <= rBtnX + 70 && my >= sBtnY && my <= sBtnY + 26) {
+        retreatOperator(state.selectedOp);
+        return;
+      }
+    }
+
+    // Check map click
+    const tile = getTileAt(mx, my);
+    if (!tile) {
+      state.selectedCard = null;
+      state.selectedOp = null;
+      return;
+    }
+
+    // If we have a selected card, try to deploy
+    if (state.selectedCard) {
+      if (isValidDeployTile(tile.gx, tile.gy, state.selectedCard)) {
+        const success = deployOperator(state.selectedCard, tile.gx, tile.gy);
+        if (success) {
+          state.selectedCard = null;
+          state.hoverTile = null;
+        }
+      }
+      return;
+    }
+
+    // Click on deployed operator to select it
+    const clickedOp = getOpAt(tile.gx, tile.gy);
+    if (clickedOp) {
+      state.selectedOp = clickedOp;
+      state.selectedCard = null;
+      return;
+    }
+
+    // Clicked empty tile, deselect
+    state.selectedOp = null;
+  }
+}
+
+function handleRightClick(mx, my) {
+  state.selectedCard = null;
+  state.selectedOp = null;
+}
+
+function handleMouseMove(mx, my) {
+  if (state.phase !== "playing") {
+    state.hoverTile = null;
+    return;
+  }
+  // Only track hover when selecting deployment or on map
+  if (my > 100 && my < H - 100) {
+    state.hoverTile = getTileAt(mx, my);
+  } else {
+    state.hoverTile = null;
+  }
+}
+
+// ==================== EVENT LISTENERS ====================
+canvas.addEventListener("click", (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = W / rect.width;
+  const scaleY = H / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
+  handleClick(mx, my);
+});
+
+canvas.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = W / rect.width;
+  const scaleY = H / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
+  handleRightClick(mx, my);
+});
+
+canvas.addEventListener("mousemove", (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = W / rect.width;
+  const scaleY = H / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
+  handleMouseMove(mx, my);
+});
+
+canvas.addEventListener("mouseleave", () => {
+  state.hoverTile = null;
+});
+
+document.addEventListener("keydown", (e) => {
+  if (state.phase === "playing" || state.phase === "paused") {
+    if (e.key === "Escape") {
+      if (state.selectedOp) {
+        state.selectedOp = null;
+      } else if (state.selectedCard) {
+        state.selectedCard = null;
+      } else {
+        // Return to menu
+        state.phase = "menu";
+        document.getElementById("level-select").classList.remove("hidden");
+        document.getElementById("game-over-overlay").classList.remove("show");
+      }
+    }
+    if (e.key === " " || e.key === "Spacebar") {
+      e.preventDefault();
+      if (state.phase === "paused") state.phase = "playing";
+      else if (state.phase === "playing") state.phase = "paused";
+    }
+    if (e.key === "2" && state.phase === "playing") {
+      state.speed = state.speed === 1 ? 2 : 1;
+    }
+    // Number keys to select operators
+    if (e.key >= "1" && e.key <= "6") {
+      const idx = parseInt(e.key) - 1;
+      if (idx < OPERATOR_LIST.length) {
+        const opId = OPERATOR_LIST[idx];
+        if (state.dp >= OPERATORS[opId].cost) {
+          if (state.selectedCard === opId) state.selectedCard = null;
+          else { state.selectedCard = opId; state.selectedOp = null; }
+        }
+      }
+    }
+  }
+});
+
+// Level select buttons
+document.querySelectorAll(".level-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const idx = parseInt(btn.dataset.level);
+    startLevel(idx);
+  });
+});
+
+// Game over buttons
+document.getElementById("btn-restart").addEventListener("click", () => {
+  startLevel(state.levelIdx);
+});
+document.getElementById("btn-menu").addEventListener("click", () => {
+  state.phase = "menu";
+  document.getElementById("level-select").classList.remove("hidden");
+  document.getElementById("game-over-overlay").classList.remove("show");
+});
+
+// ==================== GAME LOOP ====================
+let lastTime = performance.now();
+
+function gameLoop(time) {
+  let dt = (time - lastTime) / 1000;
+  lastTime = time;
+
+  // Clamp dt to avoid spiral of death
+  if (dt > 0.1) dt = 0.1;
+  if (dt <= 0) dt = 0.016;
+
+  if (state.phase === "playing") {
+    update(dt);
+  }
+
+  render();
+  requestAnimationFrame(gameLoop);
+}
+
+// ==================== INIT ====================
+// Start with menu
+state.phase = "menu";
+document.getElementById("level-select").classList.remove("hidden");
+
+requestAnimationFrame(gameLoop);
+
+console.log("明日方舟 Demo 已就绪 - Arknights Tower Defense Ready");
+console.log("操作说明:");
+console.log("  1-6键: 选择干员卡牌");
+console.log("  点击地图: 部署干员 / 选择已部署干员");
+console.log("  右键/Esc: 取消选择");
+console.log("  空格: 暂停/继续");
+console.log("  2键: 切换1×/2×速度");
+</script>
+</body>
+</html>

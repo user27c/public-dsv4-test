@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>宝可梦对战 - 皮卡丘 VS 暴鲤龙</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+:root {
+  --screen-bg: #8bac0f;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #1a1a2e;
+  background-image:
+    repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  font-family: 'Press Start 2P', monospace;
+  overflow-x: hidden;
+  user-select: none;
+}
+
+/* ===== Game Boy Device Shell ===== */
+.gameboy {
+  background: #d0d0b8;
+  border-radius: 14px 14px 44px 14px;
+  padding: 28px 24px 24px;
+  box-shadow:
+    0 0 0 4px #b8b8a0,
+    0 0 0 7px #8a8a78,
+    0 10px 40px rgba(0,0,0,0.55),
+    inset 0 2px 0 rgba(255,255,255,0.25);
+  position: relative;
+  border-bottom: 20px solid #5a5a4a;
+  border-right: 8px solid #6a6a58;
+}
+
+.gameboy::before {
+  content: 'Nintendo GAME BOY™';
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  color: #404080;
+  letter-spacing: 3px;
+  opacity: 0.5;
+  white-space: nowrap;
+}
+
+/* ===== Screen Bezel ===== */
+.screen-bezel {
+  background: #343434;
+  border-radius: 8px 8px 14px 8px;
+  padding: 16px;
+  box-shadow:
+    inset 0 3px 8px rgba(0,0,0,0.7),
+    0 2px 0 rgba(255,255,255,0.12);
+  position: relative;
+}
+
+/* Red power LED */
+.power-led {
+  position: absolute;
+  top: -12px;
+  left: 18px;
+  width: 8px;
+  height: 8px;
+  background: #ff2828;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #ff0000, 0 0 18px rgba(255,0,0,0.45);
+  animation: led-pulse 2s ease-in-out infinite;
+  z-index: 5;
+}
+
+@keyframes led-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Screen label */
+.screen-label {
+  position: absolute;
+  top: -12px;
+  left: 36px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 6px;
+  color: #8888aa;
+  letter-spacing: 1px;
+}
+
+/* ===== LCD Screen ===== */
+.lcd-screen {
+  background: var(--screen-bg);
+  width: 480px;
+  height: 432px;
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+  /* CRT scanlines */
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.055) 2px,
+      rgba(0,0,0,0.055) 4px
+    );
+  box-shadow:
+    inset 0 0 50px rgba(0,0,0,0.22),
+    inset 0 0 12px rgba(0,0,0,0.08);
+  image-rendering: pixelated;
+  cursor: pointer;
+}
+
+/* Subtle screen reflection */
+.lcd-screen::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 45%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.07) 0%, transparent 100%);
+  pointer-events: none;
+  z-index: 50;
+}
+
+/* ===== Battle Scene (Top 280px) ===== */
+.battle-scene {
+  position: relative;
+  width: 100%;
+  height: 280px;
+  background: linear-gradient(180deg,
+    #9bbc0f 0%, #8bac0f 6%,
+    #8bac0f 6%, #8bac0f 53%,
+    #7a9a0a 53%, #7a9a0a 60%,
+    #6b8a08 60%, #6b8a08 100%
+  );
+  border-bottom: 4px solid #506000;
+  overflow: hidden;
+}
+
+/* Ground shadows */
+.ground-shadow-enemy {
+  position: absolute;
+  bottom: -16px;
+  left: 46px;
+  width: 110px;
+  height: 34px;
+  background: radial-gradient(ellipse, rgba(64,80,0,0.45) 0%, transparent 72%);
+  border-radius: 50%;
+}
+
+.ground-shadow-player {
+  position: absolute;
+  bottom: -8px;
+  right: 50px;
+  width: 130px;
+  height: 38px;
+  background: radial-gradient(ellipse, rgba(64,80,0,0.4) 0%, transparent 72%);
+  border-radius: 50%;
+}
+
+/* ===== Enemy (Gyarados) Area ===== */
+.enemy-area {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  z-index: 10;
+  transition: transform 0.15s ease, opacity 0.5s ease;
+}
+
+.enemy-sprite {
+  width: 128px;
+  height: 128px;
+  image-rendering: pixelated;
+}
+
+/* Enemy Info Plate (top right) */
+.enemy-info {
+  position: absolute;
+  top: 6px;
+  right: 16px;
+  background: #f8e0a0;
+  border: 3px solid #403818;
+  border-radius: 5px;
+  padding: 9px 14px;
+  min-width: 145px;
+  box-shadow: 3px 3px 0 rgba(0,0,0,0.35);
+  z-index: 11;
+}
+
+.enemy-name {
+  font-size: 10px;
+  color: #282008;
+  text-transform: uppercase;
+  letter-spacing: 0px;
+}
+
+.enemy-level {
+  font-size: 8px;
+  color: #585028;
+  float: right;
+  margin-left: 8px;
+}
+
+.hp-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.hp-label {
+  font-size: 7px;
+  color: #483818;
+}
+
+.hp-bar-outer {
+  flex: 1;
+  height: 6px;
+  background: #604830;
+  border: 1px solid #302008;
+  border-radius: 2px;
+  position: relative;
+  overflow: hidden;
+}
+
+.hp-bar-inner {
+  height: 100%;
+  background: #38c838;
+  border-radius: 1px;
+  transition: width 0.4s steps(20);
+}
+
+.hp-bar-inner.low { background: #f8b820; }
+.hp-bar-inner.critical { background: #f83030; animation: hp-blink 0.35s steps(2) infinite; }
+
+@keyframes hp-blink {
+  0% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+.hp-fraction {
+  font-size: 7px;
+  color: #403818;
+  white-space: nowrap;
+}
+
+/* ===== Player (Pikachu) Area ===== */
+.player-area {
+  position: absolute;
+  bottom: 8px;
+  right: 16px;
+  z-index: 10;
+  transition: transform 0.15s ease;
+}
+
+.player-sprite {
+  width: 128px;
+  height: 128px;
+  image-rendering: pixelated;
+  transform: scale(1.18);
+  transform-origin: bottom right;
+}
+
+/* Player Info Plate (bottom left) */
+.player-info {
+  position: absolute;
+  bottom: 4px;
+  left: 16px;
+  background: #f8e0a0;
+  border: 3px solid #403818;
+  border-radius: 5px;
+  padding: 9px 14px;
+  min-width: 155px;
+  box-shadow: 3px 3px 0 rgba(0,0,0,0.35);
+  z-index: 11;
+}
+
+.player-name {
+  font-size: 10px;
+  color: #282008;
+  text-transform: uppercase;
+}
+
+.player-level {
+  font-size: 8px;
+  color: #585028;
+  float: right;
+}
+
+.exp-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.exp-label {
+  font-size: 6px;
+  color: #685838;
+}
+
+.exp-bar-outer {
+  flex: 1;
+  height: 4px;
+  background: #685838;
+  border: 1px solid #302810;
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.exp-bar-inner {
+  height: 100%;
+  background: #4890d8;
+  transition: width 0.5s;
+}
+
+/* ===== Message Box (Bottom 152px) ===== */
+.message-box {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 152px;
+  background: #f8f0d0;
+  border-top: 4px solid #403818;
+  border-left: 3px solid #403818;
+  border-right: 3px solid #403818;
+  border-bottom: 3px solid #403818;
+  box-shadow: inset 0 0 0 4px #e0d0a0;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+}
+
+.message-text {
+  font-size: 11px;
+  color: #282008;
+  line-height: 1.85;
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  min-height: 52px;
+}
+
+/* Blinking continue arrow */
+.message-text .continue-arrow {
+  display: inline-block;
+  margin-left: 4px;
+  animation: blink-arrow 0.55s steps(2) infinite;
+  font-size: 10px;
+  align-self: flex-end;
+  position: absolute;
+  bottom: 4px;
+  right: 18px;
+}
+
+@keyframes blink-arrow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ===== Command Menu ===== */
+.command-menu {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px 24px;
+  padding: 6px 0;
+}
+
+.command-btn {
+  background: none;
+  border: none;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  color: #282008;
+  cursor: pointer;
+  padding: 7px 14px;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border-radius: 3px;
+}
+
+.command-btn:hover {
+  background: #d8c890;
+}
+
+.command-btn .cursor {
+  display: inline-block;
+  margin-right: 6px;
+  color: #ff3030;
+  visibility: hidden;
+  font-size: 9px;
+}
+
+.command-btn:hover .cursor {
+  visibility: visible;
+}
+
+/* ===== Move Selection Menu ===== */
+.move-menu {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px 20px;
+  padding: 6px 0;
+}
+
+.move-btn {
+  background: none;
+  border: none;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px;
+  color: #282008;
+  cursor: pointer;
+  padding: 7px 14px;
+  text-align: left;
+  text-transform: uppercase;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.move-btn:hover {
+  background: #d8c890;
+}
+
+.move-btn .cursor {
+  display: inline-block;
+  color: #ff3030;
+  visibility: hidden;
+  font-size: 8px;
+}
+
+.move-btn:hover .cursor {
+  visibility: visible;
+}
+
+.move-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.move-pp {
+  font-size: 7px;
+  color: #686848;
+}
+
+.move-type-badge {
+  display: inline-block;
+  font-size: 6px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.type-electric { background: #f0b828; color: #282008; }
+.type-water { background: #3890f8; }
+.type-normal { background: #989898; }
+.type-dragon { background: #6838f0; }
+.type-flying { background: #a890f0; }
+
+/* Back button */
+.back-btn {
+  grid-column: 1 / -1;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 8px;
+  background: none;
+  border: none;
+  color: #585028;
+  cursor: pointer;
+  padding: 6px;
+  text-align: center;
+  margin-top: 2px;
+  border-radius: 3px;
+}
+
+.back-btn:hover {
+  background: #d8c890;
+}
+
+/* ===== Damage Popup ===== */
+.damage-popup {
+  position: absolute;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 13px;
+  color: #fff;
+  text-shadow:
+    2px 2px 0 #000, -1px -1px 0 #000,
+    1px -1px 0 #000, -1px 1px 0 #000;
+  pointer-events: none;
+  z-index: 30;
+  animation: dmg-float 1.3s ease-out forwards;
+}
+
+.damage-popup.super-effective {
+  color: #ff4444;
+  font-size: 15px;
+}
+
+.damage-popup.not-very-effective {
+  color: #8888ff;
+  font-size: 11px;
+}
+
+@keyframes dmg-float {
+  0% { opacity: 1; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-24px); }
+  100% { opacity: 0; transform: translateY(-48px); }
+}
+
+/* ===== Screen Shake ===== */
+.shake {
+  animation: shake 0.45s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  8% { transform: translateX(-5px) rotate(-0.3deg); }
+  25% { transform: translateX(5px) rotate(0.3deg); }
+  42% { transform: translateX(-4px); }
+  58% { transform: translateX(4px); }
+  75% { transform: translateX(-2px); }
+  92% { transform: translateX(2px); }
+}
+
+/* ===== Flash Effect ===== */
+.flash {
+  animation: flash 0.28s ease-out;
+}
+
+@keyframes flash {
+  0% { filter: brightness(3.5); }
+  100% { filter: brightness(1); }
+}
+
+/* ===== Overlay (Win/Lose) ===== */
+.overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  z-index: 60;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+
+.overlay.show {
+  display: flex;
+}
+
+.overlay-text {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 14px;
+  color: #fff;
+  text-align: center;
+  line-height: 2;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.overlay-btn {
+  margin-top: 22px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  background: #f8e0a0;
+  border: 3px solid #403818;
+  padding: 12px 24px;
+  cursor: pointer;
+  color: #282008;
+  border-radius: 5px;
+  box-shadow: 2px 2px 0 rgba(0,0,0,0.4);
+}
+
+.overlay-btn:hover {
+  background: #ffe8b8;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 600px) {
+  .gameboy {
+    padding: 16px 10px 14px;
+    border-radius: 8px 8px 28px 8px;
+    border-bottom-width: 12px;
+    border-right-width: 4px;
+  }
+  .screen-bezel { padding: 8px; }
+  .lcd-screen { width: 300px; height: 270px; }
+  .battle-scene { height: 175px; }
+  .enemy-sprite, .player-sprite { width: 80px; height: 80px; }
+  .enemy-info { top: 3px; right: 6px; padding: 5px 8px; min-width: 105px; }
+  .player-info { bottom: 2px; left: 6px; padding: 5px 8px; min-width: 110px; }
+  .message-box { height: 95px; padding: 8px 10px; }
+  .enemy-name, .player-name { font-size: 7px; }
+  .message-text { font-size: 8px; }
+  .command-btn { font-size: 7px; padding: 5px 8px; }
+  .move-btn { font-size: 6px; padding: 5px 8px; }
+  .hp-bar-outer { height: 4px; }
+}
+</style>
+</head>
+<body>
+
+<div class="gameboy">
+  <div class="screen-bezel">
+    <div class="power-led"></div>
+    <span class="screen-label">COLOR</span>
+
+    <div class="lcd-screen" id="lcdScreen">
+
+      <!-- ===== Battle Scene ===== -->
+      <div class="battle-scene" id="battleScene">
+        <div class="ground-shadow-enemy"></div>
+        <div class="ground-shadow-player"></div>
+
+        <!-- Enemy: Gyarados -->
+        <div class="enemy-area" id="enemyArea">
+          <canvas class="enemy-sprite" id="enemySprite" width="64" height="64"></canvas>
+        </div>
+
+        <!-- Enemy Info Plate -->
+        <div class="enemy-info">
+          <div>
+            <span class="enemy-name" id="enemyName">暴鲤龙</span>
+            <span class="enemy-level" id="enemyLevel">Lv60</span>
+          </div>
+          <div class="hp-row">
+            <span class="hp-label">HP</span>
+            <div class="hp-bar-outer">
+              <div class="hp-bar-inner" id="enemyHpBar" style="width:100%"></div>
+            </div>
+            <span class="hp-fraction" id="enemyHpFraction"></span>
+          </div>
+        </div>
+
+        <!-- Player: Pikachu -->
+        <div class="player-area" id="playerArea">
+          <canvas class="player-sprite" id="playerSprite" width="64" height="64"></canvas>
+        </div>
+
+        <!-- Player Info Plate -->
+        <div class="player-info">
+          <div>
+            <span class="player-name" id="playerName">皮卡丘</span>
+            <span class="player-level" id="playerLevel">Lv60</span>
+          </div>
+          <div class="hp-row">
+            <span class="hp-label">HP</span>
+            <div class="hp-bar-outer">
+              <div class="hp-bar-inner" id="playerHpBar" style="width:100%"></div>
+            </div>
+            <span class="player-hp-fraction" id="playerHpFraction"></span>
+          </div>
+          <div class="exp-row">
+            <span class="exp-label">EXP</span>
+            <div class="exp-bar-outer">
+              <div class="exp-bar-inner" id="expBar" style="width:65%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== Message Box ===== -->
+      <div class="message-box" id="messageBox">
+        <div class="message-text" id="messageText"></div>
+        <div id="menuContainer"></div>
+      </div>
+
+      <!-- ===== Overlay ===== -->
+      <div class="overlay" id="overlay">
+        <div class="overlay-text" id="overlayText"></div>
+        <button class="overlay-btn" id="overlayBtn" onclick="resetBattle()">▶ 重新开始</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  Pokémon Battle Demo — Pikachu vs Gyarados
+//  Faithful recreation of early Game Boy Pokémon battles
+// ============================================================
+
+// ── Audio Engine (Simple 8-bit sounds) ──────────────────────
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+
+function initAudio() {
+  if (!audioCtx) audioCtx = new AudioCtx();
+}
+
+function playBeep(freq = 440, duration = 0.08, type = 'square', vol = 0.06) {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t);
+  gain.gain.setValueAtTime(vol, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + duration);
+}
+
+function sfxSelect() { playBeep(880, 0.05, 'square', 0.04); }
+function sfxConfirm() { playBeep(660, 0.06, 'square', 0.05); playBeep(880, 0.06, 'square', 0.05); }
+function sfxHit() { playBeep(150, 0.12, 'sawtooth', 0.07); }
+function sfxSuperEffective() { playBeep(1200, 0.08, 'square', 0.06); playBeep(1500, 0.1, 'square', 0.06); }
+function sfxNotVeryEffective() { playBeep(300, 0.15, 'triangle', 0.05); }
+function sfxFaint() { playBeep(200, 0.25, 'sawtooth', 0.06); playBeep(150, 0.3, 'sawtooth', 0.04); playBeep(100, 0.35, 'sawtooth', 0.02); }
+
+// ── Pixel Art Sprite Definitions ────────────────────────────
+
+// ── Gyarados Sprite Constants ───────────────────────────────
+// Color indices used in the pixel data below:
+// Gyarados: 0=transparent, 1=blue, 2=dark blue, 3=cream, 4=red, 5=white, 6=black, 7=light blue, 8=shadow blue
+
+// Gyarados color palette (indexed by number)
+const gyaradosColors = [
+  null,           // 0 = transparent
+  '#4880d0',      // 1 = primary blue
+  '#2858a8',      // 2 = dark blue / shadow
+  '#f8e8c8',      // 3 = cream belly
+  '#f83030',      // 4 = red (mouth)
+  '#f8f8f8',      // 5 = white (eye, teeth)
+  '#101010',      // 6 = black (eye pupil)
+  '#70a0e8',      // 7 = light blue highlight
+  '#3868b8',      // 8 = shadow blue
+];
+
+// Gyarados pixel data (hand-crafted 64×64)
+// This recreates the iconic serpentine pose from Red/Blue
+const gyaradosData = [
+// Row 0-3: top crest/fin
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+// Row 4-7: head top
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+// Row 8-12: face with eyes
+[0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,5,5,5,5,5,5,1,1,1,1,0,0,0,0,0,1,1,1,1,5,5,5,5,5,5,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,5,6,5,5,6,5,1,1,1,1,0,0,0,0,0,1,1,1,1,5,6,5,5,6,5,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+// Row 13-16: mouth area
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,4,4,4,4,1,1,1,1,0,0,0,0,0,0,0,1,1,1,1,4,4,4,4,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,4,4,4,4,1,1,1,1,1,0,0,0,0,0,1,1,1,1,1,4,4,4,4,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+// Row 17-24: serpentine body curving down
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,3,3,3,3,1,1,1,1,1,0,0,0,0,1,1,1,1,1,3,3,3,3,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,3,3,3,1,1,1,1,1,0,0,0,0,1,1,1,1,1,3,3,3,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+// Row 25-32: body continues
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,3,3,3,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,3,3,3,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,3,3,3,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,3,3,3,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,2,2,2,2,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,2,2,2,2,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,1,1,1,1,0,0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+// Row 33-40: lower body curving to tail
+[0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,1,1,1,2,2,2,2,2,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+// Row 41-48: tail / fin
+[0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,1,1,1,2,2,2,2,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,1,1,1,1,2,2,2,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,1,1,1,1,1,2,2,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,1,1,1,1,1,1,2,2,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+// Pad remaining rows with transparent
+];
+
+while (gyaradosData.length < 64) gyaradosData.push(new Array(64).fill(0));
+
+
+
+// Pikachu back sprite (64×64)
+const pikachuData = [
+// Row 0-5: Ears
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,3,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,3,3,3,3,0,0,0,0,0,0,0,0,0,0,0,3,3,3,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,4,3,3,3,3,0,0,0,0,0,0,0,0,0,0,3,3,3,3,3,4,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,3,3,3,3,3,0,0,0,0,0,0,0,0,0,0,3,3,3,3,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,3,3,3,0,0,0,0,0,0,0,0,0,0,0,0,3,3,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+// Row 6-8: between ears
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+// Row 9-12: head top
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,6,6,6,6,6,6,1,1,1,1,1,1,1,1,6,6,6,6,6,6,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,6,6,6,6,6,6,6,1,1,1,1,1,1,1,1,6,6,6,6,6,6,6,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0],
+// Row 13-16: head / face area (back view - see ears, back of head)
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,3,3,3,3,3,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,3,3,3,3,3,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+// Row 17-24: body / back stripes
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,3,3,3,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,2,2,2,2,1,1,1,1,1,1,1,1,2,2,2,2,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,2,2,2,2,1,1,1,1,1,1,1,1,2,2,2,2,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+// Row 25-32: lower body / tail start
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+// Row 33-40: tail lightning bolt
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,1,1,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,1,1,1,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,1,1,1,1,1,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,1,1,1,1,1,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+// Row 41-45: tail tip
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,1,1,1,1,1,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,2,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+];
+
+while (pikachuData.length < 64) pikachuData.push(new Array(64).fill(0));
+
+// ── Sprite Rendering ────────────────────────────────────────
+function renderSprite(canvasId, data, colorMap, scale = 2) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  const ps = scale;
+  ctx.clearRect(0, 0, 64 * ps, 64 * ps);
+
+  for (let y = 0; y < Math.min(data.length, 64); y++) {
+    const row = data[y];
+    for (let x = 0; x < Math.min(row.length, 64); x++) {
+      const c = row[x];
+      if (c === 0) continue;
+      const hex = colorMap[c];
+      if (!hex) continue;
+      ctx.fillStyle = hex;
+      ctx.fillRect(x * ps, y * ps, ps, ps);
+    }
+  }
+}
+
+// ── Pikachu Color Palette ──────────────────────────────────
+// Pikachu: 0=transparent, 1=yellow, 2=dark yellow, 3=brown, 4=black, 5=white, 6=light yellow, 7=red, 8=shadow yellow, 9=edge dark
+const pikachuColors = [
+  null,           // 0 = transparent
+  '#f8c828',      // 1 = yellow
+  '#d09810',      // 2 = dark yellow
+  '#783808',      // 3 = brown (ear tips, back stripes)
+  '#181818',      // 4 = black
+  '#f8f8f8',      // 5 = white
+  '#f8e080',      // 6 = light yellow
+  '#e83828',      // 7 = red (cheek)
+  '#e0a800',      // 8 = shadow yellow
+  '#b88008',      // 9 = edge dark
+];
+
+function renderAll() {
+  renderSprite('enemySprite', gyaradosData, gyaradosColors, 2);
+  renderSprite('playerSprite', pikachuData, pikachuColors, 2);
+}
+
+// ── Battle Data ─────────────────────────────────────────────
+const pikachu = {
+  name: '皮卡丘', type: 'electric', maxHp: 160, hp: 160, level: 60,
+  attack: 85, defense: 60, spAtk: 80, spDef: 70, speed: 110,
+  moves: [
+    { name: '十万伏特', type: 'electric', power: 90, pp: 15, maxPp: 15, cat: 'special' },
+    { name: '打雷', type: 'electric', power: 110, pp: 10, maxPp: 10, cat: 'special' },
+    { name: '电光一闪', type: 'normal', power: 40, pp: 20, maxPp: 20, cat: 'physical' },
+    { name: '电击波', type: 'electric', power: 60, pp: 15, maxPp: 15, cat: 'special' },
+  ],
+};
+
+const gyarados = {
+  name: '暴鲤龙', type: 'water', maxHp: 190, hp: 190, level: 60,
+  attack: 145, defense: 99, spAtk: 80, spDef: 120, speed: 95,
+  moves: [
+    { name: '水炮', type: 'water', power: 110, pp: 5, maxPp: 5, cat: 'special' },
+    { name: '龙之怒', type: 'dragon', power: 85, pp: 10, maxPp: 10, cat: 'special' },
+    { name: '破坏光线', type: 'normal', power: 150, pp: 5, maxPp: 5, cat: 'special' },
+    { name: '攀瀑', type: 'water', power: 80, pp: 15, maxPp: 15, cat: 'physical' },
+  ],
+};
+
+const typeChart = {
+  electric: { water: 2, flying: 2, electric: 0.5, grass: 0.5, dragon: 0.5, ground: 0 },
+  water:    { fire: 2, ground: 2, rock: 2, water: 0.5, grass: 0.5, dragon: 0.5 },
+  normal:   { rock: 0.5, ghost: 0, steel: 0.5 },
+  dragon:   { dragon: 2 },
+};
+
+// ── State ───────────────────────────────────────────────────
+let state = 'intro';  // intro | await-action | animating | victory | defeat
+let pendingCallback = null;  // callback to run after current message is dismissed
+
+// ── DOM refs ────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const msgText = $('messageText');
+const menuEl  = $('menuContainer');
+const enemyHpBar = $('enemyHpBar');
+const playerHpBar = $('playerHpBar');
+const enemyHpFrac = $('enemyHpFraction');
+const playerHpFrac = $('playerHpFraction');
+const expBarEl = $('expBar');
+const lcdScreen = $('lcdScreen');
+const battleScene = $('battleScene');
+const enemyArea = $('enemyArea');
+const playerArea = $('playerArea');
+const overlay = $('overlay');
+const overlayText = $('overlayText');
+const messageBox = $('messageBox');
+
+// ── HP Bar Update ──────────────────────────────────────────
+function updateUI() {
+  const ep = Math.max(0, (gyarados.hp / gyarados.maxHp) * 100);
+  const pp = Math.max(0, (pikachu.hp / pikachu.maxHp) * 100);
+
+  enemyHpBar.style.width = ep + '%';
+  playerHpBar.style.width = pp + '%';
+  enemyHpFrac.textContent = `${Math.max(0, gyarados.hp)} / ${gyarados.maxHp}`;
+  playerHpFrac.textContent = `${Math.max(0, pikachu.hp)} / ${pikachu.maxHp}`;
+
+  enemyHpBar.classList.remove('low', 'critical');
+  playerHpBar.classList.remove('low', 'critical');
+  if (ep <= 20) enemyHpBar.classList.add('critical');
+  else if (ep <= 50) enemyHpBar.classList.add('low');
+  if (pp <= 20) playerHpBar.classList.add('critical');
+  else if (pp <= 50) playerHpBar.classList.add('low');
+}
+
+// ── Message System ─────────────────────────────────────────
+function setMessage(text, showArrow = true) {
+  msgText.innerHTML = text;
+  if (showArrow) {
+    msgText.innerHTML += ' <span class="continue-arrow">▼</span>';
+  }
+}
+
+function clearMenu() {
+  menuEl.innerHTML = '';
+}
+
+// ── Command Menu ───────────────────────────────────────────
+function showCommandMenu() {
+  state = 'await-action';
+  setMessage('皮卡丘 要做什么？');
+  clearMenu();
+  menuEl.innerHTML = `
+    <div class="command-menu">
+      <button class="command-btn" onclick="chooseFight()"><span class="cursor">▶</span> 战斗</button>
+      <button class="command-btn" onclick="notAvailable('道具')"><span class="cursor">▶</span> 道具</button>
+      <button class="command-btn" onclick="notAvailable('宝可梦')"><span class="cursor">▶</span> 宝可梦</button>
+      <button class="command-btn" onclick="notAvailable('逃跑')"><span class="cursor">▶</span> 逃跑</button>
+    </div>
+  `;
+}
+
+function chooseFight() {
+  initAudio();
+  sfxConfirm();
+  showMoveMenu();
+}
+
+function notAvailable(what) {
+  initAudio();
+  sfxSelect();
+  setMessage(`无法使用 ${what}！`);
+  clearMenu();
+  waitForClick(() => showCommandMenu());
+}
+
+// ── Move Menu ──────────────────────────────────────────────
+function showMoveMenu() {
+  state = 'await-action';
+  setMessage('选择招式：');
+  clearMenu();
+
+  const moves = pikachu.moves;
+  const typeClass = { electric: 'type-electric', water: 'type-water', normal: 'type-normal', dragon: 'type-dragon' };
+
+  let html = '<div class="move-menu">';
+  moves.forEach((m, i) => {
+    const disabled = m.pp <= 0 ? 'disabled' : '';
+    html += `
+      <button class="move-btn" onclick="selectMove(${i})" ${disabled}>
+        <span class="cursor">▶</span> ${m.name}
+        <span class="move-pp">PP:${m.pp}/${m.maxPp}</span>
+        <span class="move-type-badge ${typeClass[m.type] || ''}">${m.type.toUpperCase()}</span>
+      </button>`;
+  });
+  html += `<button class="back-btn" onclick="showCommandMenu()">← 返回</button></div>`;
+  menuEl.innerHTML = html;
+}
+
+// ── Select Move & Execute ──────────────────────────────────
+function selectMove(index) {
+  if (state !== 'await-action') return;
+  const move = pikachu.moves[index];
+  if (move.pp <= 0) return;
+
+  initAudio();
+  sfxConfirm();
+  clearMenu();
+  state = 'animating';
+
+  setMessage(`皮卡丘 使出了<br>${move.name}！`);
+  pikachu.moves[index].pp--;
+
+  waitForClick(() => {
+    animatePlayerAttack(() => {
+      executeMove(pikachu, gyarados, move, 'enemy', () => {
+        if (state === 'victory' || state === 'defeat') return;
+        // After player's move + any effectiveness message, go to enemy turn
+        enemyTurn();
+      });
+    });
+  });
+}
+
+// ── Damage Calc ────────────────────────────────────────────
+function calcDamage(atk, def, move) {
+  const a = move.cat === 'special' ? atk.spAtk : atk.attack;
+  const d = move.cat === 'special' ? def.spDef : def.defense;
+  let dmg = ((2 * atk.level / 5 + 2) * move.power * a / d) / 50 + 2;
+  dmg = Math.floor(dmg * (0.85 + Math.random() * 0.15));
+
+  if (move.type === atk.type) dmg = Math.floor(dmg * 1.5);
+
+  let eff = 1;
+  if (typeChart[move.type] && typeChart[move.type][def.type]) {
+    eff = typeChart[move.type][def.type];
+  }
+  dmg = Math.floor(dmg * eff);
+
+  const crit = Math.random() < 0.0625;
+  if (crit) dmg = Math.floor(dmg * 1.8);
+
+  return { damage: Math.max(1, dmg), effectiveness: eff, crit };
+}
+
+// ── Execute Move ───────────────────────────────────────────
+function executeMove(atk, def, move, targetSide, callback) {
+  const result = calcDamage(atk, def, move);
+  def.hp -= result.damage;
+  if (def.hp < 0) def.hp = 0;
+  updateUI();
+
+  // Damage popup
+  const targetArea = targetSide === 'enemy' ? enemyArea : playerArea;
+  showDamagePopup(targetArea, result);
+
+  // Hit SFX
+  if (result.effectiveness > 1.5) sfxSuperEffective();
+  else if (result.effectiveness < 0.5 && result.effectiveness > 0) sfxNotVeryEffective();
+  else sfxHit();
+
+  // Build messages
+  const msgs = [];
+  if (result.crit) msgs.push('会心一击！');
+  if (result.effectiveness > 1.5) msgs.push('效果拔群！');
+  else if (result.effectiveness < 0.5 && result.effectiveness > 0) msgs.push('效果不太好...');
+
+  // Faint check
+  if (def.hp <= 0) {
+    sfxFaint();
+    msgs.push(`${def.name} 倒下了！`);
+    setMessage(msgs.join('<br>'));
+    waitForClick(() => {
+      if (def === gyarados) {
+        setMessage('皮卡丘 获得了胜利！');
+        waitForClick(() => {
+          overlayText.innerHTML = '你赢了！<br><span style="color:#f8c828">★ 皮卡丘 获胜！ ★</span>';
+          overlay.classList.add('show');
+          state = 'victory';
+        });
+      } else {
+        setMessage('眼前一片漆黑...');
+        waitForClick(() => {
+          overlayText.innerHTML = '你输了...<br><span style="color:#ff4444">眼前一片漆黑...</span>';
+          overlay.classList.add('show');
+          state = 'defeat';
+        });
+      }
+    });
+    return;
+  }
+
+  // Show messages, then callback
+  if (msgs.length > 0) {
+    setMessage(msgs.join('<br>'));
+    waitForClick(callback);
+  } else {
+    callback();
+  }
+}
+
+// ── Damage Popup ───────────────────────────────────────────
+function showDamagePopup(area, result) {
+  const el = document.createElement('div');
+  el.className = 'damage-popup';
+  if (result.effectiveness > 1.5 || result.crit) el.classList.add('super-effective');
+  else if (result.effectiveness < 0.5 && result.effectiveness > 0) el.classList.add('not-very-effective');
+  el.textContent = `-${result.damage}`;
+  el.style.left = (15 + Math.random() * 40) + 'px';
+  el.style.top = (5 + Math.random() * 25) + 'px';
+  area.appendChild(el);
+  setTimeout(() => el.remove(), 1400);
+}
+
+// ── Animations ─────────────────────────────────────────────
+function animatePlayerAttack(cb) {
+  playerArea.style.transform = 'translate(-24px, -12px)';
+  playerArea.style.transition = 'transform 0.18s ease-out';
+  lcdScreen.classList.add('flash');
+
+  setTimeout(() => {
+    playerArea.style.transform = '';
+    lcdScreen.classList.remove('flash');
+    enemyArea.style.transform = 'translate(8px, 0)';
+    enemyArea.style.transition = 'transform 0.1s ease';
+    setTimeout(() => {
+      enemyArea.style.transform = 'translate(-5px, 0)';
+      setTimeout(() => {
+        enemyArea.style.transform = '';
+        if (cb) cb();
+      }, 70);
+    }, 70);
+  }, 220);
+}
+
+function animateEnemyAttack(cb) {
+  enemyArea.style.transform = 'translate(18px, 6px)';
+  enemyArea.style.transition = 'transform 0.18s ease-out';
+  lcdScreen.classList.add('flash');
+
+  setTimeout(() => {
+    enemyArea.style.transform = '';
+    lcdScreen.classList.remove('flash');
+    playerArea.style.transform = 'translate(-10px, 0)';
+    playerArea.style.transition = 'transform 0.1s ease';
+    setTimeout(() => {
+      playerArea.style.transform = 'translate(5px, 0)';
+      setTimeout(() => {
+        playerArea.style.transform = '';
+        if (cb) cb();
+      }, 70);
+    }, 70);
+  }, 220);
+}
+
+// ── Enemy AI ───────────────────────────────────────────────
+function enemyTurn() {
+  if (state === 'victory' || state === 'defeat') return;
+  state = 'animating';
+
+  const available = gyarados.moves.filter(m => m.pp > 0);
+  if (available.length === 0) {
+    setMessage('暴鲤龙 没有可以使用的<br>招式了！');
+    waitForClick(() => showCommandMenu());
+    return;
+  }
+
+  const move = available[Math.floor(Math.random() * available.length)];
+  setMessage(`暴鲤龙 使出了<br>${move.name}！`);
+  gyarados.moves.forEach(m => { if (m.name === move.name) m.pp--; });
+
+  waitForClick(() => {
+    animateEnemyAttack(() => {
+      executeMove(gyarados, pikachu, move, 'player', () => {
+        if (state === 'victory' || state === 'defeat') return;
+        showCommandMenu();
+      });
+    });
+  });
+}
+
+// ── Click-to-advance ───────────────────────────────────────
+function waitForClick(callback) {
+  pendingCallback = callback;
+}
+
+messageBox.addEventListener('click', (e) => {
+  // Don't process clicks if clicking a button in the menu
+  if (e.target.closest('button')) return;
+  if (!pendingCallback) return;
+  initAudio();
+  sfxSelect();
+  const cb = pendingCallback;
+  pendingCallback = null;
+  cb();
+});
+
+// ── Battle Intro ───────────────────────────────────────────
+function startIntro() {
+  state = 'intro';
+  updateUI();
+  clearMenu();
+  setMessage('');
+
+  // Enemy entrance animation
+  enemyArea.style.opacity = '0';
+  enemyArea.style.transform = 'translate(60px, -20px) scale(0.4)';
+  enemyArea.style.transition = 'all 0.55s ease-out';
+
+  setTimeout(() => {
+    enemyArea.style.opacity = '1';
+    enemyArea.style.transform = '';
+    lcdScreen.classList.add('shake');
+    setTimeout(() => lcdScreen.classList.remove('shake'), 450);
+  }, 350);
+
+  setMessage('野生的 暴鲤龙 出现了！');
+  waitForClick(() => {
+    setMessage('上吧！ 皮卡丘！');
+    waitForClick(() => {
+      showCommandMenu();
+    });
+  });
+}
+
+// ── Reset ──────────────────────────────────────────────────
+function resetBattle() {
+  pikachu.hp = pikachu.maxHp;
+  gyarados.hp = gyarados.maxHp;
+  pikachu.moves.forEach(m => m.pp = m.maxPp);
+  gyarados.moves.forEach(m => m.pp = m.maxPp);
+  state = 'intro';
+  pendingCallback = null;
+  updateUI();
+  overlay.classList.remove('show');
+  clearMenu();
+  enemyArea.style.opacity = '1';
+  enemyArea.style.transform = '';
+  playerArea.style.transform = '';
+  startIntro();
+}
+
+// ── Initialize ─────────────────────────────────────────────
+function init() {
+  renderAll();
+  updateUI();
+  setTimeout(startIntro, 600);
+}
+
+window.addEventListener('load', init);
+</script>
+</body>
+</html>

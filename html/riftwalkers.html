@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Riftwalkers — Tactical Strategy Game</title>
+<style>
+/* ============================================================
+   CSS RESET & BASE
+   ============================================================ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --amber:#e8a830;--amber-light:#f5d080;--amber-dark:#9a6010;--amber-glow:#ffc84080;
+  --violet:#8b4fc0;--violet-light:#c09aef;--violet-dark:#4a1d78;--violet-glow:#a060e080;
+  --cell-light:#f0e6d3;--cell-dark:#c4a882;--rift-color:#20d0c0;--rift-glow:#40f0e0aa;
+  --bg:#1a1410;--panel-bg:#231c16;--text:#e8dcc8;--text-dim:#a09888;--accent:#d4782a;
+  --danger:#d04040;--success:#40a060;--highlight:#ffe080;
+  --board-size:min(80vmin,560px);
+  --cell-size:calc(var(--board-size)/8);
+  --font-main:'Segoe UI',system-ui,sans-serif;
+  --font-mono:'Cascadia Code','Fira Code',monospace;
+}
+html,body{width:100%;height:100%;overflow:hidden;font-family:var(--font-main);background:var(--bg);color:var(--text);-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:12px}
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+.header{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.header h1{font-size:clamp(1.2rem,3vmin,1.8rem);font-weight:700;letter-spacing:0.04em;
+  background:linear-gradient(135deg,var(--amber),var(--rift-color),var(--violet-light));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.header .rift-icon{font-size:1.4rem;animation:riftPulse 2s ease-in-out infinite}
+@keyframes riftPulse{0%,100%{filter:drop-shadow(0 0 4px var(--rift-glow))}50%{filter:drop-shadow(0 0 12px var(--rift-glow))}}
+
+/* ============================================================
+   MAIN LAYOUT
+   ============================================================ */
+.main-layout{display:flex;gap:16px;align-items:stretch;flex:1;min-height:0;width:100%;max-width:960px;justify-content:center}
+.side-panel{display:flex;flex-direction:column;gap:8px;min-width:130px;max-width:180px;flex:1;font-size:0.82rem}
+.side-panel.left{text-align:right}
+.side-panel.right{text-align:left}
+
+.panel-box{background:var(--panel-bg);border-radius:10px;padding:10px 12px;border:1px solid #ffffff10}
+.panel-box h3{font-size:0.78rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:6px}
+.panel-box .piece-row{display:flex;align-items:center;gap:6px;padding:3px 0}
+.panel-box.left .piece-row{flex-direction:row-reverse}
+.grave-piece{font-size:1.1rem;opacity:0.5;filter:grayscale(0.5)}
+.grave-count{font-size:0.7rem;color:var(--text-dim)}
+.player-indicator{padding:8px 12px;border-radius:8px;font-weight:700;font-size:0.9rem;text-align:center;transition:all 0.3s}
+.player-indicator.active{box-shadow:0 0 16px var(--amber-glow);border:2px solid var(--amber);background:#2a1a08}
+.player-indicator.active.violet{box-shadow:0 0 16px var(--violet-glow);border:2px solid var(--violet-light);background:#1a0a28}
+.player-indicator.inactive{opacity:0.5;border:2px solid transparent}
+
+/* ============================================================
+   BOARD
+   ============================================================ */
+.board-container{position:relative;flex-shrink:0}
+.board-wrapper{position:relative;border-radius:12px;overflow:hidden;box-shadow:0 0 40px #00000060,0 0 80px #00000020}
+.board{display:grid;grid-template-columns:repeat(8,var(--cell-size));grid-template-rows:repeat(8,var(--cell-size));width:var(--board-size);height:var(--board-size)}
+.cell{position:relative;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background 0.15s;font-size:calc(var(--cell-size)*0.58)}
+.cell.light{background:var(--cell-light)}
+.cell.dark{background:var(--cell-dark)}
+.cell.rift{box-shadow:inset 0 0 18px var(--rift-glow)}
+.cell.rift::after{content:'';position:absolute;inset:3px;border-radius:50%;border:2px solid var(--rift-color);opacity:0.5;animation:riftPulse 3s ease-in-out infinite;pointer-events:none}
+.cell.selected{background:var(--highlight)!important;box-shadow:inset 0 0 20px #ffe08080}
+.cell.valid-move::before{content:'';position:absolute;width:28%;height:28%;border-radius:50%;background:var(--accent);opacity:0.5;pointer-events:none}
+.cell.valid-capture{box-shadow:inset 0 0 0 4px var(--danger)!important}
+.cell.valid-capture::before{content:'';position:absolute;inset:3px;border-radius:50%;border:3px solid var(--danger);opacity:0.6;pointer-events:none}
+.cell.last-from{box-shadow:inset 0 0 10px #ffffff40!important}
+.cell.last-to{box-shadow:inset 0 0 10px #ffffff60!important}
+.cell.in-check{animation:checkPulse 0.6s ease-in-out infinite;box-shadow:inset 0 0 0 4px #ff4040!important}
+@keyframes checkPulse{0%,100%{box-shadow:inset 0 0 0 4px #ff4040}50%{box-shadow:inset 0 0 0 8px #ff0000c0}}
+
+.piece{cursor:pointer;position:relative;z-index:2;transition:transform 0.12s;filter:drop-shadow(0 2px 4px #00000060);line-height:1;pointer-events:none}
+.piece:active{transform:scale(0.9)}
+.cell.selected .piece{transform:scale(1.12);filter:drop-shadow(0 4px 10px #000000aa)}
+.piece.amber{text-shadow:0 0 8px var(--amber-glow)}
+.piece.violet{text-shadow:0 0 8px var(--violet-glow)}
+
+.coord-label{position:absolute;font-size:calc(var(--cell-size)*0.18);color:var(--text-dim);pointer-events:none;z-index:1}
+.coord-label.file{bottom:2px;right:3px}
+.coord-label.rank{top:2px;left:3px}
+
+/* ============================================================
+   CONTROLS
+   ============================================================ */
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;flex-shrink:0}
+.controls button,.controls select{font-family:var(--font-main);font-size:0.82rem;padding:8px 14px;border-radius:8px;border:1px solid #ffffff20;background:var(--panel-bg);color:var(--text);cursor:pointer;transition:all 0.2s;white-space:nowrap}
+.controls button:hover,.controls select:hover{background:#3a3028;border-color:#ffffff40}
+.controls button:active{transform:scale(0.96)}
+.controls button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.controls button.primary:hover{background:#e08830}
+.controls button.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+.controls select{padding-right:28px;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' fill='none' stroke='%23e8dcc8' stroke-width='1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center}
+
+/* ============================================================
+   MODALS
+   ============================================================ */
+.modal-overlay{position:fixed;inset:0;background:#000000c0;z-index:100;display:flex;align-items:center;justify-content:center;animation:fadeIn 0.2s}
+.modal{background:var(--panel-bg);border-radius:16px;padding:24px;max-width:500px;width:90%;max-height:85vh;overflow-y:auto;border:1px solid #ffffff20;box-shadow:0 20px 60px #00000080;animation:slideUp 0.25s}
+.modal h2{font-size:1.3rem;margin-bottom:12px;text-align:center}
+.modal p{line-height:1.6;margin-bottom:10px;color:var(--text-dim)}
+.modal .piece-demo{font-size:2rem;text-align:center;margin:8px 0}
+.modal button{margin-top:12px;width:100%}
+@keyframes fadeIn{from{opacity:0}}
+@keyframes slideUp{from{opacity:0;transform:translateY(30px)}}
+
+.promotion-popup{position:fixed;inset:0;background:#000000a0;z-index:90;display:flex;align-items:center;justify-content:center}
+.promotion-choices{display:flex;gap:16px;background:var(--panel-bg);padding:20px;border-radius:16px;border:2px solid var(--accent)}
+.promotion-choices button{font-size:2.5rem;padding:12px 16px;border-radius:12px;border:2px solid #ffffff30;background:#2a2018;color:var(--text);cursor:pointer;transition:all 0.2s}
+.promotion-choices button:hover{background:#3a3028;border-color:var(--accent);transform:scale(1.08)}
+.promotion-choices button:disabled{opacity:0.25;cursor:not-allowed;transform:none}
+
+/* ============================================================
+   TUTORIAL
+   ============================================================ */
+.tutorial-highlight{position:absolute;border:3px dashed var(--highlight);border-radius:8px;pointer-events:none;z-index:50;animation:tutPulse 1.5s ease-in-out infinite}
+@keyframes tutPulse{0%,100%{border-color:var(--highlight);box-shadow:0 0 8px #ffe08060}50%{border-color:#fff;box-shadow:0 0 16px #ffe080a0}}
+.tutorial-tooltip{position:absolute;background:#2a2218;color:var(--text);padding:10px 14px;border-radius:10px;font-size:0.82rem;max-width:220px;z-index:55;border:1px solid var(--highlight);box-shadow:0 8px 24px #00000080;pointer-events:none}
+.tutorial-tooltip strong{color:var(--highlight)}
+
+.tip-bar{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:var(--panel-bg);padding:8px 16px;border-radius:20px;font-size:0.78rem;color:var(--text-dim);z-index:40;border:1px solid #ffffff15;pointer-events:none;transition:all 0.4s;text-align:center;max-width:90%}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media(max-width:720px){
+  .main-layout{flex-direction:column;align-items:center;gap:6px}
+  .side-panel{flex-direction:row;flex-wrap:wrap;max-width:100%;min-width:0;justify-content:center;font-size:0.72rem}
+  .side-panel .panel-box{flex:1;min-width:100px}
+  .side-panel.left{text-align:center}
+  .side-panel.right{text-align:center}
+  .controls{gap:4px}
+  .controls button,.controls select{font-size:0.72rem;padding:6px 10px}
+  :root{--board-size:min(92vw,92vh - 280px)}
+}
+@media(max-width:400px){
+  :root{--board-size:min(96vw,360px)}
+  .side-panel{font-size:0.65rem;gap:4px}
+  .header h1{font-size:1rem}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <span class="rift-icon">🔮</span>
+  <h1>RIFTWALKERS</h1>
+  <span class="rift-icon">🔮</span>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="main-layout">
+  <!-- Left panel: Violet info -->
+  <div class="side-panel left" id="panelViolet">
+    <div class="player-indicator violet inactive" id="indViolet">🟣 VIOLET</div>
+    <div class="panel-box">
+      <h3>Captured</h3>
+      <div id="graveViolet"></div>
+    </div>
+    <div class="panel-box">
+      <h3>Ascended</h3>
+      <div id="ascendViolet">0 / 2</div>
+    </div>
+  </div>
+
+  <!-- Board -->
+  <div class="board-container" id="boardContainer">
+    <div class="board-wrapper">
+      <div class="board" id="board"></div>
+    </div>
+  </div>
+
+  <!-- Right panel: Amber info -->
+  <div class="side-panel right" id="panelAmber">
+    <div class="player-indicator amber active" id="indAmber">🟠 AMBER</div>
+    <div class="panel-box">
+      <h3>Captured</h3>
+      <div id="graveAmber"></div>
+    </div>
+    <div class="panel-box">
+      <h3>Ascended</h3>
+      <div id="ascendAmber">0 / 2</div>
+    </div>
+  </div>
+</div>
+
+<!-- CONTROLS -->
+<div class="controls" id="controls">
+  <button onclick="newGame()" class="primary">🔄 New Game</button>
+  <select id="difficultySelect" onchange="setDifficulty(this.value)">
+    <option value="easy">🟢 Easy</option>
+    <option value="medium" selected>🟡 Medium</option>
+    <option value="hard">🔴 Hard</option>
+  </select>
+  <select id="sideSelect" onchange="setSide(this.value)">
+    <option value="amber">Play Amber</option>
+    <option value="violet">Play Violet</option>
+  </select>
+  <button onclick="toggleMode()" id="modeBtn">🤝 Pass &amp; Play</button>
+  <button onclick="openTutorial()">📖 Tutorial</button>
+  <button onclick="toggleTips()" id="tipsBtn">💡 Tips: ON</button>
+</div>
+
+<!-- TIP BAR -->
+<div class="tip-bar" id="tipBar"></div>
+
+<!-- MODAL CONTAINER -->
+<div id="modalContainer"></div>
+
+<!-- PROMOTION POPUP -->
+<div id="promoContainer"></div>
+
+<script>
+// ============================================================
+// RIFTWALKERS — Complete Game Engine + AI + UI
+// ============================================================
+
+// ─── CONSTANTS ─────────────────────────────────────────────
+const BOARD_SIZE = 8;
+const AMBER = 0;
+const VIOLET = 1;
+const LORD = 'lord';
+const KNIGHT = 'knight';
+const MAGE = 'mage';
+const WALKER = 'walker';
+
+const PIECE_CHARS = {
+  lord: '👑', knight: '🗡️', mage: '🔮', walker: '⚔️',
+  'lord-promo':'👑','knight-promo':'🗡️','mage-promo':'🔮','walker-promo':'⚔️'
+};
+const PIECE_NAMES = { lord:'Rift Lord', knight:'Phase Knight', mage:'Warp Mage', walker:'Rift Walker' };
+const PIECE_VALUES = { lord:1000, knight:5, mage:4, walker:2 };
+
+const RIFT_POSITIONS = [[2,2],[5,2],[2,5],[5,5]];
+
+// Direction: Amber at row 7 (bottom), moves up (-). Violet at row 0 (top), moves down (+).
+const FORWARD = { [AMBER]:-1, [VIOLET]:1 };
+const BACK_ROW = { [AMBER]:7, [VIOLET]:0 };
+const PROMO_ROW = { [AMBER]:0, [VIOLET]:7 };
+
+// ─── GAME STATE ────────────────────────────────────────────
+let G = null; // singleton GameState
+
+class GameState {
+  constructor() {
+    this.reset();
+  }
+
+  reset() {
+    this.board = Array.from({length:8},()=>Array(8).fill(null));
+    this.currentPlayer = AMBER;
+    this.captured = {[AMBER]:[], [VIOLET]:[]};
+    this.promoted = {[AMBER]:0, [VIOLET]:0};
+    this.selected = null;       // [r,c] | null
+    this.validMoves = [];       // [{r,c,type:'move'|'capture'}]
+    this.moveHistory = [];
+    this.gameOver = false;
+    this.winner = null;
+    this.winReason = '';
+    this.inCheck = false;
+
+    // Setup initial pieces
+    const setup = [WALKER, KNIGHT, MAGE, LORD, MAGE, KNIGHT, WALKER, WALKER];
+    for (let c=0;c<8;c++) {
+      this.board[7][c] = {type:setup[c], player:AMBER, hasMoved:false};
+      this.board[0][c] = {type:setup[c], player:VIOLET, hasMoved:false};
+    }
+    // Mark all as not moved (for potential future use)
+    for (let c=0;c<8;c++) {
+      if (this.board[7][c]) this.board[7][c].hasMoved = false;
+      if (this.board[0][c]) this.board[0][c].hasMoved = false;
+    }
+  }
+
+  clone() {
+    const g = Object.create(GameState.prototype);
+    g.board = this.board.map(row=>row.map(cell=>cell?{...cell}:null));
+    g.currentPlayer = this.currentPlayer;
+    g.captured = {
+      [AMBER]:[...this.captured[AMBER]],
+      [VIOLET]:[...this.captured[VIOLET]]
+    };
+    g.promoted = {...this.promoted};
+    g.selected = null;
+    g.validMoves = [];
+    g.moveHistory = [...this.moveHistory];
+    g.gameOver = this.gameOver;
+    g.winner = this.winner;
+    g.winReason = this.winReason;
+    g.inCheck = this.inCheck;
+    return g;
+  }
+
+  getPiece(r,c) { return (r>=0&&r<8&&c>=0&&c<8) ? this.board[r][c] : null; }
+  isRift(r,c) { return RIFT_POSITIONS.some(([rr,cc])=>rr===r&&cc===c); }
+  isOnRift(r,c) { return this.isRift(r,c); }
+}
+
+// ─── MOVE GENERATION ───────────────────────────────────────
+
+/** Get raw moves for a piece at (r,c), ignoring check */
+function getRawMoves(g, r, c) {
+  const piece = g.getPiece(r,c);
+  if (!piece) return [];
+  const moves = [];
+  const p = piece.player;
+  const onRift = g.isOnRift(r,c);
+  const fwd = FORWARD[p];
+
+  const addMove = (tr,tc) => {
+    if (tr<0||tr>7||tc<0||tc>7) return false; // out of bounds
+    const target = g.getPiece(tr,tc);
+    if (target && target.player === p) return false; // friendly
+    moves.push({r:tr, c:tc, type:target?'capture':'move', captureType:target?target.type:null});
+    return !target; // return true if empty (can continue sliding)
+  };
+
+  switch(piece.type) {
+    case LORD: {
+      const range = onRift ? 2 : 1;
+      for (let dr=-range; dr<=range; dr++) {
+        for (let dc=-range; dc<=range; dc++) {
+          if (dr===0 && dc===0) continue;
+          // Must move in straight or diagonal line
+          if (!(dr===0 || dc===0 || Math.abs(dr)===Math.abs(dc))) continue;
+          const tr=r+dr, tc=c+dc;
+          if (tr<0||tr>7||tc<0||tc>7) continue;
+          // Path check for range 2 (both straight and diagonal)
+          if (range===2 && (Math.abs(dr)===2 || Math.abs(dc)===2)) {
+            const mr = r + (dr>0?1:dr<0?-1:0);
+            const mc = c + (dc>0?1:dc<0?-1:0);
+            if (g.getPiece(mr,mc)) continue; // blocked
+          }
+          const target = g.getPiece(tr,tc);
+          if (target && target.player===p) continue;
+          moves.push({r:tr,c:tc,type:target?'capture':'move',captureType:target?target.type:null});
+        }
+      }
+      break;
+    }
+    case KNIGHT: {
+      const jumps = onRift
+        ? [[-3,-1],[-3,1],[-1,-3],[-1,3],[1,-3],[1,3],[3,-1],[3,1],
+           [-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]]
+        : [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+      for (const [dr,dc] of jumps) {
+        const tr=r+dr, tc=c+dc;
+        if (tr<0||tr>7||tc<0||tc>7) continue;
+        const target = g.getPiece(tr,tc);
+        if (target && target.player===p) continue;
+        moves.push({r:tr,c:tc,type:target?'capture':'move',captureType:target?target.type:null});
+      }
+      break;
+    }
+    case MAGE: {
+      const maxDist = onRift ? 5 : 3;
+      const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+      for (const [dr,dc] of dirs) {
+        for (let d=1; d<=maxDist; d++) {
+          const tr=r+dr*d, tc=c+dc*d;
+          if (tr<0||tr>7||tc<0||tc>7) break;
+          const target = g.getPiece(tr,tc);
+          if (target && target.player===p) break;
+          moves.push({r:tr,c:tc,type:target?'mage_capture':'move',captureType:target?target.type:null});
+          if (target) break; // stop after capture
+        }
+      }
+      break;
+    }
+    case WALKER: {
+      const promoted = piece.promoted;
+      if (onRift || promoted) {
+        // Any direction, 1 step
+        for (let dr=-1;dr<=1;dr++) {
+          for (let dc=-1;dc<=1;dc++) {
+            if (dr===0 && dc===0) continue;
+            const tr=r+dr, tc=c+dc;
+            if (tr<0||tr>7||tc<0||tc>7) continue;
+            const target = g.getPiece(tr,tc);
+            if (target && target.player===p) continue;
+            moves.push({r:tr,c:tc,type:target?'capture':'move',captureType:target?target.type:null});
+          }
+        }
+      } else {
+        // Normal walker: 1 forward (move), 1 diagonal forward (capture)
+        const tr = r + fwd;
+        if (tr>=0 && tr<=7) {
+          // Forward move
+          if (!g.getPiece(tr,c)) {
+            moves.push({r:tr,c:c,type:'move',captureType:null});
+          }
+          // Diagonal captures
+          for (const dc of [-1,1]) {
+            const tc = c+dc;
+            if (tc>=0 && tc<=7) {
+              const target = g.getPiece(tr,tc);
+              if (target && target.player!==p) {
+                moves.push({r:tr,c:tc,type:'capture',captureType:target.type});
+              }
+            }
+          }
+        }
+      }
+      break;
+    }
+  }
+  return moves;
+}
+
+/** Check if a player's lord is under attack */
+function isInCheck(g, player) {
+  // Find the lord
+  let lordPos = null;
+  for (let r=0;r<8;r++) {
+    for (let c=0;c<8;c++) {
+      const piece = g.getPiece(r,c);
+      if (piece && piece.type===LORD && piece.player===player) {
+        lordPos = [r,c];
+        break;
+      }
+    }
+    if (lordPos) break;
+  }
+  if (!lordPos) return true; // lord gone = definitely in check (shouldn't happen in normal play)
+
+  // Check if any opponent piece can capture the lord
+  const opp = player===AMBER?VIOLET:AMBER;
+  for (let r=0;r<8;r++) {
+    for (let c=0;c<8;c++) {
+      const piece = g.getPiece(r,c);
+      if (piece && piece.player===opp) {
+        const moves = getRawMoves(g,r,c);
+        if (moves.some(m=>m.r===lordPos[0]&&m.c===lordPos[1]&&(m.type==='capture'||m.type==='mage_capture'))) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/** Get legal moves for a piece (filtering out moves that leave own lord in check) */
+function getLegalMoves(g, r, c) {
+  const piece = g.getPiece(r,c);
+  if (!piece) return [];
+  const raw = getRawMoves(g,r,c);
+  return raw.filter(move => {
+    // Simulate the move
+    const sim = g.clone();
+    applyMoveSilent(sim, r, c, move.r, move.c);
+    return !isInCheck(sim, piece.player);
+  });
+}
+
+/** Apply a move to a game state (normal capture; used for simulation/check testing) */
+function applyMoveSilent(g, fromR, fromC, toR, toC) {
+  const piece = g.getPiece(fromR,fromC);
+  const target = g.getPiece(toR,toC);
+
+  if (!piece) return;
+
+  // Normal capture (for simulation, always use capture, not swap)
+  if (target && target.player !== piece.player) {
+    g.captured[target.player].push(target.type);
+    if (target.type === LORD) {
+      g.gameOver = true;
+      g.winner = piece.player;
+      g.winReason = 'Lord captured!';
+    }
+  }
+
+  // Move piece
+  g.board[toR][toC] = piece;
+  g.board[fromR][fromC] = null;
+  piece.hasMoved = true;
+
+  // Check promotion
+  if (piece.type === WALKER && toR === PROMO_ROW[piece.player]) {
+    piece._promotable = true;
+  }
+}
+
+/** Check for ascension win */
+function checkAscensionWin(g) {
+  if (g.promoted[AMBER] >= 2) { g.gameOver=true; g.winner=AMBER; g.winReason='Ascension!'; return true; }
+  if (g.promoted[VIOLET] >= 2) { g.gameOver=true; g.winner=VIOLET; g.winReason='Ascension!'; return true; }
+  return false;
+}
+
+/** Check if current player has any legal moves */
+function hasLegalMoves(g) {
+  const p = g.currentPlayer;
+  for (let r=0;r<8;r++) {
+    for (let c=0;c<8;c++) {
+      const piece = g.getPiece(r,c);
+      if (piece && piece.player===p) {
+        if (getLegalMoves(g,r,c).length > 0) return true;
+      }
+    }
+  }
+  return false;
+}
+
+// ─── AI ENGINE ──────────────────────────────────────────────
+
+function getAllLegalMoves(g, player) {
+  const all = [];
+  for (let r=0;r<8;r++) {
+    for (let c=0;c<8;c++) {
+      const piece = g.getPiece(r,c);
+      if (piece && piece.player===player) {
+        const moves = getLegalMoves(g,r,c);
+        for (const m of moves) {
+          all.push({fromR:r, fromC:c, toR:m.r, toC:m.c, captureType:m.captureType, moveType:m.type});
+        }
+      }
+    }
+  }
+  return all;
+}
+
+function evaluateBoard(g) {
+  if (g.gameOver) {
+    if (g.winner === AMBER) return 100000;
+    if (g.winner === VIOLET) return -100000;
+    return 0;
+  }
+
+  let score = 0;
+  for (let r=0;r<8;r++) {
+    for (let c=0;c<8;c++) {
+      const piece = g.getPiece(r,c);
+      if (!piece) continue;
+      let val = PIECE_VALUES[piece.type] || 2;
+      if (piece.type===WALKER && piece.promoted) val = 6;
+      if (piece.player === AMBER) {
+        score += val;
+        // Positional: Amber wants to move up (toward row 0)
+        if (piece.type !== LORD) score += (7-r) * 0.1;
+        // Rift bonus
+        if (g.isOnRift(r,c)) score += 0.5;
+      } else {
+        score -= val;
+        if (piece.type !== LORD) score -= r * 0.1;
+        if (g.isOnRift(r,c)) score -= 0.5;
+      }
+    }
+  }
+  // Promotion progress
+  score += g.promoted[AMBER] * 3;
+  score -= g.promoted[VIOLET] * 3;
+  return score;
+}
+
+function aiMoveEasy(g) {
+  const moves = getAllLegalMoves(g, g.currentPlayer);
+  if (moves.length===0) return null;
+  return moves[Math.floor(Math.random()*moves.length)];
+}
+
+function aiMoveMedium(g) {
+  const moves = getAllLegalMoves(g, g.currentPlayer);
+  if (moves.length===0) return null;
+
+  const aiPlayer = g.currentPlayer;
+  let bestScore = aiPlayer===AMBER ? -Infinity : Infinity;
+  let bestMoves = [];
+  for (const move of moves) {
+    const sim = g.clone();
+    applyMoveSilent(sim, move.fromR, move.fromC, move.toR, move.toC);
+    handlePromotionSim(sim, move);
+    sim.currentPlayer = aiPlayer===AMBER?VIOLET:AMBER;
+    const score = evaluateBoard(sim);
+    const isBetter = aiPlayer===AMBER ? (score > bestScore) : (score < bestScore);
+    const isEqual = Math.abs(score - bestScore) < 0.001;
+    if (isBetter) { bestScore = score; bestMoves = [move]; }
+    else if (isEqual) { bestMoves.push(move); }
+  }
+  return bestMoves[Math.floor(Math.random()*bestMoves.length)];
+}
+
+function aiMoveHard(g) {
+  const player = g.currentPlayer;
+  return minimax(g, 3, -Infinity, Infinity, player===AMBER, player).move;
+}
+
+function minimax(g, depth, alpha, beta, maximizing, aiPlayer) {
+  if (depth===0 || g.gameOver) {
+    return {score:evaluateBoard(g), move:null};
+  }
+
+  const moves = getAllLegalMoves(g, g.currentPlayer);
+  if (moves.length===0) {
+    // No moves = lose
+    return {score:maximizing?-99999:99999, move:null};
+  }
+
+  // Move ordering: captures first
+  moves.sort((a,b)=>(b.captureType?PIECE_VALUES[b.captureType]||0:0)-(a.captureType?PIECE_VALUES[a.captureType]||0:0));
+
+  let bestMove = moves[0];
+
+  if (maximizing) {
+    let maxScore = -Infinity;
+    for (const move of moves) {
+      const sim = g.clone();
+      applyMoveSilent(sim, move.fromR, move.fromC, move.toR, move.toC);
+      handlePromotionSim(sim, move);
+      sim.currentPlayer = g.currentPlayer===AMBER?VIOLET:AMBER;
+      const result = minimax(sim, depth-1, alpha, beta, false, aiPlayer);
+      if (result.score > maxScore) { maxScore=result.score; bestMove=move; }
+      alpha = Math.max(alpha, result.score);
+      if (beta <= alpha) break;
+    }
+    return {score:maxScore, move:bestMove};
+  } else {
+    let minScore = Infinity;
+    for (const move of moves) {
+      const sim = g.clone();
+      applyMoveSilent(sim, move.fromR, move.fromC, move.toR, move.toC);
+      handlePromotionSim(sim, move);
+      sim.currentPlayer = g.currentPlayer===AMBER?VIOLET:AMBER;
+      const result = minimax(sim, depth-1, alpha, beta, true, aiPlayer);
+      if (result.score < minScore) { minScore=result.score; bestMove=move; }
+      beta = Math.min(beta, result.score);
+      if (beta <= alpha) break;
+    }
+    return {score:minScore, move:bestMove};
+  }
+}
+
+function handlePromotionSim(g, move) {
+  const piece = g.getPiece(move.toR, move.toC);
+  if (piece && piece._promotable && piece.type===WALKER) {
+    const caps = g.captured[piece.player];
+    if (caps.length>0) {
+      const best = caps.reduce((a,b)=>((PIECE_VALUES[a]||0)>(PIECE_VALUES[b]||0)?a:b));
+      piece.type = best;
+      piece.promoted = true;
+      piece._promotable = false;
+      g.promoted[piece.player]++;
+      checkAscensionWin(g);
+    } else {
+      piece.promoted = true;
+      piece._promotable = false;
+      g.promoted[piece.player]++;
+      checkAscensionWin(g);
+    }
+  }
+}
+
+function getAiMove(g, difficulty) {
+  switch(difficulty) {
+    case 'easy': return aiMoveEasy(g);
+    case 'medium': return aiMoveMedium(g);
+    case 'hard': return aiMoveHard(g);
+    default: return aiMoveMedium(g);
+  }
+}
+
+// ─── MAIN GAME LOGIC ────────────────────────────────────────
+
+let humanPlayer = AMBER;
+let gameMode = 'ai'; // 'ai' | 'pass-and-play'
+let aiDifficulty = 'medium';
+let tipsEnabled = true;
+let pendingPromotion = null; // {fromR,fromC,toR,toC}
+let lastMoveFrom = null, lastMoveTo = null; // for highlighting
+
+function newGame() {
+  G = new GameState();
+  humanPlayer = document.getElementById('sideSelect').value === 'amber' ? AMBER : VIOLET;
+  gameMode = document.getElementById('modeBtn').textContent.includes('Pass') ? 'ai' : 'pass-and-play';
+  aiDifficulty = document.getElementById('difficultySelect').value;
+  pendingPromotion = null;
+  lastMoveFrom = null;
+  lastMoveTo = null;
+  closeModal();
+  closePromotion();
+  updateUI();
+  updateTip();
+
+  // If AI goes first
+  if (gameMode==='ai' && humanPlayer===VIOLET) {
+    setTimeout(doAiMove, 400);
+  }
+}
+
+function setDifficulty(val) { aiDifficulty=val; if(gameMode==='ai')updateTip(); }
+function setSide(val) { humanPlayer=val=== 'amber'?AMBER:VIOLET; newGame(); }
+function toggleMode() {
+  gameMode = gameMode==='ai'?'pass-and-play':'ai';
+  document.getElementById('modeBtn').textContent = gameMode==='ai'?'🤝 Pass & Play':'🤖 vs AI';
+  newGame();
+}
+function toggleTips() {
+  tipsEnabled=!tipsEnabled;
+  document.getElementById('tipsBtn').textContent = tipsEnabled?'💡 Tips: ON':'💡 Tips: OFF';
+  document.getElementById('tipBar').style.opacity = tipsEnabled?'1':'0';
+}
+
+function handleCellClick(r, c) {
+  if (!G || G.gameOver) return;
+  if (gameMode==='ai' && G.currentPlayer!==humanPlayer) return; // not human's turn
+  if (pendingPromotion) return; // waiting for promotion choice
+
+  const piece = G.getPiece(r,c);
+  const isSelected = G.selected && G.selected[0]===r && G.selected[1]===c;
+
+  // If clicking on a valid move destination
+  if (G.selected && G.validMoves.some(m=>m.r===r&&m.c===c)) {
+    const move = G.validMoves.find(m=>m.r===r&&m.c===c);
+    executeMove(G.selected[0], G.selected[1], r, c, move);
+    return;
+  }
+
+  // If clicking on own piece, select it
+  if (piece && piece.player===G.currentPlayer && !isSelected) {
+    G.selected = [r,c];
+    G.validMoves = getLegalMoves(G, r, c);
+    updateUI();
+    return;
+  }
+
+  // Deselect
+  G.selected = null;
+  G.validMoves = [];
+  updateUI();
+}
+
+function executeMove(fromR, fromC, toR, toC, moveInfo) {
+  const piece = G.getPiece(fromR,fromC);
+  const target = G.getPiece(toR,toC);
+
+  // Handle Mage special capture (swap or remove)
+  if (piece.type===MAGE && target && target.player!==piece.player && moveInfo.type==='mage_capture') {
+    showMageChoice(fromR, fromC, toR, toC);
+    return;
+  }
+
+  // Check for walker promotion
+  if (piece.type===WALKER && toR===PROMO_ROW[piece.player] && !piece.promoted) {
+    // Need to choose promotion
+    pendingPromotion = {fromR, fromC, toR, toC};
+    showPromotionUI(piece.player);
+    return;
+  }
+
+  finishMove(fromR, fromC, toR, toC, null);
+}
+
+function finishMove(fromR, fromC, toR, toC, promotionChoice) {
+  const piece = G.getPiece(fromR,fromC);
+  const target = G.getPiece(toR,toC);
+
+  lastMoveFrom = [fromR, fromC];
+  lastMoveTo = [toR, toC];
+
+  // Capture
+  if (target && target.player !== piece.player) {
+    G.captured[target.player].push(target.type);
+    if (target.type===LORD) {
+      G.gameOver = true;
+      G.winner = piece.player;
+      G.winReason = 'The Rift Lord has fallen!';
+    }
+  }
+
+  // Move piece
+  G.board[toR][toC] = piece;
+  G.board[fromR][fromC] = null;
+  piece.hasMoved = true;
+
+  // Handle promotion
+  if (piece.type===WALKER && toR===PROMO_ROW[piece.player] && !piece.promoted) {
+    if (promotionChoice) {
+      // Remove the chosen type from captured
+      const idx = G.captured[piece.player].indexOf(promotionChoice);
+      if (idx>=0) G.captured[piece.player].splice(idx,1);
+      piece.type = promotionChoice;
+    } else {
+      // Auto-promote to best captured
+      const caps = G.captured[piece.player];
+      if (caps.length>0) {
+        const best = caps.reduce((a,b)=>((PIECE_VALUES[a]||0)>(PIECE_VALUES[b]||0)?a:b));
+        const idx = caps.indexOf(best);
+        if (idx>=0) caps.splice(idx,1);
+        piece.type = best;
+      }
+    }
+    piece.promoted = true;
+    G.promoted[piece.player]++;
+    checkAscensionWin(G);
+  }
+
+  // Store move
+  G.moveHistory.push({fromR,fromC,toR,toC,pieceType:piece.type,captured:target?target.type:null});
+
+  // Switch turns
+  G.currentPlayer = G.currentPlayer===AMBER?VIOLET:AMBER;
+  G.selected = null;
+  G.validMoves = [];
+
+  // Check check
+  G.inCheck = isInCheck(G, G.currentPlayer);
+
+  // Check stalemate
+  if (!G.gameOver && !hasLegalMoves(G)) {
+    G.gameOver = true;
+    G.winner = G.currentPlayer===AMBER?VIOLET:AMBER;
+    G.winReason = 'No legal moves — stalemate!';
+  }
+
+  pendingPromotion = null;
+  updateUI();
+  updateTip();
+
+  // AI move
+  if (!G.gameOver && gameMode==='ai' && G.currentPlayer!==humanPlayer) {
+    setTimeout(doAiMove, 350);
+  }
+}
+
+function doAiMove() {
+  if (!G || G.gameOver) return;
+  if (gameMode!=='ai' || G.currentPlayer===humanPlayer) return;
+
+  const move = getAiMove(G, aiDifficulty);
+  if (!move) {
+    G.gameOver = true;
+    G.winner = humanPlayer;
+    G.winReason = 'AI has no moves — you win!';
+    updateUI();
+    return;
+  }
+
+  // Execute AI move
+  const piece = G.getPiece(move.fromR, move.fromC);
+  const target = G.getPiece(move.toR, move.toC);
+
+  lastMoveFrom = [move.fromR, move.fromC];
+  lastMoveTo = [move.toR, move.toC];
+
+  // Handle mage capture for AI (capture normally)
+  if (piece.type===MAGE && target && target.player!==piece.player) {
+    G.captured[target.player].push(target.type);
+    if (target.type===LORD) {
+      G.gameOver=true; G.winner=piece.player; G.winReason='The Rift Lord has fallen!';
+    }
+    G.board[move.toR][move.toC] = piece;
+    G.board[move.fromR][move.fromC] = null;
+    piece.hasMoved = true;
+  } else {
+    if (target && target.player!==piece.player) {
+      G.captured[target.player].push(target.type);
+      if (target.type===LORD) {
+        G.gameOver=true; G.winner=piece.player; G.winReason='The Rift Lord has fallen!';
+      }
+    }
+    G.board[move.toR][move.toC] = piece;
+    G.board[move.fromR][move.fromC] = null;
+    piece.hasMoved = true;
+
+    // Handle promotion
+    if (piece.type===WALKER && move.toR===PROMO_ROW[piece.player] && !piece.promoted) {
+      const caps = G.captured[piece.player];
+      if (caps.length>0) {
+        const best = caps.reduce((a,b)=>((PIECE_VALUES[a]||0)>(PIECE_VALUES[b]||0)?a:b));
+        const idx = caps.indexOf(best);
+        if (idx>=0) caps.splice(idx,1);
+        piece.type = best;
+      }
+      piece.promoted = true;
+      G.promoted[piece.player]++;
+      checkAscensionWin(G);
+    }
+    G.moveHistory.push({fromR:move.fromR,fromC:move.fromC,toR:move.toR,toC:move.toC,pieceType:piece.type,captured:target?target.type:null});
+  }
+
+  G.currentPlayer = G.currentPlayer===AMBER?VIOLET:AMBER;
+  G.selected = null;
+  G.validMoves = [];
+  G.inCheck = isInCheck(G, G.currentPlayer);
+
+  if (!G.gameOver && !hasLegalMoves(G)) {
+    G.gameOver = true;
+    G.winner = G.currentPlayer===AMBER?VIOLET:AMBER;
+    G.winReason = 'No legal moves — stalemate!';
+  }
+
+  updateUI();
+  updateTip();
+}
+
+// ─── MAGE CHOICE ────────────────────────────────────────────
+
+function showMageChoice(fromR, fromC, toR, toC) {
+  const piece = G.getPiece(fromR,fromC);
+  const target = G.getPiece(toR,toC);
+  const container = document.getElementById('promoContainer');
+  container.innerHTML = `
+    <div class="promotion-popup" onclick="event.stopPropagation()">
+      <div class="promotion-choices" onclick="event.stopPropagation()">
+        <div style="text-align:center;width:100%;margin-bottom:12px;color:var(--text-dim)">
+          🔮 Warp Mage — Choose action:
+        </div>
+        <button onclick="mageChoice(${fromR},${fromC},${toR},${toC},'capture')" style="font-size:1.4rem">
+          ⚡ Capture<br><small style="font-size:0.6rem">Remove enemy</small>
+        </button>
+        <button onclick="mageChoice(${fromR},${fromC},${toR},${toC},'swap')" style="font-size:1.4rem">
+          🔄 Swap<br><small style="font-size:0.6rem">Trade places</small>
+        </button>
+      </div>
+    </div>`;
+}
+
+function mageChoice(fromR, fromC, toR, toC, choice) {
+  const piece = G.getPiece(fromR,fromC);
+  const target = G.getPiece(toR,toC);
+  closePromotion();
+
+  lastMoveFrom = [fromR, fromC];
+  lastMoveTo = [toR, toC];
+
+  if (choice==='swap') {
+    // Swap positions
+    G.board[toR][toC] = piece;
+    G.board[fromR][fromC] = target;
+    piece.hasMoved = true;
+    // No capture (target survives at mage's old position)
+  } else {
+    // Normal capture
+    if (target && target.player!==piece.player) {
+      G.captured[target.player].push(target.type);
+      if (target.type===LORD) {
+        G.gameOver=true; G.winner=piece.player; G.winReason='The Rift Lord has fallen!';
+      }
+    }
+    G.board[toR][toC] = piece;
+    G.board[fromR][fromC] = null;
+    piece.hasMoved = true;
+  }
+
+  G.moveHistory.push({fromR,fromC,toR,toC,pieceType:'mage',captured:choice==='capture'?target?.type:null,swapped:choice==='swap'});
+
+  G.currentPlayer = G.currentPlayer===AMBER?VIOLET:AMBER;
+  G.selected = null;
+  G.validMoves = [];
+  G.inCheck = isInCheck(G, G.currentPlayer);
+
+  if (!G.gameOver && !hasLegalMoves(G)) {
+    G.gameOver = true;
+    G.winner = G.currentPlayer===AMBER?VIOLET:AMBER;
+    G.winReason = 'No legal moves — stalemate!';
+  }
+
+  updateUI();
+  updateTip();
+
+  if (!G.gameOver && gameMode==='ai' && G.currentPlayer!==humanPlayer) {
+    setTimeout(doAiMove, 350);
+  }
+}
+
+// ─── PROMOTION UI ───────────────────────────────────────────
+
+function showPromotionUI(player) {
+  const caps = G.captured[player];
+  const container = document.getElementById('promoContainer');
+  const uniqueCaps = [...new Set(caps)];
+  if (uniqueCaps.length===0) {
+    // No captured pieces to promote to; just finish
+    const p = pendingPromotion;
+    pendingPromotion = null;
+    finishMove(p.fromR, p.fromC, p.toR, p.toC, null);
+    return;
+  }
+  container.innerHTML = `
+    <div class="promotion-popup" onclick="event.stopPropagation()">
+      <div class="promotion-choices" onclick="event.stopPropagation()">
+        <div style="text-align:center;width:100%;margin-bottom:8px;color:var(--text-dim)">
+          ⚔️ Rift Walker promotes! Choose:
+        </div>
+        ${uniqueCaps.map(t=>`
+          <button onclick="promoteChoice('${t}')" title="${PIECE_NAMES[t]}">
+            ${PIECE_CHARS[t]}<br><small style="font-size:0.55rem">${PIECE_NAMES[t]}</small>
+          </button>
+        `).join('')}
+      </div>
+    </div>`;
+}
+
+function promoteChoice(type) {
+  closePromotion();
+  if (pendingPromotion) {
+    finishMove(pendingPromotion.fromR, pendingPromotion.fromC, pendingPromotion.toR, pendingPromotion.toC, type);
+  }
+}
+
+function closePromotion() {
+  document.getElementById('promoContainer').innerHTML = '';
+}
+
+// ─── MODALS ─────────────────────────────────────────────────
+
+function showModal(html) {
+  document.getElementById('modalContainer').innerHTML = `
+    <div class="modal-overlay" onclick="closeModal()">
+      <div class="modal" onclick="event.stopPropagation()">${html}</div>
+    </div>`;
+}
+
+function closeModal() {
+  document.getElementById('modalContainer').innerHTML = '';
+}
+
+function showGameOverModal() {
+  if (!G || !G.gameOver) return;
+  const winnerName = G.winner===AMBER?'Amber':'Violet';
+  const winnerEmoji = G.winner===AMBER?'🟠':'🟣';
+  const humanWon = gameMode==='ai' && G.winner===humanPlayer;
+  const aiWon = gameMode==='ai' && G.winner!==humanPlayer;
+
+  showModal(`
+    <h2>${winnerEmoji} ${winnerName} Wins!</h2>
+    <div class="piece-demo">${G.winReason.includes('Ascension')?'⭐ Ascension Victory! ⭐':'⚔️ Conquest Victory! ⚔️'}</div>
+    <p style="text-align:center">${G.winReason}</p>
+    <p style="text-align:center;font-size:0.8rem;color:var(--text-dim)">
+      ${humanWon?'🎉 Congratulations! You won!':''}${aiWon?' 🤖 The AI prevailed. Try again!':''}${gameMode==='pass-and-play'?' '+winnerName+' player wins!':''}
+    </p>
+    <button class="primary" onclick="newGame()">🔄 Play Again</button>
+    <button onclick="closeModal()">👀 View Board</button>
+  `);
+}
+
+function openTutorial() {
+  showModal(`
+    <h2>📖 How to Play Riftwalkers</h2>
+    <p><strong>Goal:</strong> Capture the enemy <strong>Rift Lord 👑</strong> or achieve <strong>Ascension</strong> by promoting 2 Rift Walkers ⚔️ to the opponent's back row.</p>
+
+    <h3 style="margin-top:14px">🟠🟣 Pieces</h3>
+    <p>👑 <strong>Rift Lord</strong> — Moves 1 step any direction (like a King). <em>Lose it = lose the game!</em><br>
+       <small>Rift Surge: Move 2 steps instead of 1.</small></p>
+    <p>🗡️ <strong>Phase Knight</strong> — Jumps in an L-shape (2+1). Can leap over pieces.<br>
+       <small>Rift Surge: Extended L (3+1) — reach further!</small></p>
+    <p>🔮 <strong>Warp Mage</strong> — Slides 1–3 spaces orthogonally. When landing on an enemy, you choose: <strong>Capture</strong> (remove it) or <strong>Swap</strong> (trade positions).<br>
+       <small>Rift Surge: Range increases to 1–5.</small></p>
+    <p>⚔️ <strong>Rift Walker</strong> — Moves 1 forward, captures diagonally forward. <strong>Promotes</strong> upon reaching the far rank — transform into any piece you've captured!<br>
+       <small>Rift Surge: Move/capture in any direction for one turn.</small></p>
+
+    <h3 style="margin-top:14px">🔮 Rift Tiles</h3>
+    <p>The 4 glowing <span style="color:var(--rift-color)">teal tiles</span> are <strong>Rifts</strong>. Any piece starting its turn on a Rift gains a one-turn power boost (see above). Rifts are neutral — both players benefit!</p>
+
+    <h3 style="margin-top:14px">🏆 Win Conditions</h3>
+    <p>1. <strong>Conquest:</strong> Capture the enemy Rift Lord 👑</p>
+    <p>2. <strong>Ascension:</strong> Promote 2 Rift Walkers ⚔️ (reach opponent's back row)</p>
+
+    <h3 style="margin-top:14px">💡 Tips</h3>
+    <p>• Protect your Lord! Keep a Knight or Mage nearby.<br>
+       • Control the Rifts — the surge bonuses are game-changers.<br>
+       • Send Walkers forward early — Ascension is a real threat.<br>
+       • Mages can swap to disrupt enemy formations.<br>
+       • A promoted Walker with Rift Surge becomes incredibly versatile.</p>
+
+    <button class="primary" onclick="closeModal()">✕ Close</button>
+  `);
+}
+
+// ─── TIPS ───────────────────────────────────────────────────
+
+function updateTip() {
+  if (!tipsEnabled || !G || G.gameOver) {
+    document.getElementById('tipBar').style.opacity = '0';
+    return;
+  }
+  document.getElementById('tipBar').style.opacity = '1';
+  const tips = [];
+
+  if (G.currentPlayer===humanPlayer || gameMode==='pass-and-play') {
+    // Tips for human player
+    const selectedPiece = G.selected ? G.getPiece(G.selected[0], G.selected[1]) : null;
+    if (selectedPiece) {
+      const pos = G.selected;
+      const onRift = G.isOnRift(pos[0],pos[1]);
+      const name = PIECE_NAMES[selectedPiece.type];
+      if (onRift) tips.push(`🔥 Your ${name} is on a Rift — it has enhanced movement this turn!`);
+      if (selectedPiece.type===LORD) tips.push('⚠️ Be careful moving your Lord — keep it protected!');
+      if (selectedPiece.type===WALKER && !selectedPiece.promoted) {
+        const distToPromo = Math.abs(pos[0]-PROMO_ROW[selectedPiece.player]);
+        if (distToPromo<=2) tips.push('⭐ This Walker is close to promotion!');
+      }
+      if (selectedPiece.type===MAGE) tips.push('🔮 Mage can either capture or swap with the target.');
+    } else {
+      // General tips
+      const lordPos = findLord(G.currentPlayer);
+      if (lordPos && G.isOnRift(lordPos[0],lordPos[1])) {
+        tips.push('👑 Your Lord is on a Rift — use the surge to reposition safely!');
+      }
+      if (G.inCheck) tips.push('⚠️ CHECK! Your Lord is under attack — you must protect it!');
+      if (G.promoted[G.currentPlayer]>=1) tips.push('⭐ One more promotion and you win by Ascension!');
+
+      // Check if any walker can promote
+      let promoNear = false;
+      for (let r=0;r<8;r++) for (let c=0;c<8;c++) {
+        const p = G.getPiece(r,c);
+        if (p && p.player===G.currentPlayer && p.type===WALKER && !p.promoted) {
+          if (Math.abs(r-PROMO_ROW[G.currentPlayer])<=1) promoNear=true;
+        }
+      }
+      if (promoNear) tips.push('⚔️ A Walker is 1 step from promotion — seize the Ascension!');
+
+      // Rift control tip
+      let playerOnRift = false, enemyOnRift = false;
+      for (let r=0;r<8;r++) for (let c=0;c<8;c++) {
+        if (!G.isOnRift(r,c)) continue;
+        const p = G.getPiece(r,c);
+        if (p && p.player===G.currentPlayer) playerOnRift=true;
+        if (p && p.player!==G.currentPlayer) enemyOnRift=true;
+      }
+      if (!playerOnRift && enemyOnRift) tips.push('🔮 The enemy controls the Rifts — contest them!');
+      if (playerOnRift) tips.push('🔮 You control a Rift — use the surge bonus wisely.');
+
+      if (tips.length===0) {
+        const generic = [
+          '💡 Select a piece to see its legal moves.',
+          '⚔️ Send Walkers forward to threaten Ascension.',
+          '🔮 Use Rift tiles for powerful surge bonuses.',
+          '🗡️ Knights can jump over pieces — great for surprise attacks.',
+          '👑 Keep your Lord protected behind other pieces.',
+          '🔄 Warp Mages can swap with enemies to disrupt formations.',
+          '⭐ Promote 2 Walkers for an Ascension victory!',
+        ];
+        tips.push(generic[Math.floor(Math.random()*generic.length)]);
+      }
+    }
+  }
+
+  document.getElementById('tipBar').textContent = tips[0] || '';
+}
+
+function findLord(player) {
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++) {
+    const p = G.getPiece(r,c);
+    if (p && p.type===LORD && p.player===player) return [r,c];
+  }
+  return null;
+}
+
+// ─── UI RENDERING ───────────────────────────────────────────
+
+function updateUI() {
+  renderBoard();
+  renderPanels();
+  if (G && G.gameOver) {
+    setTimeout(showGameOverModal, 500);
+  }
+}
+
+function renderBoard() {
+  const boardEl = document.getElementById('board');
+  boardEl.innerHTML = '';
+
+  // Find lord position once for check highlighting
+  let checkLordPos = null;
+  if (G && G.inCheck && G.currentPlayer !== null) {
+    checkLordPos = findLord(G.currentPlayer);
+  }
+
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.classList.add((r+c)%2===0?'light':'dark');
+      if (G && G.isOnRift(r,c)) cell.classList.add('rift');
+      if (G && G.selected && G.selected[0]===r && G.selected[1]===c) cell.classList.add('selected');
+      if (G && lastMoveFrom && lastMoveFrom[0]===r && lastMoveFrom[1]===c) cell.classList.add('last-from');
+      if (G && lastMoveTo && lastMoveTo[0]===r && lastMoveTo[1]===c) cell.classList.add('last-to');
+      // Highlight lord when in check
+      if (checkLordPos && checkLordPos[0]===r && checkLordPos[1]===c) cell.classList.add('in-check');
+
+      // Valid move indicators
+      if (G && G.validMoves.some(m=>m.r===r&&m.c===c)) {
+        const move = G.validMoves.find(m=>m.r===r&&m.c===c);
+        const target = G.getPiece(r,c);
+        if (target || move.type==='capture'||move.type==='mage_capture') {
+          cell.classList.add('valid-capture');
+        } else {
+          cell.classList.add('valid-move');
+        }
+      }
+
+      cell.addEventListener('click', ()=>handleCellClick(r,c));
+      cell.addEventListener('touchend', (e)=>{e.preventDefault();handleCellClick(r,c);});
+
+      // Coordinate labels
+      if (c===0) {
+        const rank = document.createElement('span');
+        rank.className = 'coord-label rank';
+        rank.textContent = 8-r;
+        cell.appendChild(rank);
+      }
+      if (r===7) {
+        const file = document.createElement('span');
+        file.className = 'coord-label file';
+        file.textContent = 'abcdefgh'[c];
+        cell.appendChild(file);
+      }
+
+      // Piece
+      if (G) {
+        const piece = G.getPiece(r,c);
+        if (piece) {
+          const pieceEl = document.createElement('span');
+          pieceEl.className = 'piece';
+          pieceEl.classList.add(piece.player===AMBER?'amber':'violet');
+          pieceEl.textContent = PIECE_CHARS[piece.type] || '?';
+          cell.appendChild(pieceEl);
+        }
+      }
+
+      boardEl.appendChild(cell);
+    }
+  }
+}
+
+function renderPanels() {
+  if (!G) {
+    document.getElementById('graveAmber').innerHTML = '<span style="color:var(--text-dim)">—</span>';
+    document.getElementById('graveViolet').innerHTML = '<span style="color:var(--text-dim)">—</span>';
+    document.getElementById('ascendAmber').textContent = '0 / 2';
+    document.getElementById('ascendViolet').textContent = '0 / 2';
+    document.getElementById('indAmber').className = 'player-indicator amber '+(G?.currentPlayer===AMBER?'active':'inactive');
+    document.getElementById('indViolet').className = 'player-indicator violet '+(G?.currentPlayer===VIOLET?'active':'inactive');
+    return;
+  }
+
+  // Graveyard Amber (human perspective: amber captured by violet = in amber's graveyard)
+  const graveAmber = G.captured[AMBER];
+  const graveViolet = G.captured[VIOLET];
+
+  document.getElementById('graveAmber').innerHTML = graveAmber.length===0
+    ? '<span style="color:var(--text-dim)">none</span>'
+    : graveAmber.map(t=>`<span class="grave-piece">${PIECE_CHARS[t]}</span>`).join('');
+  document.getElementById('graveViolet').innerHTML = graveViolet.length===0
+    ? '<span style="color:var(--text-dim)">none</span>'
+    : graveViolet.map(t=>`<span class="grave-piece">${PIECE_CHARS[t]}</span>`).join('');
+
+  document.getElementById('ascendAmber').textContent = `${G.promoted[AMBER]} / 2`;
+  document.getElementById('ascendViolet').textContent = `${G.promoted[VIOLET]} / 2`;
+
+  document.getElementById('indAmber').className = 'player-indicator amber '+(G.currentPlayer===AMBER?'active':'inactive');
+  document.getElementById('indViolet').className = 'player-indicator violet '+(G.currentPlayer===VIOLET?'active':'inactive');
+
+  // Update indicator text with check warning
+  document.getElementById('indAmber').textContent = G.currentPlayer===AMBER && G.inCheck ? '🟠 AMBER ⚠️' : '🟠 AMBER';
+  document.getElementById('indViolet').textContent = G.currentPlayer===VIOLET && G.inCheck ? '🟣 VIOLET ⚠️' : '🟣 VIOLET';
+}
+
+// ─── INIT ───────────────────────────────────────────────────
+
+function init() {
+  G = new GameState();
+  updateUI();
+  updateTip();
+  document.getElementById('tipBar').style.opacity = tipsEnabled?'1':'0';
+}
+
+// Keyboard shortcut
+document.addEventListener('keydown', (e) => {
+  if (e.key==='n' && e.ctrlKey) { e.preventDefault(); newGame(); }
+  if (e.key==='t' && e.ctrlKey) { e.preventDefault(); openTutorial(); }
+  if (e.key==='Escape') { closeModal(); closePromotion(); }
+});
+
+// Initialize
+init();
+</script>
+</body>
+</html>

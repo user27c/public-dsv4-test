@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>深圳城市展示 — 时代变迁 1950-2050</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+body{width:100vw;height:100vh;height:100dvh;overflow:hidden;background:#0a0a0f;font-family:'Noto Sans SC',system-ui,sans-serif;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+canvas{position:fixed;inset:0;display:block}
+
+#timeline{position:fixed;bottom:32px;left:32px;z-index:10;display:flex;flex-direction:column;gap:10px;padding:18px 24px 16px;background:rgba(16,16,30,0.84);backdrop-filter:blur(24px) saturate(140%);-webkit-backdrop-filter:blur(24px) saturate(140%);border-radius:20px;border:1px solid rgba(255,255,255,0.1);box-shadow:0 8px 40px rgba(0,0,0,0.55);min-width:400px}
+#year-display{font-family:'Noto Serif SC',serif;font-size:48px;font-weight:900;color:#e8e4dd;line-height:1;letter-spacing:0.02em}
+#year-display .era-label{display:block;font-size:12px;font-weight:400;color:#9a958b;letter-spacing:0.08em;margin-top:1px;font-family:'Noto Sans SC',sans-serif}
+#track-area{position:relative;height:40px;display:flex;align-items:center;cursor:pointer}
+#track-line{position:absolute;left:0;right:0;height:3px;background:rgba(255,255,255,0.12);border-radius:2px}
+#track-fill{position:absolute;left:0;height:3px;background:linear-gradient(90deg,#d4a843,#e8c667);border-radius:2px;box-shadow:0 0 12px rgba(212,168,67,0.5)}
+#dots-container{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);display:flex;justify-content:space-between;pointer-events:none}
+.dot-wrapper{display:flex;flex-direction:column;align-items:center;gap:5px;pointer-events:auto;cursor:pointer}
+.dot{width:13px;height:13px;border-radius:50%;background:rgba(255,255,255,0.3);border:2px solid rgba(255,255,255,0.2);transition:all 0.35s cubic-bezier(0.34,1.56,0.64,1)}
+.dot.active{background:#d4a843;border-color:#e8c667;box-shadow:0 0 16px rgba(212,168,67,0.5),0 0 32px rgba(212,168,67,0.5);transform:scale(1.3)}
+.dot.passed{background:rgba(212,168,67,0.5);border-color:rgba(212,168,67,0.4)}
+.dot-label{font-size:10px;color:#9a958b;font-weight:500;letter-spacing:0.05em}
+.dot.active+.dot-label,.dot-wrapper:has(.dot.active) .dot-label{color:#d4a843;font-weight:700}
+#handle{position:absolute;top:50%;transform:translate(-50%,-50%);width:26px;height:26px;background:radial-gradient(circle at 40% 35%,#f0d878,#b8902a);border-radius:50%;box-shadow:0 0 20px rgba(212,168,67,0.5),0 4px 12px rgba(0,0,0,0.4);border:2px solid rgba(255,255,255,0.3);cursor:grab;z-index:2}
+#handle:active{cursor:grabbing;transform:translate(-50%,-50%) scale(1.15)}
+#handle.dragging{box-shadow:0 0 32px rgba(212,168,67,0.5),0 0 60px rgba(212,168,67,0.6)}
+
+#hint{position:fixed;bottom:125px;left:50%;transform:translateX(-50%);font-size:12px;color:rgba(255,255,255,0.4);letter-spacing:0.05em;pointer-events:none}
+#era-tag{position:fixed;top:24px;right:32px;z-index:10;font-family:'Noto Serif SC',serif;font-size:16px;color:rgba(255,255,255,0.5);letter-spacing:0.1em}
+
+@media(max-width:520px){
+  #timeline{left:10px;right:10px;bottom:14px;min-width:auto;padding:12px 14px 10px;border-radius:16px;gap:6px}
+  #year-display{font-size:34px}
+  #year-display .era-label{font-size:10px}
+  #track-area{height:34px}
+  .dot{width:10px;height:10px}
+  .dot-label{font-size:8px}
+  #handle{width:20px;height:20px}
+  #hint{bottom:100px;font-size:10px}
+}
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div id="timeline">
+  <div id="year-display">1950<span class="era-label">渔村时代 · 宝安县</span></div>
+  <div id="track-area">
+    <div id="track-line"></div>
+    <div id="track-fill"></div>
+    <div id="dots-container"></div>
+    <div id="handle"></div>
+  </div>
+</div>
+<div id="hint">← 拖动时间线或点击节点切换时代 →</div>
+<div id="era-tag"></div>
+
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ===================== DOM =====================
+const canvas = document.getElementById('scene');
+const yearDisplay = document.getElementById('year-display');
+const trackArea = document.getElementById('track-area');
+const trackFill = document.getElementById('track-fill');
+const dotsContainer = document.getElementById('dots-container');
+const handleEl = document.getElementById('handle');
+const hintEl = document.getElementById('hint');
+const eraTag = document.getElementById('era-tag');
+
+// ===================== CONSTANTS =====================
+const ERA_NODES = [1950, 1970, 1990, 2010, 2030, 2050];
+const MIN_YEAR = 1950, MAX_YEAR = 2050;
+const LERP_SPEED = 0.05;
+
+const ERA_LABELS = {
+  1950: '渔村时代 · 宝安县',
+  1970: '公社时期 · 集体建设',
+  1990: '特区初建 · 改革开放',
+  2010: '现代都市 · 科技新城',
+  2030: '智慧城市 · 创新驱动',
+  2050: '未来之城 · 星辰大海',
+};
+
+// ===================== RING DIMENSIONS =====================
+// Layer 1: Core buildings   |x|≤6, |z|≤6  (12×12)
+// Layer 2: Sidewalk         6<|x|≤8, 6<|z|≤8  (2 wide)
+// Layer 3: Road             8<|x|≤12, 8<|z|≤12 (4 wide)
+// Layer 4: Outer buildings  |x|>12, |z|>12
+const CORE_HALF = 6;
+const SW_HALF = 8;
+const ROAD_HALF = 12;
+const OUTER_HALF = 16;
+
+// ===================== THREE.JS =====================
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(44, 2, 0.5, 120);
+camera.position.set(0, 22, 22);
+camera.lookAt(0, 0, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0, 0);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.minDistance = 10; controls.maxDistance = 50;
+controls.maxPolarAngle = Math.PI * 0.42; controls.minPolarAngle = 0.25;
+controls.autoRotate = true; controls.autoRotateSpeed = 0.2;
+controls.update();
+
+// ===================== LIGHTING =====================
+const ambientLight = new THREE.AmbientLight(0x8899bb, 1.0);
+scene.add(ambientLight);
+const sunLight = new THREE.DirectionalLight(0xffeedd, 5);
+sunLight.position.set(20, 25, 10);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.width = 2048; sunLight.shadow.mapSize.height = 2048;
+sunLight.shadow.camera.near = 0.5; sunLight.shadow.camera.far = 90;
+sunLight.shadow.camera.left = -30; sunLight.shadow.camera.right = 30;
+sunLight.shadow.camera.top = 30; sunLight.shadow.camera.bottom = -30;
+sunLight.shadow.bias = -0.0002; sunLight.shadow.normalBias = 0.02;
+scene.add(sunLight);
+scene.add(new THREE.DirectionalLight(0x8899cc, 0.8).translateX(-12));
+scene.add(new THREE.DirectionalLight(0xffffff, 0.5).translateZ(-12));
+
+// ===================== HELPERS =====================
+function M(color, rough = 0.6, metal = 0.05, opts = {}) {
+  return new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: rough, metalness: metal, ...opts });
+}
+function MT(color, rough = 0.6, metal = 0.05) {
+  return new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: rough, metalness: metal, transparent: true, opacity: 1 });
+}
+function box(w, h, d) { return new THREE.BoxGeometry(w, h, d); }
+function cyl(rT, rB, h, s = 12) { return new THREE.CylinderGeometry(rT, rB, h, s); }
+function sphere(r, s = 8) { return new THREE.SphereGeometry(r, s, 6); }
+
+function place(g, x, y, z, rx = 0, ry = 0, rz = 0) {
+  g.position.set(x, y, z);
+  g.rotation.set(rx, ry, rz);
+  return g;
+}
+
+// ===================== PERSISTENT GROUND RINGS =====================
+const groundGroup = new THREE.Group();
+scene.add(groundGroup);
+
+// Core ground
+const coreGround = new THREE.Mesh(new THREE.PlaneGeometry(CORE_HALF * 2, CORE_HALF * 2), M('#b8b0a0', 0.7));
+coreGround.rotation.x = -Math.PI / 2; coreGround.position.y = 0.005; coreGround.receiveShadow = true; coreGround.name = 'coreGround';
+groundGroup.add(coreGround);
+
+// Sidewalk ring (4 strips)
+function addSidewalkStrip(cx, cz, w, d) {
+  const g = new THREE.PlaneGeometry(w, d);
+  const m = M('#c8c4bc', 0.65);
+  const mesh = new THREE.Mesh(g, m);
+  mesh.rotation.x = -Math.PI / 2; mesh.position.set(cx, 0.01, cz); mesh.receiveShadow = true;
+  groundGroup.add(mesh);
+  return mesh;
+}
+// Top sidewalk
+addSidewalkStrip(0, -(CORE_HALF + 1), SW_HALF * 2, 2);
+// Bottom sidewalk
+addSidewalkStrip(0, CORE_HALF + 1, SW_HALF * 2, 2);
+// Left sidewalk
+addSidewalkStrip(-(CORE_HALF + 1), 0, 2, SW_HALF * 2);
+// Right sidewalk
+addSidewalkStrip(CORE_HALF + 1, 0, 2, SW_HALF * 2);
+
+// Road ring (4 strips)
+function addRoadStrip(cx, cz, w, d) {
+  const g = new THREE.PlaneGeometry(w, d);
+  const m = M('#555550', 0.85);
+  const mesh = new THREE.Mesh(g, m);
+  mesh.rotation.x = -Math.PI / 2; mesh.position.set(cx, 0.015, cz); mesh.receiveShadow = true;
+  groundGroup.add(mesh);
+  // Road markings (dashed centerline)
+  const dashLen = d / 4;
+  for (let i = 0; i < 4; i++) {
+    const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.2, dashLen * 0.5), M('#ddddd0', 0.5));
+    dash.rotation.x = -Math.PI / 2; dash.position.y = 0.018;
+    if (w > d) {
+      dash.position.set(cx - w / 2 + (i + 0.5) * (w / 4), 0.018, cz);
+    } else {
+      dash.position.set(cx, 0.018, cz - d / 2 + (i + 0.5) * (d / 4));
+    }
+    groundGroup.add(dash);
+  }
+  return mesh;
+}
+// Road strips (wider: 4 units)
+const roadTop = addRoadStrip(0, -(SW_HALF + 2), ROAD_HALF * 2, 4);
+const roadBot = addRoadStrip(0, SW_HALF + 2, ROAD_HALF * 2, 4);
+const roadLeft = addRoadStrip(-(SW_HALF + 2), 0, 4, ROAD_HALF * 2);
+const roadRight = addRoadStrip(SW_HALF + 2, 0, 4, ROAD_HALF * 2);
+
+// Outer ground
+const outerGround = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), M('#6a7060', 0.9));
+outerGround.rotation.x = -Math.PI / 2; outerGround.position.y = -0.01; outerGround.receiveShadow = true; outerGround.name = 'outerGround';
+groundGroup.add(outerGround);
+
+// ===================== ERA DATA =====================
+const ERA_DATA = {
+  1950: { sky: '#9ab8d8', fog: '#c0d4e4', fogN: 25, fogF: 65, sunI: 4.8, ambI: 1.2, exp: 1.05, coreGround: '#c8b898', outerGround: '#7a8a60' },
+  1970: { sky: '#8a9298', fog: '#b0a8a0', fogN: 18, fogF: 50, sunI: 3.5, ambI: 0.9, exp: 0.85, coreGround: '#b0a898', outerGround: '#6a7a58' },
+  1990: { sky: '#7aa0c0', fog: '#bcc8d4', fogN: 20, fogF: 58, sunI: 4.0, ambI: 1.05, exp: 0.95, coreGround: '#c0b8a8', outerGround: '#7a8070' },
+  2010: { sky: '#6a98c0', fog: '#c0c8d4', fogN: 22, fogF: 62, sunI: 4.4, ambI: 1.15, exp: 1.0, coreGround: '#d0c8b8', outerGround: '#788068' },
+  2030: { sky: '#5898c8', fog: '#b8cce0', fogN: 24, fogF: 68, sunI: 4.8, ambI: 1.25, exp: 1.08, coreGround: '#d8d4cc', outerGround: '#689060' },
+  2050: { sky: '#1a2848', fog: '#162030', fogN: 28, fogF: 75, sunI: 4.2, ambI: 1.3, exp: 1.15, coreGround: '#c0c0c8', outerGround: '#486050' },
+};
+
+// ===================== BUILD ERA SCENE =====================
+function buildEraGroup(era) {
+  const group = new THREE.Group();
+  group.name = `era_${era}`;
+  const C = CORE_HALF, S = SW_HALF, R = ROAD_HALF, O = OUTER_HALF;
+
+  // Helper: add mesh to group
+  function add(mesh) { mesh.castShadow = true; mesh.receiveShadow = true; group.add(mesh); return mesh; }
+  function bldg(x, z, w, d, h, color) {
+    const m = new THREE.Mesh(box(w, h, d), MT(color, 0.55));
+    m.position.set(x, h / 2, z); m.userData = { w, h, d }; add(m); return m;
+  }
+  function winRow(b, rows, cols) {
+    const ud = b.userData;
+    const wg = box(ud.w * 0.06, ud.h * 0.06, 0.03);
+    const wm = new THREE.MeshStandardMaterial({ color: 0xffffdd, roughness: 0.3, emissive: 0x332200, emissiveIntensity: 0.3 });
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        for (const s of [1, -1]) {
+          const w = new THREE.Mesh(wg, wm);
+          w.position.set(
+            b.position.x - ud.w / 2 + ud.w * 0.1 + c * (ud.w * 0.8 / cols),
+            b.position.y - ud.h / 2 + ud.h * 0.1 + r * (ud.h * 0.82 / rows),
+            b.position.z + s * (ud.d / 2 + 0.02)
+          );
+          group.add(w);
+        }
+      }
+    }
+  }
+  function roofOn(b, overhang = 0.4, color = '#5a4840', h = 0.7) {
+    const ud = b.userData;
+    const rw = ud.w + overhang * 2, rd = ud.d + overhang * 2;
+    const g = new THREE.ConeGeometry(Math.max(rw, rd) * 0.72, h, 4);
+    const m = new THREE.Mesh(g, M(color, 0.5));
+    m.position.copy(b.position); m.position.y += ud.h / 2 + h / 2;
+    m.rotation.y = Math.PI / 4;
+    m.scale.set(rw / (Math.max(rw, rd) * 1.44), 1, rd / (Math.max(rw, rd) * 1.44));
+    m.castShadow = true; group.add(m);
+  }
+
+  // ---- PERSON ----
+  function person(x, z, bodyC, rot = 0) {
+    const p = new THREE.Group();
+    p.add(place(new THREE.Mesh(cyl(0.12, 0.16, 0.9, 6), M(bodyC, 0.6)), 0, 0.5, 0));
+    p.add(place(new THREE.Mesh(sphere(0.13), M('#e8d8c0', 0.5)), 0, 1.05, 0));
+    for (let l = -1; l <= 1; l += 2) {
+      p.add(place(new THREE.Mesh(cyl(0.05, 0.06, 0.5, 5), M('#333', 0.6)), l * 0.07, 0.25, 0));
+    }
+    place(p, x, 0, z, 0, rot, 0); group.add(p);
+  }
+
+  // ---- CAR ----
+  function car(x, z, color, rot = 0, lane) {
+    const c = new THREE.Group();
+    c.add(place(new THREE.Mesh(box(1.6, 0.55, 3.2), M(color, 0.3, 0.5)), 0, 0.5, 0));
+    c.add(place(new THREE.Mesh(box(1.3, 0.35, 1.6), M('#bbccdd', 0.2, 0.4)), 0, 0.85, -0.2));
+    for (let wx = -1; wx <= 1; wx += 2)
+      for (let wz = -1; wz <= 1; wz += 2)
+        c.add(place(new THREE.Mesh(cyl(0.28, 0.28, 0.18, 8), M('#111', 0.7)), wx * 0.65, 0.28, wz * 1.0, Math.PI / 2, 0, 0));
+    place(c, x, 0, z, 0, rot, 0); group.add(c);
+  }
+
+  // ---- BICYCLE ----
+  function bicycle(x, z, rot = 0) {
+    const b = new THREE.Group();
+    b.add(place(new THREE.Mesh(box(0.06, 0.7, 1.4), M('#444', 0.4, 0.3)), 0, 0.5, 0, 0.15));
+    for (let wz = -1; wz <= 1; wz += 2)
+      b.add(place(new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.04, 6, 10), M('#222', 0.6)), 0, 0.28, wz * 0.6));
+    place(b, x, 0, z, 0, rot, 0); group.add(b);
+  }
+
+  // ---- TREE ----
+  function tree(x, z, s = 1) {
+    const t = new THREE.Group();
+    t.add(place(new THREE.Mesh(cyl(0.07 * s, 0.1 * s, 1.6 * s, 6), M('#5a4030', 0.7)), 0, 0.8 * s, 0));
+    for (let i = 0; i < 3; i++)
+      t.add(place(new THREE.Mesh(sphere(0.5 * s, 8), M('#3d7035', 0.7)), (Math.random() - 0.5) * 0.4 * s, (1.3 + i * 0.45) * s, (Math.random() - 0.5) * 0.4 * s));
+    place(t, x, 0, z); group.add(t);
+  }
+
+  // ---- STREETLIGHT ----
+  function streetlight(x, z) {
+    const pole = new THREE.Mesh(cyl(0.06, 0.08, 6, 8), M('#bbb', 0.3, 0.5));
+    place(pole, x, 3, z); group.add(pole);
+    const lamp = new THREE.Mesh(sphere(0.25), new THREE.MeshBasicMaterial({ color: 0xffffdd }));
+    place(lamp, x, 6.1, z); group.add(lamp);
+  }
+
+  // ==================== ERA-SPECIFIC CONTENT ====================
+
+  // ----- CORE BUILDINGS (inside |x|≤6, |z|≤6) -----
+  if (era === 1950) {
+    // Traditional village houses around a central courtyard
+    const b1 = bldg(-2.5, -2.5, 3.5, 3, 2.5, '#e8e0d4'); roofOn(b1, 0.5, '#4a4038', 0.6);
+    const b2 = bldg(2.5, -2.5, 3.2, 2.8, 2.2, '#e8ddd0'); roofOn(b2, 0.45, '#4a3d35', 0.55);
+    const b3 = bldg(-2.5, 2.5, 3.5, 2.8, 2.3, '#e8e0d4'); roofOn(b3, 0.5, '#4a4038', 0.6);
+    const b4 = bldg(2.8, 2.5, 3, 3, 2.0, '#e9e2d8'); roofOn(b4, 0.4, '#4a3d35', 0.5);
+    // Well
+    const well = new THREE.Mesh(cyl(0.4, 0.45, 0.7, 8), M('#888', 0.5));
+    place(well, 0, 0.35, 0); group.add(well);
+    // Drying rack
+    for (let i = 0; i < 3; i++) {
+      const pole = new THREE.Mesh(cyl(0.05, 0.06, 3, 6), M('#8a7a50', 0.7));
+      place(pole, -4 + i * 2.5, 1.5, -4.5); group.add(pole);
+      const net = new THREE.Mesh(new THREE.PlaneGeometry(1, 2), M('#998877', 0.8, 0, { side: THREE.DoubleSide, transparent: true, opacity: 0.45 }));
+      place(net, -4 + i * 2.5, 1.8, -4.2); group.add(net);
+    }
+    // Village people in core
+    for (let i = 0; i < 6; i++) person((Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9, [0x334455, 0x445544, 0x553322][i % 3], i * 1.2);
+    // Trees
+    tree(-4.5, 4.5, 0.8); tree(4.5, -4.5, 0.7); tree(4, 4, 0.9);
+
+    // ----- SIDEWALK -----
+    for (let i = 0; i < 4; i++) bicycle(-7, -4 + i * 3, i * 0.7);
+    for (let i = 0; i < 3; i++) person(-7, -3 + i * 4, 0x334455, i);
+
+    // ----- ROAD -----
+    // One old truck on road
+    car(-10, 6, '#4a6040', 0);
+    bicycle(-10, -6, 1.5);
+
+    // ----- OUTER RING (distant traditional village) -----
+    for (let i = 0; i < 16; i++) {
+      const angle = (i / 16) * Math.PI * 2;
+      const ox = Math.cos(angle) * (O + 2), oz = Math.sin(angle) * (O + 2);
+      const ob = bldg(ox, oz, 2.5, 2, 2 + Math.random() * 0.5, '#ddd8cc');
+      roofOn(ob, 0.3, '#5a4a38', 0.4);
+    }
+  }
+
+  if (era === 1970) {
+    // Concrete commune buildings
+    const f1 = bldg(-2, -2, 4.5, 3.5, 3.5, '#b0a898'); winRow(f1, 3, 4);
+    const f2 = bldg(2.5, -2, 4, 3.5, 3.2, '#b0a898'); winRow(f2, 3, 4);
+    const f3 = bldg(0, 2.5, 3.5, 3, 2.8, '#a89888');
+    // Small factory workshop
+    const ws = bldg(-3, 2.5, 4, 3, 2.5, '#9a9080');
+    // Chimney
+    const chimney = new THREE.Mesh(cyl(0.2, 0.35, 7, 8), M('#6a5850', 0.7));
+    place(chimney, -3, 3.5, 4.5); group.add(chimney);
+    // Propaganda board
+    const board = new THREE.Mesh(box(4, 1.8, 0.15), M('#c84038', 0.5));
+    place(board, 0, 1.4, -5.6); group.add(board);
+    // Yellow text strips
+    for (let t = 0; t < 2; t++) {
+      const strip = new THREE.Mesh(box(3, 0.15, 0.04), M('#ffd840', 0.4));
+      place(strip, 0, 2.1 + t * 0.4, -5.7); group.add(strip);
+    }
+    // Bicycle parking
+    for (let i = 0; i < 5; i++) bicycle(-4, -1 + i * 1.2, 0);
+
+    // People in blue/grey
+    for (let i = 0; i < 8; i++) person((Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9, [0x334466, 0x445566, 0x334455][i % 3], i);
+
+    // Sidewalk
+    for (let i = 0; i < 3; i++) person(-7, -3 + i * 4, 0x334466, i);
+
+    // Road - truck + bicycles
+    car(10, -8, '#5a6a40', Math.PI);
+    car(-10, 8, '#4a5a30', 0);
+    for (let i = 0; i < 3; i++) bicycle(-10, -5 + i * 3, i);
+
+    // Outer ring - mid concrete buildings
+    for (let i = 0; i < 14; i++) {
+      const angle = (i / 14) * Math.PI * 2;
+      const ox = Math.cos(angle) * (O + 2), oz = Math.sin(angle) * (O + 2);
+      const ob = bldg(ox, oz, 3, 2.5, 3 + Math.random() * 1.5, '#b0a898');
+      winRow(ob, Math.floor(2 + Math.random() * 2), 3);
+    }
+  }
+
+  if (era === 1990) {
+    // White-tile mid-rise + first glass buildings
+    const m1 = bldg(-2.5, -2, 4.5, 3.5, 8, '#e8e4e0'); winRow(m1, 6, 4);
+    const m2 = bldg(2.5, -2, 4, 3.5, 7, '#e8e4e0'); winRow(m2, 5, 4);
+    const m3 = bldg(0, 2.5, 4.5, 3, 9, '#d8dce0'); winRow(m3, 7, 4);
+    // Glass accent
+    const glass1 = new THREE.Mesh(box(4.6, 7, 0.08), M('#88aacc', 0.15, 0.7));
+    place(glass1, -2.5, 4, -0.2); group.add(glass1);
+    // Small plaza with early fountain
+    const fountain = new THREE.Mesh(cyl(0.8, 1, 0.4, 12), M('#aaa', 0.4));
+    place(fountain, 0, 0.2, -0.5); group.add(fountain);
+    // Construction crane
+    const cranePole = new THREE.Mesh(cyl(0.2, 0.3, 10, 8), M('#d8a030', 0.5, 0.4));
+    place(cranePole, -5, 5, 3); group.add(cranePole);
+    const craneArm = new THREE.Mesh(box(0.25, 0.2, 7), M('#d8a030', 0.5, 0.4));
+    place(craneArm, -5, 10, 6.5); group.add(craneArm);
+    // Street vendors in core
+    for (let i = 0; i < 2; i++) {
+      const stall = new THREE.Mesh(box(1.8, 1, 1.2), M('#d8c8a0', 0.6));
+      place(stall, -3 + i * 6, 0.5, 5); group.add(stall);
+      const umber = new THREE.Mesh(new THREE.ConeGeometry(1, 0.3, 8), M('#cc4444', 0.5));
+      place(umber, -3 + i * 6, 1.15, 5); group.add(umber);
+    }
+
+    // People mixed
+    for (let i = 0; i < 10; i++) person((Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9, [0x334455, 0x553322, 0xcc3333, 0x336699][i % 4], i);
+
+    // Sidewalk
+    for (let i = 0; i < 4; i++) person(-7 + (i % 2) * 14, -3 + Math.floor(i / 2) * 8, 0x334455, i);
+
+    // Road - taxis & cars
+    car(-10, -6, '#d84030', 0); car(10, 4, '#3366aa', Math.PI);
+    car(-10, 0, '#ddd', Math.PI / 2);
+    for (let i = 0; i < 2; i++) bicycle(10, -3 + i * 6, Math.PI);
+
+    // Neon signs on outer buildings
+    for (let i = 0; i < 4; i++) {
+      const sign = new THREE.Mesh(box(2, 0.8, 0.1), new THREE.MeshBasicMaterial({ color: [0xff3366, 0xffcc00, 0x33ccff, 0xff6600][i] }));
+      const angle = (i / 4) * Math.PI * 2;
+      place(sign, Math.cos(angle) * (O + 3), 5, Math.sin(angle) * (O + 3)); group.add(sign);
+    }
+
+    // Outer ring - mid/high rise
+    for (let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2;
+      const ox = Math.cos(angle) * (O + 2), oz = Math.sin(angle) * (O + 2);
+      const ob = bldg(ox, oz, 3.5, 3, 6 + Math.random() * 5, '#e0dcd8');
+      winRow(ob, Math.floor(4 + Math.random() * 4), 3);
+    }
+  }
+
+  if (era === 2010) {
+    // Glass commercial buildings
+    const g1 = bldg(-2.5, -2, 5, 4, 14, '#c8d4e0'); winRow(g1, 10, 5);
+    const glassF1 = new THREE.Mesh(box(5.1, 13, 0.08), M('#7799bb', 0.12, 0.85));
+    place(glassF1, -2.5, 7, -3.95); group.add(glassF1);
+
+    const g2 = bldg(2.5, -2, 4.5, 4, 12, '#c0d0dc'); winRow(g2, 9, 4);
+    const glassF2 = new THREE.Mesh(box(4.6, 11, 0.08), M('#7799bb', 0.12, 0.85));
+    place(glassF2, 2.5, 6, -3.95); group.add(glassF2);
+
+    const g3 = bldg(0, 3, 5, 3.5, 10, '#ccd8e4'); winRow(g3, 7, 5);
+
+    // Central plaza with fountain
+    const fountain2 = new THREE.Mesh(cyl(1, 1.3, 0.5, 16), M('#bbb', 0.3, 0.6));
+    place(fountain2, 0, 0.25, -0.5); group.add(fountain2);
+    // Water jet
+    const jet = new THREE.Mesh(cyl(0.08, 0.15, 1.5, 8), M('#cceeff', 0.2, 0.3));
+    place(jet, 0, 1, -0.5); group.add(jet);
+
+    // Outdoor seating
+    for (let i = 0; i < 3; i++) {
+      const table = new THREE.Mesh(box(1.2, 0.08, 1.2), M('#ddd', 0.4));
+      place(table, -2 + i * 2, 0.7, 4.5); group.add(table);
+      for (let c = 0; c < 4; c++) {
+        const chair = new THREE.Mesh(box(0.3, 0.5, 0.3), M('#ccc', 0.4));
+        place(chair, -2 + i * 2 + (c % 2 ? 0.6 : -0.6), 0.25, 4.5 + (c < 2 ? 0.7 : -0.7)); group.add(chair);
+      }
+    }
+
+    // Modern people
+    for (let i = 0; i < 12; i++) person((Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9, [0x222, 0x445, 0xc33, 0x369, 0xf83][i % 5], i);
+
+    // Sidewalk - trees + people
+    for (let i = 0; i < 4; i++) { tree(-7, -4 + i * 3, 0.7); tree(7, -4 + i * 3, 0.7); }
+    for (let i = 0; i < 4; i++) person(-7, -3 + i * 4, 0x334455, i);
+
+    // Streetlights
+    for (let i = 0; i < 4; i++) { streetlight(-10, -6 + i * 4); streetlight(10, -6 + i * 4); }
+
+    // Road - modern cars
+    car(-10, -8, '#fff', 0); car(10, -2, '#333', Math.PI);
+    car(-10, 4, '#c00', Math.PI / 2); car(10, 6, '#03a', 0);
+    // E-scooters on road edge
+    for (let i = 0; i < 2; i++) {
+      const scooter = new THREE.Group();
+      scooter.add(place(new THREE.Mesh(box(0.4, 0.5, 1.2), M('#eee', 0.3, 0.4)), 0, 0.4, 0));
+      for (let w = -1; w <= 1; w += 2)
+        scooter.add(place(new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.03, 6, 8), M('#222', 0.6)), 0, 0.2, w * 0.5));
+      place(scooter, -9 + i * 2, 0, -7 + i * 4, 0, i * 2); group.add(scooter);
+    }
+
+    // Outer ring - skyscrapers
+    for (let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2;
+      const ox = Math.cos(angle) * (O + 3), oz = Math.sin(angle) * (O + 3);
+      const ob = bldg(ox, oz, 3, 3, 10 + Math.random() * 10, '#c8d8e8');
+      winRow(ob, Math.floor(6 + Math.random() * 6), 3);
+    }
+
+    // LED billboard
+    const led = new THREE.Mesh(new THREE.PlaneGeometry(3, 1.8), new THREE.MeshBasicMaterial({ color: 0x2266cc }));
+    place(led, 0, 5, ROAD_HALF + 0.5); group.add(led);
+  }
+
+  if (era === 2030) {
+    // Green/smart buildings
+    const s1 = bldg(-2.5, -2, 5, 4, 13, '#d4dcd4'); winRow(s1, 9, 5);
+    // Vertical garden
+    for (let v = 0; v < 5; v++) {
+      const garden = new THREE.Mesh(box(0.5, 11, 0.25), M('#4a8a40', 0.6));
+      place(garden, -2.5 - 1.5 + v * 0.7, 6.5, -3.95); group.add(garden);
+    }
+    const s2 = bldg(2.5, -2, 4.5, 4, 14, '#d8e0dc'); winRow(s2, 10, 4);
+    // Solar roof
+    const solar = new THREE.Mesh(box(4.7, 0.12, 4.2), M('#224488', 0.15, 0.8));
+    place(solar, 2.5, 14.05, -2, 0.18); group.add(solar);
+
+    const s3 = bldg(0, 3, 5, 3.5, 11, '#e0e4e0'); winRow(s3, 8, 5);
+
+    // Smart plaza
+    for (let i = 0; i < 3; i++) {
+      const kiosk = new THREE.Mesh(box(0.7, 1.6, 0.5), M('#ddeeff', 0.25, 0.5));
+      place(kiosk, -2 + i * 2, 0.8, 4.8); group.add(kiosk);
+      const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.7), new THREE.MeshBasicMaterial({ color: 0x44aaff }));
+      place(screen, -2 + i * 2, 1.1, 5.06); group.add(screen);
+    }
+
+    // Drones in core
+    for (let i = 0; i < 3; i++) {
+      const drone = new THREE.Group();
+      drone.add(place(new THREE.Mesh(box(0.5, 0.12, 0.5), M('#ddeeff', 0.2, 0.7)), 0, 0, 0));
+      for (let a = 0; a < 4; a++)
+        drone.add(place(new THREE.Mesh(cyl(0.03, 0.03, 0.4, 6), M('#888', 0.3)), Math.cos(a * Math.PI / 2) * 0.3, 0, Math.sin(a * Math.PI / 2) * 0.3, 0, 0, Math.PI / 2));
+      const light = new THREE.Mesh(sphere(0.05), new THREE.MeshBasicMaterial({ color: 0x44ff88 }));
+      place(light, 0, 0.1, 0); drone.add(light);
+      place(drone, (Math.random() - 0.5) * 6, 4 + Math.random() * 3, (Math.random() - 0.5) * 6);
+      drone.userData = { seed: i, baseY: drone.position.y }; group.add(drone);
+    }
+
+    // People
+    for (let i = 0; i < 10; i++) person((Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9, [0x334455, 0x445566, 0x225588][i % 3], i);
+
+    // Sidewalk trees
+    for (let i = 0; i < 6; i++) { tree(-7, -5 + i * 2.5, 0.8); tree(7, -5 + i * 2.5, 0.8); }
+
+    // Road - autonomous pods
+    const pod1 = new THREE.Group();
+    pod1.add(place(new THREE.Mesh(box(1.3, 0.7, 2.3), M('#aaccee', 0.15, 0.6)), 0, 0.55, 0));
+    pod1.add(place(new THREE.Mesh(sphere(0.6, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), M('#ddf', 0.1, 0.3)), 0, 0.9, 0));
+    for (let w = -1; w <= 1; w += 2)
+      pod1.add(place(new THREE.Mesh(cyl(0.22, 0.22, 0.12, 8), M('#444', 0.5)), 0, 0.22, w * 0.85, Math.PI / 2, 0, 0));
+    place(pod1, -10, 0, 3, 0, Math.PI / 2, 0); group.add(pod1);
+
+    car(10, -6, '#cce', Math.PI);
+    car(-10, -3, '#dde', 0);
+
+    // Smart streetlights
+    for (let i = 0; i < 4; i++) {
+      const pole = new THREE.Mesh(cyl(0.05, 0.07, 6, 8), M('#ddd', 0.2, 0.7));
+      place(pole, -10, 3, -6 + i * 4); group.add(pole);
+    }
+
+    // Outer ring - green/smart buildings
+    for (let i = 0; i < 10; i++) {
+      const angle = (i / 10) * Math.PI * 2;
+      const ox = Math.cos(angle) * (O + 3), oz = Math.sin(angle) * (O + 3);
+      const ob = bldg(ox, oz, 3.5, 3, 12 + Math.random() * 8, '#d0dcd0');
+    }
+  }
+
+  if (era === 2050) {
+    // Organic flowing buildings
+    const f1 = bldg(-2.5, -2, 5, 4, 16, '#8899cc');
+    for (let l = 0; l < 7; l++) {
+      const layer = new THREE.Mesh(box(5.2, 1.8, 0.35), M(`hsl(${220 + l * 10}, 55%, ${48 + l * 5}%)`, 0.15, 0.75));
+      place(layer, -2.5, 1.5 + l * 2.2, -2 + Math.sin(l * 0.5) * 1.2); group.add(layer);
+    }
+
+    const f2 = bldg(2.5, -2, 4.5, 4, 18, '#7788bb');
+    const f3 = bldg(0, 3, 5, 3.5, 14, '#8899cc');
+
+    // Holographic centerpiece
+    for (let h = 0; h < 3; h++) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(1.5 + h * 0.8, 0.04, 16, 32), new THREE.MeshBasicMaterial({ color: 0x44ccff, transparent: true, opacity: 0.5 }));
+      place(ring, 0, 1 + h * 1.5, 0, Math.PI / 2); group.add(ring);
+    }
+
+    // Ground neon strips
+    for (let i = 0; i < 5; i++) {
+      const strip = new THREE.Mesh(box(0.06, 0.03, 2.5), new THREE.MeshBasicMaterial({ color: [0x44ccff, 0xff4488, 0x44ff88][i % 3] }));
+      place(strip, -4 + i * 2, 0.02, 5); group.add(strip);
+    }
+
+    // Robots
+    for (let i = 0; i < 3; i++) {
+      const rb = new THREE.Group();
+      rb.add(place(new THREE.Mesh(cyl(0.25, 0.3, 1, 8), M('#ddeeff', 0.15, 0.8)), 0, 0.5, 0));
+      rb.add(place(new THREE.Mesh(sphere(0.22), M('#fff', 0.15, 0.6)), 0, 1.1, 0));
+      rb.add(place(new THREE.Mesh(sphere(0.04), new THREE.MeshBasicMaterial({ color: 0x44ccff })), 0, 1.15, 0.2));
+      place(rb, -2 + i * 2, 0, 4); group.add(rb);
+    }
+
+    // Flying cars above core
+    for (let i = 0; i < 4; i++) {
+      const fc = new THREE.Group();
+      fc.add(place(new THREE.Mesh(box(1.3, 0.4, 2.8), M('#aabbdd', 0.1, 0.7)), 0, 0, 0));
+      for (let s = -1; s <= 1; s += 2)
+        fc.add(place(new THREE.Mesh(box(2.2, 0.06, 1), M('#8899bb', 0.15)), s * 1.2, 0.15, 0));
+      fc.add(place(new THREE.Mesh(sphere(0.12), new THREE.MeshBasicMaterial({ color: 0x44ccff })), 0, 0, 1.5));
+      place(fc, (Math.random() - 0.5) * 8, 5 + Math.random() * 5, (Math.random() - 0.5) * 8);
+      fc.userData = { seed: i, baseY: fc.position.y }; group.add(fc);
+    }
+
+    // People (futuristic with glow)
+    for (let i = 0; i < 10; i++) {
+      const pp = new THREE.Group();
+      pp.add(place(new THREE.Mesh(cyl(0.12, 0.16, 0.9, 6), M('#334466', 0.5, 0.3)), 0, 0.5, 0));
+      pp.add(place(new THREE.Mesh(sphere(0.13), M('#e8d8c0', 0.5)), 0, 1.05, 0));
+      for (let l = -1; l <= 1; l += 2)
+        pp.add(place(new THREE.Mesh(cyl(0.05, 0.06, 0.5, 5), M('#222', 0.6)), l * 0.07, 0.25, 0));
+      const glow = new THREE.Mesh(sphere(0.06), new THREE.MeshBasicMaterial({ color: 0x44ccff, transparent: true, opacity: 0.5 }));
+      place(glow, 0, 1.25, 0.1); pp.add(glow);
+      place(pp, (Math.random() - 0.5) * 9, 0, (Math.random() - 0.5) * 9); group.add(pp);
+    }
+
+    // Sidewalk
+    for (let i = 0; i < 4; i++) streetlight(-7, -4 + i * 3);
+    for (let i = 0; i < 4; i++) streetlight(7, -4 + i * 3);
+
+    // Road - futuristic vehicles
+    car(-10, -4, '#8899cc', 0);
+    car(10, -2, '#99aadd', Math.PI);
+
+    // Outer ring - futuristic towers
+    for (let i = 0; i < 10; i++) {
+      const angle = (i / 10) * Math.PI * 2;
+      const ox = Math.cos(angle) * (O + 3), oz = Math.sin(angle) * (O + 3);
+      const ob = bldg(ox, oz, 3.5, 3, 14 + Math.random() * 10, '#7788aa');
+    }
+
+    // Holographic billboards on outer ring
+    for (let i = 0; i < 6; i++) {
+      const holo = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 1.5), new THREE.MeshBasicMaterial({ color: [0x44ccff, 0xff4488, 0x44ff88][i % 3], transparent: true, opacity: 0.45, side: THREE.DoubleSide }));
+      const angle = (i / 6) * Math.PI * 2;
+      place(holo, Math.cos(angle) * (O + 4), 6, Math.sin(angle) * (O + 4));
+      holo.userData = { seed: i }; group.add(holo);
+    }
+  }
+
+  return group;
+}
+
+// ==================== BUILD ALL ERA GROUPS ====================
+const eraGroups = {};
+for (const era of ERA_NODES) {
+  const g = buildEraGroup(era);
+  g.traverse(child => {
+    if (child.material) {
+      child.material.transparent = true;
+      child.material.opacity = (era === 1950) ? 1.0 : 0.0;
+      child.material.depthWrite = (era === 1950);
+      child.material.needsUpdate = true;
+    }
+  });
+  eraGroups[era] = g;
+  scene.add(g);
+}
+
+// ==================== PARTICLES ====================
+const particleData = { 1970: { count: 40, color: 0x999999, size: 0.4 }, 1990: { count: 35, color: 0xccbb99, size: 0.25 }, 2030: { count: 50, color: 0x88ccff, size: 0.15 }, 2050: { count: 70, color: 0x4488ff, size: 0.12 } };
+const particleSystems = {};
+for (const [era, pd] of Object.entries(particleData)) {
+  const positions = new Float32Array(pd.count * 3);
+  for (let i = 0; i < pd.count; i++) {
+    positions[i * 3] = (Math.random() - 0.5) * 25;
+    positions[i * 3 + 1] = 1 + Math.random() * 12;
+    positions[i * 3 + 2] = (Math.random() - 0.5) * 25;
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const mat = new THREE.PointsMaterial({ color: pd.color, size: pd.size, transparent: true, opacity: 0, blending: THREE.NormalBlending, depthWrite: false });
+  const pts = new THREE.Points(geom, mat);
+  pts.userData = { era: parseInt(era) };
+  particleSystems[era] = pts;
+  scene.add(pts);
+}
+
+// ==================== STATE ====================
+let currentYear = 1950, targetYear = 1950;
+function lerp(a, b, t) { return a + (b - a) * t; }
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function getEraState(year) {
+  year = clamp(year, MIN_YEAR, MAX_YEAR);
+  const nodes = ERA_NODES;
+  if (year <= nodes[0]) return { ...ERA_DATA[nodes[0]] };
+  if (year >= nodes[nodes.length - 1]) return { ...ERA_DATA[nodes[nodes.length - 1]] };
+  let lo = nodes[0], hi = nodes[nodes.length - 1];
+  for (let i = 0; i < nodes.length - 1; i++) {
+    if (year >= nodes[i] && year <= nodes[i + 1]) { lo = nodes[i]; hi = nodes[i + 1]; break; }
+  }
+  const t = (year - lo) / (hi - lo);
+  const et = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  const a = ERA_DATA[lo], b = ERA_DATA[hi];
+  const r = {};
+  for (const k of Object.keys(a)) {
+    if (typeof a[k] === 'number') r[k] = lerp(a[k], b[k], et);
+    else r[k] = a[k];
+  }
+  for (const k of ['sky', 'fog', 'coreGround', 'outerGround']) {
+    if (typeof a[k] === 'string') {
+      const ca = new THREE.Color(a[k]), cb = new THREE.Color(b[k]);
+      r[k] = '#' + new THREE.Color(clamp(lerp(ca.r, cb.r, et), 0, 1), clamp(lerp(ca.g, cb.g, et), 0, 1), clamp(lerp(ca.b, cb.b, et), 0, 1)).getHexString();
+    }
+  }
+  return r;
+}
+
+function applyState(state) {
+  scene.background = new THREE.Color(state.sky);
+  scene.fog.color = new THREE.Color(state.fog);
+  scene.fog.near = state.fogN; scene.fog.far = state.fogF;
+  sunLight.intensity = state.sunI; ambientLight.intensity = state.ambI;
+  renderer.toneMappingExposure = state.exp;
+
+  const cg = scene.getObjectByName('coreGround');
+  if (cg) cg.material.color.set(state.coreGround);
+  const og = scene.getObjectByName('outerGround');
+  if (og) og.material.color.set(state.outerGround);
+
+  // Crossfade era groups
+  for (const era of ERA_NODES) {
+    const g = eraGroups[era];
+    if (!g) continue;
+    const dist = Math.abs(currentYear - era);
+    let target = 0;
+    if (dist < 2) target = 1;
+    else if (dist < 25) target = Math.max(0, 1 - (dist - 2) / 23);
+    g.traverse(child => {
+      if (child.material && child.material.transparent !== false) {
+        child.material.opacity += (target - child.material.opacity) * 0.06;
+        child.material.depthWrite = child.material.opacity > 0.75;
+      }
+    });
+  }
+
+  // Particles
+  for (const [era, pts] of Object.entries(particleSystems)) {
+    if (!pts) continue;
+    const dist = Math.abs(currentYear - parseInt(era));
+    const target = dist < 8 ? (1 - dist / 8) * 0.55 : 0;
+    pts.material.opacity += (target - pts.material.opacity) * 0.04;
+    pts.visible = pts.material.opacity > 0.005;
+  }
+}
+
+// ==================== ANIMATION ====================
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.1);
+  const elapsed = performance.now() * 0.001;
+
+  const diff = targetYear - currentYear;
+  if (Math.abs(diff) > 0.05) { currentYear += diff * LERP_SPEED; if (Math.abs(diff) < 0.08) currentYear = targetYear; }
+  else currentYear = targetYear;
+
+  applyState(getEraState(currentYear));
+
+  // Animate drones / flying cars / rings
+  for (const era of ERA_NODES) {
+    const g = eraGroups[era];
+    if (!g) continue;
+    g.traverse(child => {
+      if (child.userData && child.userData.baseY !== undefined && child.userData.seed !== undefined) {
+        child.position.y = child.userData.baseY + Math.sin(elapsed * 1.5 + child.userData.seed) * 0.6;
+        child.position.x += Math.cos(elapsed * 0.7 + child.userData.seed) * 0.015;
+        child.position.z += Math.sin(elapsed * 0.6 + child.userData.seed) * 0.015;
+      }
+    });
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+  updateTimelineUI();
+}
+
+// ==================== TIMELINE UI ====================
+function buildTimelineDots() {
+  dotsContainer.innerHTML = '';
+  ERA_NODES.forEach(year => {
+    const w = document.createElement('div'); w.className = 'dot-wrapper'; w.dataset.year = year;
+    w.addEventListener('click', () => { targetYear = year; });
+    const d = document.createElement('div'); d.className = 'dot'; d.dataset.year = year;
+    const l = document.createElement('span'); l.className = 'dot-label'; l.textContent = year;
+    w.appendChild(d); w.appendChild(l); dotsContainer.appendChild(w);
+  });
+}
+
+function updateTimelineUI() {
+  const dy = Math.round(currentYear);
+  const closest = ERA_NODES.reduce((a, b) => Math.abs(b - dy) < Math.abs(a - dy) ? b : a);
+  yearDisplay.innerHTML = `${dy}<span class="era-label">${ERA_LABELS[closest] || ''}</span>`;
+  eraTag.textContent = ERA_LABELS[closest] || '';
+  const frac = (currentYear - MIN_YEAR) / (MAX_YEAR - MIN_YEAR);
+  trackFill.style.width = `${frac * 100}%`; handleEl.style.left = `${frac * 100}%`;
+  dotsContainer.querySelectorAll('.dot').forEach(dot => {
+    const dy2 = parseInt(dot.dataset.year);
+    dot.classList.remove('active', 'passed');
+    if (Math.abs(currentYear - dy2) < 2) dot.classList.add('active');
+    else if (currentYear > dy2) dot.classList.add('passed');
+  });
+  if (targetYear !== 1950 && hintEl.style.opacity !== '0') { hintEl.style.transition = 'opacity 1.5s'; hintEl.style.opacity = '0'; }
+}
+
+let isDragging = false;
+function getYearFromEvent(e) {
+  const rect = trackArea.getBoundingClientRect();
+  const cx = e.touches ? e.touches[0].clientX : e.clientX;
+  return MIN_YEAR + clamp((cx - rect.left) / rect.width, 0, 1) * (MAX_YEAR - MIN_YEAR);
+}
+trackArea.addEventListener('mousedown', e => {
+  if (e.target === handleEl || handleEl.contains(e.target)) { isDragging = true; handleEl.classList.add('dragging'); e.preventDefault(); }
+  else targetYear = getYearFromEvent(e);
+});
+window.addEventListener('mousemove', e => { if (isDragging) targetYear = getYearFromEvent(e); });
+window.addEventListener('mouseup', () => { isDragging = false; handleEl.classList.remove('dragging'); });
+trackArea.addEventListener('touchstart', e => { isDragging = true; handleEl.classList.add('dragging'); targetYear = getYearFromEvent(e); e.preventDefault(); }, { passive: false });
+window.addEventListener('touchmove', e => { if (isDragging) targetYear = getYearFromEvent(e); }, { passive: false });
+window.addEventListener('touchend', () => { isDragging = false; handleEl.classList.remove('dragging'); });
+window.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { targetYear += 5; e.preventDefault(); }
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { targetYear -= 5; e.preventDefault(); }
+  else if ('012345'.includes(e.key)) targetYear = ERA_NODES[parseInt(e.key)];
+});
+
+// ==================== INIT ====================
+function resize() {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+trackArea.addEventListener('dblclick', e => e.preventDefault());
+
+scene.background = new THREE.Color('#9ab8d8');
+scene.fog = new THREE.Fog('#c0d4e4', 25, 65);
+
+buildTimelineDots();
+resize();
+updateTimelineUI();
+requestAnimationFrame(animate);
+
+console.log('🏙️ 深圳 · 同心四层结构 · 1950-2050');
+console.log('  内→外: 核心建筑群 | 人行道 | 马路 | 外围城市');
+</script>
+</body>
+</html>

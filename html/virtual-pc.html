@@ -1,0 +1,1642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Virtual 3D PC</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif;user-select:none;-webkit-user-select:none}
+canvas{display:block}
+#start-screen{position:fixed;inset:0;background:#0b0b0b;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;cursor:pointer;transition:opacity .5s}
+#start-screen.hidden{opacity:0;pointer-events:none}
+#start-screen h1{color:#bbb;font-size:2.8rem;font-weight:300;letter-spacing:.12em;margin-bottom:1.2rem}
+#start-screen p{color:#555;font-size:1.05rem;animation:pulse2 2.2s infinite}
+@keyframes pulse2{0%,100%{opacity:.35}50%{opacity:1}}
+#os-overlay{position:fixed;inset:0;background:#000;display:none;align-items:center;justify-content:center;z-index:50}
+#os-overlay.active{display:flex}
+#os-overlay canvas{max-width:100vw;max-height:100vh;object-fit:contain;cursor:none}
+#hint{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.45);font-size:.78rem;z-index:60;pointer-events:none;transition:opacity .4s}
+</style>
+</head>
+<body>
+<div id="start-screen" tabindex="0"><h1>Virtual 3D PC</h1><p>Press any key or click here to start</p></div>
+<div id="os-overlay"><canvas id="os-canvas"></canvas></div>
+<div id="hint">Z: Zoom to Monitor &nbsp;|&nbsp; Y: Zoom Out &nbsp;|&nbsp; ESC: Back to Start</div>
+
+<!-- Fallback: if module fails to load within 4s, show a message -->
+<script>
+window._vpcReady=false;
+setTimeout(()=>{
+  if(!window._vpcReady){
+    const p=document.querySelector('#start-screen p');
+    if(p)p.textContent='Loading failed — check console (F12) or try a different browser';
+  }
+},4000);
+</script>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+window._vpcReady=true; // Signal that module loaded successfully
+
+// roundRect polyfill for older browsers
+if(!CanvasRenderingContext2D.prototype.roundRect){
+  CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+    if(typeof r==='number')r={tl:r,tr:r,br:r,bl:r};
+    this.moveTo(x+r.tl,y);
+    this.lineTo(x+w-r.tr,y);
+    this.quadraticCurveTo(x+w,y,x+w,y+r.tr);
+    this.lineTo(x+w,y+h-r.br);
+    this.quadraticCurveTo(x+w,y+h,x+w-r.br,y+h);
+    this.lineTo(x+r.bl,y+h);
+    this.quadraticCurveTo(x,y+h,x,y+h-r.bl);
+    this.lineTo(x,y+r.tl);
+    this.quadraticCurveTo(x,y,x+r.tl,y);
+    this.closePath();
+  };
+}
+
+// ==================== CONSTANTS ====================
+const STATE={START:'start',DESK:'desk',ZOOMED:'zoomed'};
+const OS_W=1280,OS_H=800;
+const KEY_UNIT=0.17;
+const KEY_GAP=0.01;
+const KEY_HEIGHT=0.04;
+const KEY_PRESS_DEPTH=0.025;
+const ROW_SPACING=0.18;
+
+// ==================== DOM ====================
+const startScreen=document.getElementById('start-screen');
+const osOverlay=document.getElementById('os-overlay');
+const osOverlayCanvas=document.getElementById('os-canvas');
+const hintEl=document.getElementById('hint');
+
+// Click on start screen also enters the desk
+startScreen.addEventListener('click',()=>{
+  if(currentState===STATE.START)transitionTo(STATE.DESK);
+});
+// Auto-focus so keyboard works without clicking first
+startScreen.focus();
+// Also try focusing on next user interaction
+document.addEventListener('click',()=>startScreen.focus(),{once:true});
+
+// ==================== STATE ====================
+let currentState=STATE.START;
+let cameraTargetPos=new THREE.Vector3(0,0.75,2.6);
+let cameraTargetLook=new THREE.Vector3(0,0.4,-0.7);
+let zoomTransition=0;
+let keyEntries=[]; // {mesh,restY,targetY,code,char}
+
+// ==================== THREE.JS SETUP ====================
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setSize(window.innerWidth,window.innerHeight);
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.1;
+document.body.appendChild(renderer.domElement);
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color('#1a1a1f');
+scene.fog=new THREE.Fog('#1a1a1f',5,25);
+
+const camera=new THREE.PerspectiveCamera(48,window.innerWidth/window.innerHeight,0.1,30);
+camera.position.set(0,0.75,2.6);
+camera.lookAt(0,0.4,-0.7);
+
+// Lighting
+const ambient=new THREE.AmbientLight('#d0d0e0',0.65);
+scene.add(ambient);
+
+const sun=new THREE.DirectionalLight('#ffffff',1.6);
+sun.position.set(4,8,3);
+sun.castShadow=true;
+sun.shadow.mapSize.width=2048;
+sun.shadow.mapSize.height=2048;
+sun.shadow.camera.near=0.5;
+sun.shadow.camera.far=30;
+sun.shadow.camera.left=-5;
+sun.shadow.camera.right=5;
+sun.shadow.camera.top=5;
+sun.shadow.camera.bottom=-2;
+sun.shadow.bias=-0.0002;
+scene.add(sun);
+
+const fill=new THREE.DirectionalLight('#c8d0e0',0.5);
+fill.position.set(-2,2,-2);
+scene.add(fill);
+
+const rim=new THREE.DirectionalLight('#e8e8f0',0.35);
+rim.position.set(0,1,-4);
+scene.add(rim);
+
+// ==================== MATERIALS ====================
+const matDesk=new THREE.MeshStandardMaterial({color:'#3a3530',roughness:0.55,metalness:0.05});
+const matPlastic=new THREE.MeshStandardMaterial({color:'#3d3d42',roughness:0.6,metalness:0.1});
+const matBezel=new THREE.MeshStandardMaterial({color:'#1a1a1e',roughness:0.4,metalness:0.2});
+const matStand=new THREE.MeshStandardMaterial({color:'#8a8a8a',roughness:0.3,metalness:0.7});
+const matKeyTop=new THREE.MeshStandardMaterial({color:'#c8c8cd',roughness:0.5,metalness:0.05});
+const matKeySide=new THREE.MeshStandardMaterial({color:'#55555a',roughness:0.55,metalness:0.08});
+const matKeyPressedTop=new THREE.MeshStandardMaterial({color:'#a0a0a6',roughness:0.5,metalness:0.05});
+const matMouse=new THREE.MeshStandardMaterial({color:'#2e2e33',roughness:0.45,metalness:0.12});
+const matMouseBtn=new THREE.MeshStandardMaterial({color:'#3a3a40',roughness:0.5,metalness:0.1});
+const matTower=new THREE.MeshStandardMaterial({color:'#2a2a30',roughness:0.5,metalness:0.15});
+const matTowerFront=new THREE.MeshStandardMaterial({color:'#222228',roughness:0.45,metalness:0.2});
+
+// ==================== SCENE OBJECTS ====================
+const deskGroup=new THREE.Group();
+const monitorGroup=new THREE.Group();
+const keyboardGroup=new THREE.Group();
+const mouseGroup=new THREE.Group();
+const towerGroup=new THREE.Group();
+const allDeviceGroups=[keyboardGroup,mouseGroup,towerGroup];
+scene.add(deskGroup,monitorGroup,keyboardGroup,mouseGroup,towerGroup);
+
+// --- Desk ---
+const deskGeom=new THREE.BoxGeometry(3.8,0.06,2.4);
+const desk=new THREE.Mesh(deskGeom,matDesk);
+desk.position.set(0,-0.03,0);
+desk.castShadow=true;
+desk.receiveShadow=true;
+deskGroup.add(desk);
+
+// Desk legs
+const legGeom=new THREE.BoxGeometry(0.1,0.72,0.1);
+for(let[dx,dz] of[[-1.6,-0.95],[1.6,-0.95],[-1.6,0.95],[1.6,0.95]]){
+  const leg=new THREE.Mesh(legGeom,matStand);
+  leg.position.set(dx,-0.39,dz);
+  leg.castShadow=true;
+  deskGroup.add(leg);
+}
+
+// --- Monitor ---
+const screenGeom=new THREE.BoxGeometry(1.22,0.76,0.015);
+const bezelGeom=new THREE.BoxGeometry(1.3,0.84,0.03);
+const screenMesh=new THREE.Mesh(screenGeom,new THREE.MeshStandardMaterial({color:'#000',roughness:0.1,metalness:0.1}));
+screenMesh.position.set(0,0.55,-0.7);
+screenMesh.name='screen';
+monitorGroup.add(screenMesh);
+
+const bezelMesh=new THREE.Mesh(bezelGeom,matBezel);
+bezelMesh.position.set(0,0.55,-0.71);
+bezelMesh.castShadow=true;
+monitorGroup.add(bezelMesh);
+
+// Stand
+const poleGeom=new THREE.CylinderGeometry(0.04,0.05,0.22,16);
+const pole=new THREE.Mesh(poleGeom,matStand);
+pole.position.set(0,0.15,-0.6);
+pole.castShadow=true;
+monitorGroup.add(pole);
+
+const baseGeom=new THREE.BoxGeometry(0.42,0.035,0.32);
+const baseStand=new THREE.Mesh(baseGeom,matStand);
+baseStand.position.set(0,0.02,-0.6);
+baseStand.castShadow=true;
+baseStand.receiveShadow=true;
+monitorGroup.add(baseStand);
+
+// --- PC Tower ---
+const towerBodyGeom=new THREE.BoxGeometry(0.2,0.48,0.44);
+const towerBody=new THREE.Mesh(towerBodyGeom,matTower);
+towerBody.position.set(1.45,0.26,-0.5);
+towerBody.castShadow=true;
+towerBody.receiveShadow=true;
+towerGroup.add(towerBody);
+
+// Front panel
+const frontPanelGeom=new THREE.BoxGeometry(0.18,0.44,0.01);
+const frontPanel=new THREE.Mesh(frontPanelGeom,matTowerFront);
+frontPanel.position.set(1.45,0.26,-0.28);
+towerGroup.add(frontPanel);
+
+// Vents
+for(let i=0;i<5;i++){
+  const ventGeom=new THREE.BoxGeometry(0.14,0.008,0.005);
+  const vent=new THREE.Mesh(ventGeom,matBezel);
+  vent.position.set(1.45,0.38-i*0.045,-0.275);
+  towerGroup.add(vent);
+}
+// Power button
+const powerGeom=new THREE.CylinderGeometry(0.012,0.012,0.01,8);
+const powerBtn=new THREE.Mesh(powerGeom,new THREE.MeshStandardMaterial({color:'#444',roughness:0.3,metalness:0.3,emissive:'#111',emissiveIntensity:0.5}));
+powerBtn.rotation.x=Math.PI/2;
+powerBtn.position.set(1.54,0.47,-0.28);
+towerGroup.add(powerBtn);
+
+// --- Mouse ---
+const mouseBodyGeom=new THREE.BoxGeometry(0.13,0.028,0.2);
+const mouseBody=new THREE.Mesh(mouseBodyGeom,matMouse);
+mouseBody.position.y=0.018;
+mouseBody.castShadow=true;
+mouseGroup.add(mouseBody);
+
+// Mouse top shell (slightly rounded look with a thin box)
+const mouseTopGeom=new THREE.BoxGeometry(0.12,0.01,0.19);
+const mouseTop=new THREE.Mesh(mouseTopGeom,matMouseBtn);
+mouseTop.position.y=0.035;
+mouseGroup.add(mouseTop);
+
+// Left button
+const lBtnGeom=new THREE.BoxGeometry(0.052,0.006,0.08);
+const lBtn=new THREE.Mesh(lBtnGeom,matMouseBtn);
+lBtn.position.set(-0.03,0.04,-0.02);
+lBtn.name='mouse-left';
+mouseGroup.add(lBtn);
+
+// Right button
+const rBtnGeom=new THREE.BoxGeometry(0.052,0.006,0.08);
+const rBtn=new THREE.Mesh(rBtnGeom,matMouseBtn);
+rBtn.position.set(0.03,0.04,-0.02);
+rBtn.name='mouse-right';
+mouseGroup.add(rBtn);
+
+// Scroll wheel
+const wheelGeom=new THREE.CylinderGeometry(0.014,0.014,0.025,12);
+const wheel=new THREE.Mesh(wheelGeom,new THREE.MeshStandardMaterial({color:'#555',roughness:0.3,metalness:0.3}));
+wheel.rotation.x=Math.PI/2;
+wheel.position.set(0,0.043,-0.02);
+mouseGroup.add(wheel);
+
+mouseGroup.position.set(1.0,0.03,0.55);
+mouseGroup.rotation.x=-0.05;
+
+// ==================== KEYBOARD ====================
+const keyMap=new Map(); // code -> {mesh,restY,targetY,char,rowZ}
+
+const keyboardLayout=[
+  {z:-0.36,keys:[
+    {l:'`',c:'Backquote',w:1},{l:'1',c:'Digit1',w:1},{l:'2',c:'Digit2',w:1},{l:'3',c:'Digit3',w:1},{l:'4',c:'Digit4',w:1},{l:'5',c:'Digit5',w:1},{l:'6',c:'Digit6',w:1},{l:'7',c:'Digit7',w:1},{l:'8',c:'Digit8',w:1},{l:'9',c:'Digit9',w:1},{l:'0',c:'Digit0',w:1},{l:'-',c:'Minus',w:1},{l:'=',c:'Equal',w:1},{l:'⌫',c:'Backspace',w:2}
+  ]},
+  {z:-0.18,keys:[
+    {l:'Tab',c:'Tab',w:1.5},{l:'Q',c:'KeyQ',w:1},{l:'W',c:'KeyW',w:1},{l:'E',c:'KeyE',w:1},{l:'R',c:'KeyR',w:1},{l:'T',c:'KeyT',w:1},{l:'Y',c:'KeyY',w:1},{l:'U',c:'KeyU',w:1},{l:'I',c:'KeyI',w:1},{l:'O',c:'KeyO',w:1},{l:'P',c:'KeyP',w:1},{l:'[',c:'BracketLeft',w:1},{l:']',c:'BracketRight',w:1},{l:'\\',c:'Backslash',w:1.5}
+  ]},
+  {z:0,keys:[
+    {l:'Caps',c:'CapsLock',w:1.75},{l:'A',c:'KeyA',w:1},{l:'S',c:'KeyS',w:1},{l:'D',c:'KeyD',w:1},{l:'F',c:'KeyF',w:1},{l:'G',c:'KeyG',w:1},{l:'H',c:'KeyH',w:1},{l:'J',c:'KeyJ',w:1},{l:'K',c:'KeyK',w:1},{l:'L',c:'KeyL',w:1},{l:';',c:'Semicolon',w:1},{l:"'",c:'Quote',w:1},{l:'Enter',c:'Enter',w:2.25}
+  ]},
+  {z:0.18,keys:[
+    {l:'Shift',c:'ShiftLeft',w:2.25},{l:'Z',c:'KeyZ',w:1},{l:'X',c:'KeyX',w:1},{l:'C',c:'KeyC',w:1},{l:'V',c:'KeyV',w:1},{l:'B',c:'KeyB',w:1},{l:'N',c:'KeyN',w:1},{l:'M',c:'KeyM',w:1},{l:',',c:'Comma',w:1},{l:'.',c:'Period',w:1},{l:'/',c:'Slash',w:1},{l:'Shift',c:'ShiftRight',w:2.75}
+  ]},
+  {z:0.36,keys:[
+    {l:'Ctrl',c:'ControlLeft',w:1.25},{l:'Win',c:'MetaLeft',w:1.25},{l:'Alt',c:'AltLeft',w:1.25},{l:'',c:'Space',w:6.25},{l:'Alt',c:'AltRight',w:1.25},{l:'Fn',c:'Fn',w:1.25},{l:'Ctrl',c:'ControlRight',w:1.25}
+  ]}
+];
+
+// Compute total width of each row to center them
+const rowWidths=keyboardLayout.map(r=>r.keys.reduce((s,k)=>s+k.w,0)*KEY_UNIT);
+const maxRowWidth=Math.max(...rowWidths);
+
+// Keyboard base
+const kbBaseGeom=new THREE.BoxGeometry(maxRowWidth+0.25,0.025,ROW_SPACING*5+0.2);
+const kbBase=new THREE.Mesh(kbBaseGeom,matPlastic);
+kbBase.position.y=-0.018;
+kbBase.castShadow=true;
+kbBase.receiveShadow=true;
+keyboardGroup.add(kbBase);
+
+// Create key texture helper
+function createKeyTexture(label,isPressed){
+  const c=document.createElement('canvas');
+  c.width=64;c.height=64;
+  const ctx=c.getContext('2d');
+  ctx.fillStyle=isPressed?'#9999a0':'#c8c8cd';
+  ctx.fillRect(0,0,64,64);
+  ctx.fillStyle='#2a2a2a';
+  ctx.font='bold 22px "Segoe UI",system-ui,sans-serif';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.fillText(label,32,32);
+  const tex=new THREE.CanvasTexture(c);
+  tex.minFilter=THREE.LinearFilter;
+  tex.magFilter=THREE.LinearFilter;
+  tex.colorSpace=THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Pre-create key textures
+const keyTextures={};
+const keyPressedTextures={};
+function getKeyTextures(label){
+  if(!keyTextures[label]){
+    keyTextures[label]=createKeyTexture(label,false);
+    keyPressedTextures[label]=createKeyTexture(label,true);
+  }
+  return {normal:keyTextures[label],pressed:keyPressedTextures[label]};
+}
+
+// Build keys
+keyboardLayout.forEach((row,rowIdx)=>{
+  const rowWidth=rowWidths[rowIdx];
+  let xStart=-rowWidth/2;
+  row.keys.forEach(kDef=>{
+    const kw=kDef.w*KEY_UNIT;
+    const kd=KEY_UNIT;
+    const kh=KEY_HEIGHT;
+    const cx=xStart+kw/2;
+    const cz=row.z;
+    xStart+=kw;
+
+    const geom=new THREE.BoxGeometry(kw-KEY_GAP,kh,kd-KEY_GAP);
+    const texs=getKeyTextures(kDef.l);
+    const matTop=new THREE.MeshStandardMaterial({map:texs.normal,roughness:0.5,metalness:0.05});
+    const matTopP=new THREE.MeshStandardMaterial({map:texs.pressed,roughness:0.5,metalness:0.05});
+    const materials=[matKeySide,matKeySide,matTop,matKeySide,matKeySide,matKeySide];
+    const materialsPressed=[matKeySide,matKeySide,matTopP,matKeySide,matKeySide,matKeySide];
+
+    const mesh=new THREE.Mesh(geom,materials);
+    mesh.position.set(cx,kh/2,cz);
+    mesh.castShadow=true;
+    mesh.receiveShadow=true;
+    mesh.name=kDef.c;
+    keyboardGroup.add(mesh);
+
+    const restY=kh/2;
+    const entry={
+      mesh,restY,targetY:restY,code:kDef.c,char:kDef.l,
+      rowZ:cz,materials,materialsPressed,isPressed:false,pressTimer:null
+    };
+    keyEntries.push(entry);
+    keyMap.set(kDef.c,entry);
+  });
+});
+
+keyboardGroup.position.set(0,0.025,0.52);
+
+// ==================== RAYCASTER ====================
+const raycaster=new THREE.Raycaster();
+const mouse=new THREE.Vector2();
+const deskPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+
+let draggingMouse=false;
+let dragOffset=new THREE.Vector3();
+let mousePadBounds={xMin:0.45,xMax:1.55,zMin:0.25,zMax:0.85};
+
+// ==================== OS CANVAS ====================
+const osCanvas=document.createElement('canvas');
+osCanvas.width=OS_W;
+osCanvas.height=OS_H;
+const osCtx=osCanvas.getContext('2d');
+
+// Canvas texture for monitor screen
+const screenTexture=new THREE.CanvasTexture(osCanvas);
+screenTexture.minFilter=THREE.LinearFilter;
+screenTexture.magFilter=THREE.LinearFilter;
+screenTexture.colorSpace=THREE.SRGBColorSpace;
+screenMesh.material.map=screenTexture;
+screenMesh.material.color.set('#ffffff');
+screenMesh.material.needsUpdate=true;
+
+// OS overlay canvas (for zoomed mode)
+osOverlayCanvas.width=OS_W;
+osOverlayCanvas.height=OS_H;
+const osOverlayCtx=osOverlayCanvas.getContext('2d');
+
+// ==================== VIRTUAL OS ====================
+let osCursor={x:OS_W/2,y:OS_H/2};
+let isOsMouseDown=false;
+let osDirty=true;
+
+// Windows
+let windows=[];
+let windowIdCounter=0;
+let activeWindowId=null;
+let draggingWindow=null;
+let dragWinOffset={x:0,y:0};
+
+// App definitions
+const appDefs={
+  finder:{name:'Finder',icon:'📁',color:'#4a90d9',w:680,h:440},
+  calculator:{name:'Calculator',icon:'🔢',color:'#555',w:320,h:400},
+  notes:{name:'Notes',icon:'📝',color:'#e8c84a',w:500,h:400},
+  settings:{name:'Settings',icon:'⚙️',color:'#888',w:500,h:380},
+  terminal:{name:'Terminal',icon:'>_',color:'#1a1a1a',w:600,h:380},
+  tetris:{name:'Tetris',icon:'🧱',color:'#222',w:340,h:460,isGame:true},
+  snake:{name:'Snake',icon:'🐍',color:'#1a2a1a',w:420,h:460,isGame:true}
+};
+
+// Open some default windows
+function openWindow(appId){
+  // Check if already open
+  const existing=windows.find(w=>w.appId===appId&&!w.minimized);
+  if(existing){focusWindow(existing.id);return existing;}
+  const def=appDefs[appId];
+  const win={
+    id:++windowIdCounter,
+    appId,
+    title:def.name,
+    x:60+Math.random()*200,
+    y:50+Math.random()*120,
+    width:def.w,
+    height:def.h,
+    zIndex:windows.length,
+    minimized:false,
+    color:def.color,
+    isGame:def.isGame||false
+  };
+  // Init game state
+  if(appId==='tetris')initTetris(win);
+  if(appId==='snake')initSnake(win);
+  windows.push(win);
+  focusWindow(win.id);
+  osDirty=true;
+  return win;
+}
+
+function focusWindow(id){
+  activeWindowId=id;
+  const maxZ=Math.max(...windows.map(w=>w.zIndex),0);
+  const win=windows.find(w=>w.id===id);
+  if(win)win.zIndex=maxZ+1;
+  osDirty=true;
+}
+
+function closeWindow(id){
+  const idx=windows.findIndex(w=>w.id===id);
+  if(idx===-1)return;
+  const win=windows[idx];
+  if(win.appId==='tetris')stopTetris(win);
+  if(win.appId==='snake')stopSnake(win);
+  windows.splice(idx,1);
+  if(activeWindowId===id)activeWindowId=windows.length>0?windows[windows.length-1].id:null;
+  osDirty=true;
+}
+
+function minimizeWindow(id){
+  const win=windows.find(w=>w.id===id);
+  if(!win)return;
+  win.minimized=true;
+  if(activeWindowId===id)activeWindowId=null;
+  osDirty=true;
+}
+
+function unminimizeWindow(id){
+  const win=windows.find(w=>w.id===id);
+  if(!win)return;
+  win.minimized=false;
+  focusWindow(id);
+  osDirty=true;
+}
+
+// ==================== TETRIS ====================
+const TETRIS_COLS=10,TETRIS_ROWS=20;
+const TETRIS_COLORS=['#00f0f0','#0000f0','#f0a000','#f0f000','#00f000','#a000f0','#f00000'];
+
+const TETRIS_PIECES=[
+  {name:'I',states:[[[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],[[0,0,1,0],[0,0,1,0],[0,0,1,0],[0,0,1,0]],[[0,0,0,0],[0,0,0,0],[1,1,1,1],[0,0,0,0]],[[0,1,0,0],[0,1,0,0],[0,1,0,0],[0,1,0,0]]],color:0},
+  {name:'O',states:[[[1,1],[1,1]],[[1,1],[1,1]],[[1,1],[1,1]],[[1,1],[1,1]]],color:3},
+  {name:'T',states:[[[0,1,0],[1,1,1],[0,0,0]],[[0,1,0],[0,1,1],[0,1,0]],[[0,0,0],[1,1,1],[0,1,0]],[[0,1,0],[1,1,0],[0,1,0]]],color:4},
+  {name:'S',states:[[[0,1,1],[1,1,0],[0,0,0]],[[0,1,0],[0,1,1],[0,0,1]],[[0,0,0],[0,1,1],[1,1,0]],[[1,0,0],[1,1,0],[0,1,0]]],color:2},
+  {name:'Z',states:[[[1,1,0],[0,1,1],[0,0,0]],[[0,0,1],[0,1,1],[0,1,0]],[[0,0,0],[1,1,0],[0,1,1]],[[0,1,0],[1,1,0],[1,0,0]]],color:5},
+  {name:'J',states:[[[1,0,0],[1,1,1],[0,0,0]],[[0,1,1],[0,1,0],[0,1,0]],[[0,0,0],[1,1,1],[0,0,1]],[[0,1,0],[0,1,0],[1,1,0]]],color:1},
+  {name:'L',states:[[[0,0,1],[1,1,1],[0,0,0]],[[0,1,0],[0,1,0],[0,1,1]],[[0,0,0],[1,1,1],[1,0,0]],[[1,1,0],[0,1,0],[0,1,0]]],color:6}
+];
+
+function initTetris(win){
+  win.tetris={
+    board:Array.from({length:TETRIS_ROWS},()=>Array(TETRIS_COLS).fill(-1)),
+    piece:null,pieceX:0,pieceY:0,pieceRot:0,pieceIdx:-1,
+    nextPiece:null,nextIdx:-1,
+    score:0,lines:0,level:1,gameOver:false,paused:false,
+    dropInterval:800,lastDrop:0,timer:null
+  };
+  spawnTetrisPiece(win);
+  win.tetris.timer=setInterval(()=>tetrisTick(win),50);
+}
+
+function stopTetris(win){
+  if(win.tetris&&win.tetris.timer)clearInterval(win.tetris.timer);
+}
+
+function spawnTetrisPiece(win){
+  const t=win.tetris;
+  if(t.nextPiece){
+    t.piece=t.nextPiece;
+    t.pieceIdx=t.nextIdx;
+    t.pieceRot=0;
+    t.nextIdx=Math.floor(Math.random()*TETRIS_PIECES.length);
+    t.nextPiece=TETRIS_PIECES[t.nextIdx].states[0];
+  }else{
+    t.pieceIdx=Math.floor(Math.random()*TETRIS_PIECES.length);
+    t.piece=TETRIS_PIECES[t.pieceIdx].states[0];
+    t.pieceRot=0;
+    t.nextIdx=Math.floor(Math.random()*TETRIS_PIECES.length);
+    t.nextPiece=TETRIS_PIECES[t.nextIdx].states[0];
+  }
+  t.pieceX=Math.floor((TETRIS_COLS-t.piece[0].length)/2);
+  t.pieceY=0;
+  if(!tetrisValid(win,t.piece,t.pieceX,t.pieceY)){
+    t.gameOver=true;
+  }
+}
+
+function tetrisValid(win,piece,px,py){
+  for(let r=0;r<piece.length;r++){
+    for(let c=0;c<piece[r].length;c++){
+      if(!piece[r][c])continue;
+      const nx=px+c,ny=py+r;
+      if(nx<0||nx>=TETRIS_COLS||ny>=TETRIS_ROWS)return false;
+      if(ny<0)continue;
+      if(win.tetris.board[ny][nx]!==-1)return false;
+    }
+  }
+  return true;
+}
+
+function tetrisPlace(win){
+  const t=win.tetris;
+  for(let r=0;r<t.piece.length;r++){
+    for(let c=0;c<t.piece[r].length;c++){
+      if(!t.piece[r][c])continue;
+      const ny=t.pieceY+r,nx=t.pieceX+c;
+      if(ny<0){t.gameOver=true;return;}
+      t.board[ny][nx]=TETRIS_PIECES[t.pieceIdx].color;
+    }
+  }
+  // Clear lines
+  let cleared=0;
+  for(let r=TETRIS_ROWS-1;r>=0;r--){
+    if(t.board[r].every(cell=>cell!==-1)){
+      t.board.splice(r,1);
+      t.board.unshift(Array(TETRIS_COLS).fill(-1));
+      cleared++;
+      r++;
+    }
+  }
+  if(cleared>0){
+    t.lines+=cleared;
+    t.score+=[0,100,300,500,800][cleared]*t.level;
+    t.level=Math.floor(t.lines/10)+1;
+    t.dropInterval=Math.max(80,800-(t.level-1)*70);
+  }
+  spawnTetrisPiece(win);
+  osDirty=true;
+}
+
+function tetrisTick(win){
+  const t=win.tetris;
+  if(!t||t.gameOver||t.paused)return;
+  const now=Date.now();
+  if(now-t.lastDrop>t.dropInterval){
+    t.lastDrop=now;
+    if(tetrisValid(win,t.piece,t.pieceX,t.pieceY+1)){
+      t.pieceY++;
+    }else{
+      tetrisPlace(win);
+    }
+    osDirty=true;
+  }
+}
+
+function tetrisMove(win,dx,dy){
+  const t=win.tetris;
+  if(!t||t.gameOver)return;
+  if(tetrisValid(win,t.piece,t.pieceX+dx,t.pieceY+dy)){
+    t.pieceX+=dx;t.pieceY+=dy;
+    osDirty=true;
+    return true;
+  }
+  return false;
+}
+
+function tetrisRotate(win){
+  const t=win.tetris;
+  if(!t||t.gameOver)return;
+  const newRot=(t.pieceRot+1)%4;
+  const newPiece=TETRIS_PIECES[t.pieceIdx].states[newRot];
+  // Try basic, then wall kicks
+  const kicks=[0,-1,1,-2,2];
+  for(const dx of kicks){
+    if(tetrisValid(win,newPiece,t.pieceX+dx,t.pieceY)){
+      t.piece=newPiece;
+      t.pieceRot=newRot;
+      t.pieceX+=dx;
+      osDirty=true;
+      return;
+    }
+  }
+}
+
+function tetrisHardDrop(win){
+  const t=win.tetris;
+  if(!t||t.gameOver)return;
+  while(tetrisValid(win,t.piece,t.pieceX,t.pieceY+1))t.pieceY++;
+  t.score+=2;
+  tetrisPlace(win);
+  osDirty=true;
+}
+
+// ==================== SNAKE ====================
+const SNAKE_COLS=20,SNAKE_ROWS=20;
+
+function initSnake(win){
+  win.snake={
+    snake:[{x:10,y:10},{x:9,y:10},{x:8,y:10}],
+    dir:{x:1,y:0},
+    food:{x:15,y:10},
+    score:0,
+    gameOver:false,
+    paused:false,
+    speed:140,
+    lastMove:0,
+    timer:null
+  };
+  win.snake.timer=setInterval(()=>snakeTick(win),50);
+}
+
+function stopSnake(win){
+  if(win.snake&&win.snake.timer)clearInterval(win.snake.timer);
+}
+
+function snakeTick(win){
+  const s=win.snake;
+  if(!s||s.gameOver||s.paused)return;
+  const now=Date.now();
+  if(now-s.lastMove<s.speed)return;
+  s.lastMove=now;
+  const head=s.snake[0];
+  const nx=head.x+s.dir.x,ny=head.y+s.dir.y;
+  // Wall collision
+  if(nx<0||nx>=SNAKE_COLS||ny<0||ny>=SNAKE_ROWS){s.gameOver=true;osDirty=true;return;}
+  // Self collision
+  if(s.snake.some(seg=>seg.x===nx&&seg.y===ny)){s.gameOver=true;osDirty=true;return;}
+  // Move
+  s.snake.unshift({x:nx,y:ny});
+  if(nx===s.food.x&&ny===s.food.y){
+    s.score+=10;
+    s.speed=Math.max(50,s.speed-3);
+    // Spawn new food
+    do{
+      s.food={x:Math.floor(Math.random()*SNAKE_COLS),y:Math.floor(Math.random()*SNAKE_ROWS)};
+    }while(s.snake.some(seg=>seg.x===s.food.x&&seg.y===s.food.y));
+  }else{
+    s.snake.pop();
+  }
+  osDirty=true;
+}
+
+function snakeSetDir(win,dx,dy){
+  const s=win.snake;
+  if(!s||s.gameOver)return;
+  // Prevent 180° turn
+  if(s.snake.length>1&&s.dir.x===-dx&&s.dir.y===-dy)return;
+  s.dir={x:dx,y:dy};
+}
+
+// ==================== OS RENDER ====================
+function renderOS(ctx){
+  const W=OS_W,H=OS_H;
+  // Wallpaper
+  const grad=ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,'#1a1a3a');
+  grad.addColorStop(0.5,'#2a2050');
+  grad.addColorStop(1,'#1a2a3a');
+  ctx.fillStyle=grad;
+  ctx.fillRect(0,0,W,H);
+
+  // Menu bar
+  ctx.fillStyle='rgba(30,30,35,0.9)';
+  ctx.fillRect(0,0,W,26);
+  ctx.fillStyle='#ccc';
+  ctx.font='13px "Segoe UI",system-ui,sans-serif';
+  ctx.fillText('🍎  Finder  File  Edit  View  Go  Window  Help',12,18);
+  // Clock
+  const now=new Date();
+  const timeStr=now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  ctx.fillText(timeStr,W-60,18);
+
+  // Render windows (sorted by zIndex)
+  const sorted=[...windows].sort((a,b)=>a.zIndex-b.zIndex);
+  for(const win of sorted){
+    if(win.minimized)continue;
+    renderWindow(ctx,win);
+  }
+
+  // Dock
+  const dockH=58;
+  const iconSize=44;
+  const iconGap=8;
+  const totalIconsW=appDefsList.length*iconSize+(appDefsList.length-1)*iconGap;
+  const dockPadX=16;
+  const dockW=totalIconsW+dockPadX*2;
+  const dockX=(W-dockW)/2;
+  const dockY=H-dockH+4;
+  ctx.fillStyle='rgba(40,40,50,0.75)';
+  ctx.beginPath();
+  ctx.roundRect(dockX,dockY,dockW,dockH-4,12);
+  ctx.fill();
+
+  // Dock icons
+  let iconX=dockX+dockPadX;
+  for(const appId of appDefsList){
+    const def=appDefs[appId];
+    const isOpen=windows.some(w=>w.appId===appId&&!w.minimized);
+    // Icon bg
+    ctx.fillStyle=def.color;
+    ctx.beginPath();
+    ctx.roundRect(iconX,dockY+4,iconSize,iconSize,10);
+    ctx.fill();
+    // Icon label
+    ctx.fillStyle='#fff';
+    ctx.font='22px "Segoe UI",system-ui,sans-serif';
+    ctx.textAlign='center';
+    ctx.fillText(def.icon,iconX+iconSize/2,dockY+4+iconSize/2+7);
+    // Open indicator
+    if(isOpen){
+      ctx.fillStyle='#fff';
+      ctx.beginPath();
+      ctx.arc(iconX+iconSize/2,dockY+2,3,0,Math.PI*2);
+      ctx.fill();
+    }
+    iconX+=iconSize+iconGap;
+  }
+  ctx.textAlign='start';
+
+  // Cursor
+  ctx.fillStyle='#fff';
+  ctx.strokeStyle='#000';
+  ctx.lineWidth=1.5;
+  ctx.beginPath();
+  ctx.moveTo(osCursor.x,osCursor.y);
+  ctx.lineTo(osCursor.x+12,osCursor.y+10);
+  ctx.lineTo(osCursor.x+8,osCursor.y+10);
+  ctx.lineTo(osCursor.x+10,osCursor.y+16);
+  ctx.lineTo(osCursor.x+6,osCursor.y+17);
+  ctx.lineTo(osCursor.x+4,osCursor.y+11);
+  ctx.lineTo(osCursor.x,osCursor.y+13);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
+const appDefsList=['finder','calculator','notes','settings','terminal','tetris','snake'];
+
+function renderWindow(ctx,win){
+  const{x,y,width:w,height:h}=win;
+  const isActive=win.id===activeWindowId;
+
+  // Shadow
+  ctx.shadowColor='rgba(0,0,0,0.5)';
+  ctx.shadowBlur=20;
+  ctx.shadowOffsetX=0;
+  ctx.shadowOffsetY=8;
+  ctx.fillStyle='#fff';
+  ctx.beginPath();
+  ctx.roundRect(x,y,w,h,10);
+  ctx.fill();
+  ctx.shadowColor='transparent';
+  ctx.shadowBlur=0;
+  ctx.shadowOffsetY=0;
+
+  // Window body
+  ctx.fillStyle=isActive?'#e8e8ec':'#e0e0e4';
+  ctx.beginPath();
+  ctx.roundRect(x,y,w,h,10);
+  ctx.fill();
+
+  // Title bar
+  ctx.fillStyle=isActive?'#d0d0d8':'#c8c8d0';
+  ctx.beginPath();
+  ctx.moveTo(x+10,y);
+  ctx.lineTo(x+w-10,y);
+  ctx.quadraticCurveTo(x+w,y,x+w,y+10);
+  ctx.lineTo(x+w,y+32);
+  ctx.lineTo(x,y+32);
+  ctx.lineTo(x,y+10);
+  ctx.quadraticCurveTo(x,y,x+10,y);
+  ctx.fill();
+
+  // Traffic lights
+  const tlX=x+12,tlY=y+10;
+  ['#ff5f57','#ffbd2e','#28ca41'].forEach((col,i)=>{
+    ctx.fillStyle=col;
+    ctx.beginPath();
+    ctx.arc(tlX+i*20,tlY,6.5,0,Math.PI*2);
+    ctx.fill();
+  });
+
+  // Title
+  ctx.fillStyle='#333';
+  ctx.font='bold 12px "Segoe UI",system-ui,sans-serif';
+  ctx.textAlign='center';
+  ctx.fillText(win.title,x+w/2,y+22);
+  ctx.textAlign='start';
+
+  // Content area
+  const cx=x+8,cy=y+36,cw=w-16,ch=h-44;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(cx,cy,cw,ch);
+  ctx.clip();
+  renderAppContent(ctx,win,cx,cy,cw,ch);
+  ctx.restore();
+}
+
+function renderAppContent(ctx,win,cx,cy,cw,ch){
+  switch(win.appId){
+    case 'finder':renderFinder(ctx,cx,cy,cw,ch);break;
+    case 'calculator':renderCalculator(ctx,win,cx,cy,cw,ch);break;
+    case 'notes':renderNotes(ctx,win,cx,cy,cw,ch);break;
+    case 'settings':renderSettings(ctx,win,cx,cy,cw,ch);break;
+    case 'terminal':renderTerminal(ctx,win,cx,cy,cw,ch);break;
+    case 'tetris':renderTetris(ctx,win,cx,cy,cw,ch);break;
+    case 'snake':renderSnake(ctx,win,cx,cy,cw,ch);break;
+  }
+}
+
+// --- Finder ---
+function renderFinder(ctx,cx,cy,cw,ch){
+  ctx.fillStyle='#f5f5f7';
+  ctx.fillRect(cx,cy,cw,ch);
+  // Sidebar
+  ctx.fillStyle='#e8e8ec';
+  ctx.fillRect(cx,cy,180,ch);
+  ctx.fillStyle='#555';
+  ctx.font='12px "Segoe UI",system-ui,sans-serif';
+  const items=['📂  Documents','📂  Downloads','📂  Pictures','📂  Music','📂  Movies','📂  Desktop','📂  Applications'];
+  items.forEach((item,i)=>ctx.fillText(item,cx+16,cy+30+i*24));
+  // Files
+  const files=[
+    ['📄  Report.pdf','2.4 MB'],
+    ['📄  Notes.txt','12 KB'],
+    ['🖼️  Photo.jpg','1.2 MB'],
+    ['📄  Resume.docx','45 KB'],
+    ['🎵  Song.mp3','3.8 MB'],
+    ['📊  Data.xlsx','890 KB'],
+    ['📄  README.md','3 KB'],
+    ['🎬  Video.mp4','156 MB']
+  ];
+  ctx.fillStyle='#333';
+  ctx.font='13px "Segoe UI",system-ui,sans-serif';
+  files.forEach((f,i)=>{
+    const col=i%3;
+    const row=Math.floor(i/3);
+    ctx.fillText(f[0],cx+200+col*170,cy+40+row*70);
+    ctx.fillStyle='#888';
+    ctx.font='11px "Segoe UI",system-ui,sans-serif';
+    ctx.fillText(f[1],cx+200+col*170,cy+60+row*70);
+    ctx.fillStyle='#333';
+    ctx.font='13px "Segoe UI",system-ui,sans-serif';
+  });
+}
+
+// --- Calculator ---
+function renderCalculator(ctx,win,cx,cy,cw,ch){
+  if(!win.calc)win.calc={display:'0',prev:'',op:'',reset:false};
+  const calc=win.calc;
+  ctx.fillStyle='#2a2a2e';
+  ctx.fillRect(cx,cy,cw,ch);
+  // Display
+  ctx.fillStyle='#1a1a1e';
+  ctx.fillRect(cx+8,cy+8,cw-16,50);
+  ctx.fillStyle='#fff';
+  ctx.font='28px "Segoe UI",system-ui,sans-serif';
+  ctx.textAlign='right';
+  ctx.fillText(calc.display,cx+cw-20,cy+44);
+  ctx.textAlign='start';
+  // Buttons
+  const btns=[
+    ['C','±','%','÷'],
+    ['7','8','9','×'],
+    ['4','5','6','−'],
+    ['1','2','3','+'],
+    ['0','','.','=']
+  ];
+  const bw=(cw-24)/4,bh=(ch-70)/5;
+  btns.forEach((row,r)=>{
+    row.forEach((btn,c)=>{
+      if(!btn)return;
+      const bx=cx+8+c*(bw+2),by=cy+66+r*(bh+2);
+      ctx.fillStyle=btn==='='?'#4a90d9':'#444';
+      ctx.beginPath();
+      ctx.roundRect(bx,by,bw,bh,6);
+      ctx.fill();
+      ctx.fillStyle='#fff';
+      ctx.font='16px "Segoe UI",system-ui,sans-serif';
+      ctx.textAlign='center';
+      ctx.fillText(btn,bx+bw/2,by+bh/2+6);
+      ctx.textAlign='start';
+    });
+  });
+  // Store button layout for click handling
+  if(!win._calcBtns)win._calcBtns=[];
+  win._calcBtns.length=0;
+  btns.forEach((row,r)=>{
+    row.forEach((btn,c)=>{
+      if(!btn)return;
+      const bw2=(cw-24)/4,bh2=(ch-70)/5;
+      win._calcBtns.push({
+        btn,x:cx+8+c*(bw2+2),y:cy+66+r*(bh2+2),w:bw2,h:bh2
+      });
+    });
+  });
+}
+
+function calcAction(win,btn){
+  const c=win.calc;
+  if(!c)return;
+  if(btn>='0'&&btn<='9'||btn==='.'){
+    if(c.reset){c.display='';c.reset=false;}
+    if(btn==='.'&&c.display.includes('.'))return;
+    c.display=c.display==='0'&&btn!=='.'?btn:c.display+btn;
+  }else if(btn==='C'){
+    c.display='0';c.prev='';c.op='';c.reset=false;
+  }else if(btn==='±'){
+    if(c.display!=='0')c.display=c.display.startsWith('-')?c.display.slice(1):'-'+c.display;
+  }else if(btn==='%'){
+    c.display=String(parseFloat(c.display)/100);
+  }else if(btn==='='||['+','−','×','÷'].includes(btn)){
+    if(c.op&&!c.reset){
+      const a=parseFloat(c.prev),b=parseFloat(c.display);
+      let r=0;
+      if(c.op==='+')r=a+b;
+      else if(c.op==='−')r=a-b;
+      else if(c.op==='×')r=a*b;
+      else if(c.op==='÷')r=b!==0?a/b:'Error';
+      c.display=String(Math.round(r*1e8)/1e8);
+      c.prev='';c.op='';
+    }
+    if(btn!=='='){
+      c.prev=c.display;
+      c.op=btn;
+      c.reset=true;
+    }
+  }
+  osDirty=true;
+}
+
+// --- Notes ---
+function renderNotes(ctx,win,cx,cy,cw,ch){
+  if(!win.notes)win.notes={text:'Start typing here...\n\nThis is a simple note-taking app.\n\nClick this window to focus it, then type with your keyboard.'};
+  ctx.fillStyle='#fffef5';
+  ctx.fillRect(cx,cy,cw,ch);
+  ctx.fillStyle='#333';
+  ctx.font='14px "Segoe UI",system-ui,sans-serif';
+  const lines=win.notes.text.split('\n');
+  lines.forEach((line,i)=>ctx.fillText(line,cx+12,cy+24+i*20));
+}
+
+// --- Settings ---
+function renderSettings(ctx,win,cx,cy,cw,ch){
+  if(!win.settings)win.settings={wifi:true,bluetooth:false,dark:false,sound:true};
+  ctx.fillStyle='#f0f0f4';
+  ctx.fillRect(cx,cy,cw,ch);
+  const toggles=[
+    {label:'Wi-Fi',key:'wifi',x:cx+20,y:cy+20},
+    {label:'Bluetooth',key:'bluetooth',x:cx+20,y:cy+60},
+    {label:'Dark Mode',key:'dark',x:cx+20,y:cy+100},
+    {label:'Sound',key:'sound',x:cx+20,y:cy+140}
+  ];
+  ctx.fillStyle='#333';
+  ctx.font='15px "Segoe UI",system-ui,sans-serif';
+  win._settingsToggles=[];
+  toggles.forEach(t=>{
+    ctx.fillText(t.label,t.x,t.y+16);
+    const on=win.settings[t.key];
+    const tx=t.x+cw-70,ty=t.y;
+    ctx.fillStyle=on?'#34c759':'#ccc';
+    ctx.beginPath();
+    ctx.roundRect(tx,ty,50,28,14);
+    ctx.fill();
+    ctx.fillStyle='#fff';
+    ctx.beginPath();
+    ctx.arc(on?tx+36:tx+14,ty+14,11,0,Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle='#333';
+    win._settingsToggles.push({key:t.key,x:tx,y:ty,w:50,h:28});
+  });
+}
+
+// --- Terminal ---
+function renderTerminal(ctx,win,cx,cy,cw,ch){
+  if(!win.term)win.term={lines:['Last login: Today 10:23','~ $ '],input:'',history:[]};
+  ctx.fillStyle='#1a1a1e';
+  ctx.fillRect(cx,cy,cw,ch);
+  ctx.fillStyle='#0f0';
+  ctx.font='13px "Courier New",monospace';
+  const term=win.term;
+  term.lines.forEach((line,i)=>ctx.fillText(line,cx+10,cy+20+i*18));
+  // Current input line
+  const lastLine=term.lines[term.lines.length-1];
+  ctx.fillText(lastLine+term.input+(Date.now()%1000<500?'▊':''),cx+10,cy+20+(term.lines.length-1)*18);
+}
+
+function termHandleKey(win,key,code){
+  const term=win.term;
+  if(!term)return;
+  if(code==='Enter'){
+    const cmd=term.input.trim();
+    term.lines[term.lines.length-1]+=term.input;
+    const result=execTermCmd(cmd);
+    if(result==='__CLEAR__'){
+      term.lines=['~ $ '];
+      term.input='';
+      osDirty=true;
+      return;
+    }
+    term.lines.push(result);
+    term.lines.push('~ $ ');
+    term.input='';
+  }else if(code==='Backspace'){
+    term.input=term.input.slice(0,-1);
+  }else if(key.length===1){
+    term.input+=key;
+  }
+  osDirty=true;
+}
+
+function execTermCmd(cmd){
+  if(cmd==='help')return 'Commands: help, ls, echo <text>, date, clear, whoami';
+  if(cmd==='ls')return 'Documents  Downloads  Pictures  Music  Desktop';
+  if(cmd.startsWith('echo '))return cmd.slice(5);
+  if(cmd==='date')return new Date().toString();
+  if(cmd==='clear')return '__CLEAR__';
+  if(cmd==='whoami')return 'user';
+  if(cmd==='')return '';
+  return `zsh: command not found: ${cmd}`;
+}
+
+// --- Tetris Render ---
+function renderTetris(ctx,win,cx,cy,cw,ch){
+  const t=win.tetris;
+  if(!t)return;
+  ctx.fillStyle='#111';
+  ctx.fillRect(cx,cy,cw,ch);
+
+  const cellSize=Math.min(Math.floor((cw-180)/TETRIS_COLS),Math.floor(ch/TETRIS_ROWS));
+  const boardX=cx+Math.floor((cw-180-cellSize*TETRIS_COLS)/2);
+  const boardY=cy+Math.floor((ch-cellSize*TETRIS_ROWS)/2);
+
+  // Grid bg
+  ctx.fillStyle='#1a1a1a';
+  ctx.fillRect(boardX,boardY,cellSize*TETRIS_COLS,cellSize*TETRIS_ROWS);
+
+  // Grid lines
+  ctx.strokeStyle='#222';
+  ctx.lineWidth=0.5;
+  for(let r=0;r<=TETRIS_ROWS;r++){
+    ctx.beginPath();
+    ctx.moveTo(boardX,boardY+r*cellSize);
+    ctx.lineTo(boardX+cellSize*TETRIS_COLS,boardY+r*cellSize);
+    ctx.stroke();
+  }
+  for(let c=0;c<=TETRIS_COLS;c++){
+    ctx.beginPath();
+    ctx.moveTo(boardX+c*cellSize,boardY);
+    ctx.lineTo(boardX+c*cellSize,boardY+cellSize*TETRIS_ROWS);
+    ctx.stroke();
+  }
+
+  // Placed blocks
+  for(let r=0;r<TETRIS_ROWS;r++){
+    for(let c=0;c<TETRIS_COLS;c++){
+      if(t.board[r][c]!==-1){
+        ctx.fillStyle=TETRIS_COLORS[t.board[r][c]];
+        ctx.fillRect(boardX+c*cellSize+1,boardY+r*cellSize+1,cellSize-2,cellSize-2);
+      }
+    }
+  }
+
+  // Current piece
+  if(t.piece&&!t.gameOver){
+    for(let r=0;r<t.piece.length;r++){
+      for(let c=0;c<t.piece[r].length;c++){
+        if(!t.piece[r][c])continue;
+        const px=boardX+(t.pieceX+c)*cellSize;
+        const py=boardY+(t.pieceY+r)*cellSize;
+        if(t.pieceY+r<0)continue;
+        ctx.fillStyle=TETRIS_COLORS[TETRIS_PIECES[t.pieceIdx].color];
+        ctx.fillRect(px+1,py+1,cellSize-2,cellSize-2);
+      }
+    }
+  }
+
+  // Next piece
+  const nextX=boardX+cellSize*TETRIS_COLS+20;
+  const nextY=boardY+10;
+  ctx.fillStyle='#fff';
+  ctx.font='13px "Segoe UI",system-ui,sans-serif';
+  ctx.fillText('NEXT',nextX,nextY-5);
+  ctx.fillStyle='#1a1a1a';
+  ctx.fillRect(nextX,nextY,cellSize*4,cellSize*4);
+  if(t.nextPiece){
+    for(let r=0;r<t.nextPiece.length;r++){
+      for(let c=0;c<t.nextPiece[r].length;c++){
+        if(!t.nextPiece[r][c])continue;
+        ctx.fillStyle=TETRIS_COLORS[TETRIS_PIECES[t.nextIdx].color];
+        ctx.fillRect(nextX+c*cellSize+1,nextY+r*cellSize+1,cellSize-2,cellSize-2);
+      }
+    }
+  }
+
+  // Score
+  ctx.fillStyle='#fff';
+  ctx.font='14px "Segoe UI",system-ui,sans-serif';
+  ctx.fillText(`Score: ${t.score}`,nextX,nextY+cellSize*4+30);
+  ctx.fillText(`Lines: ${t.lines}`,nextX,nextY+cellSize*4+50);
+  ctx.fillText(`Level: ${t.level}`,nextX,nextY+cellSize*4+70);
+
+  if(t.gameOver){
+    ctx.fillStyle='rgba(0,0,0,0.7)';
+    ctx.fillRect(boardX,boardY+cellSize*7,cellSize*TETRIS_COLS,cellSize*6);
+    ctx.fillStyle='#f44';
+    ctx.font='bold 24px "Segoe UI",system-ui,sans-serif';
+    ctx.textAlign='center';
+    ctx.fillText('GAME OVER',boardX+cellSize*TETRIS_COLS/2,boardY+cellSize*10);
+    ctx.fillStyle='#fff';
+    ctx.font='14px "Segoe UI",system-ui,sans-serif';
+    ctx.fillText('Click to restart',boardX+cellSize*TETRIS_COLS/2,boardY+cellSize*11+10);
+    ctx.textAlign='start';
+  }
+}
+
+// --- Snake Render ---
+function renderSnake(ctx,win,cx,cy,cw,ch){
+  const s=win.snake;
+  if(!s)return;
+  ctx.fillStyle='#0a1a0a';
+  ctx.fillRect(cx,cy,cw,ch);
+
+  const cellSize=Math.min(Math.floor(cw/SNAKE_COLS),Math.floor(ch/SNAKE_ROWS));
+  const boardX=cx+Math.floor((cw-cellSize*SNAKE_COLS)/2);
+  const boardY=cy+Math.floor((ch-cellSize*SNAKE_ROWS)/2);
+
+  // Board bg
+  ctx.fillStyle='#0d1a0d';
+  ctx.fillRect(boardX,boardY,cellSize*SNAKE_COLS,cellSize*SNAKE_ROWS);
+
+  // Grid
+  ctx.strokeStyle='#1a2a1a';
+  ctx.lineWidth=0.3;
+  for(let r=0;r<=SNAKE_ROWS;r++){
+    ctx.beginPath();
+    ctx.moveTo(boardX,boardY+r*cellSize);
+    ctx.lineTo(boardX+cellSize*SNAKE_COLS,boardY+r*cellSize);
+    ctx.stroke();
+  }
+  for(let c=0;c<=SNAKE_COLS;c++){
+    ctx.beginPath();
+    ctx.moveTo(boardX+c*cellSize,boardY);
+    ctx.lineTo(boardX+c*cellSize,boardY+cellSize*SNAKE_ROWS);
+    ctx.stroke();
+  }
+
+  // Food
+  ctx.fillStyle='#f44';
+  ctx.beginPath();
+  ctx.arc(boardX+s.food.x*cellSize+cellSize/2,boardY+s.food.y*cellSize+cellSize/2,cellSize/2-2,0,Math.PI*2);
+  ctx.fill();
+
+  // Snake
+  s.snake.forEach((seg,i)=>{
+    ctx.fillStyle=i===0?'#4f4':'#3a3';
+    ctx.fillRect(boardX+seg.x*cellSize+1,boardY+seg.y*cellSize+1,cellSize-2,cellSize-2);
+  });
+
+  // Score
+  ctx.fillStyle='#fff';
+  ctx.font='14px "Segoe UI",system-ui,sans-serif';
+  ctx.fillText(`Score: ${s.score}  Speed: ${Math.round((200-s.speed)/150*100)}%`,boardX,boardY-8);
+
+  if(s.gameOver){
+    ctx.fillStyle='rgba(0,0,0,0.7)';
+    ctx.fillRect(boardX,boardY+cellSize*7,cellSize*SNAKE_COLS,cellSize*6);
+    ctx.fillStyle='#f44';
+    ctx.font='bold 24px "Segoe UI",system-ui,sans-serif';
+    ctx.textAlign='center';
+    ctx.fillText('GAME OVER',boardX+cellSize*SNAKE_COLS/2,boardY+cellSize*10);
+    ctx.fillStyle='#fff';
+    ctx.font='14px "Segoe UI",system-ui,sans-serif';
+    ctx.fillText('Click to restart',boardX+cellSize*SNAKE_COLS/2,boardY+cellSize*11+10);
+    ctx.textAlign='start';
+  }
+}
+
+// ==================== OS EVENT HANDLING ====================
+function osMouseDown(button){
+  isOsMouseDown=true;
+  // Check dock
+  const dockH=58;
+  const iconSize=44,iconGap=8;
+  const totalIconsW=appDefsList.length*iconSize+(appDefsList.length-1)*iconGap;
+  const dockPadX=16;
+  const dockW=totalIconsW+dockPadX*2;
+  const dockX=(OS_W-dockW)/2;
+  const dockY=OS_H-dockH+4;
+  let iconX=dockX+dockPadX;
+  for(const appId of appDefsList){
+    if(osCursor.x>=iconX&&osCursor.x<=iconX+iconSize&&osCursor.y>=dockY+4&&osCursor.y<=dockY+4+iconSize){
+      const existing=windows.find(w=>w.appId===appId&&!w.minimized);
+      if(existing){focusWindow(existing.id);return;}
+      const minWin=windows.find(w=>w.appId===appId&&w.minimized);
+      if(minWin){unminimizeWindow(minWin.id);return;}
+      openWindow(appId);
+      return;
+    }
+    iconX+=iconSize+iconGap;
+  }
+
+  // Check windows (top-down by zIndex)
+  const sorted=[...windows].sort((a,b)=>b.zIndex-a.zIndex);
+  for(const win of sorted){
+    if(win.minimized)continue;
+    const{x,y,width:w,height:h}=win;
+    if(osCursor.x>=x&&osCursor.x<=x+w&&osCursor.y>=y&&osCursor.y<=y+h){
+      focusWindow(win.id);
+      // Title bar drag
+      if(osCursor.y<=y+32){
+        // Traffic light close
+        const tlX=x+12,tlY=y+10;
+        const distClose=Math.hypot(osCursor.x-tlX,osCursor.y-tlY);
+        const distMin=Math.hypot(osCursor.x-(tlX+20),osCursor.y-tlY);
+        const distMax=Math.hypot(osCursor.x-(tlX+40),osCursor.y-tlY);
+        if(distClose<8){closeWindow(win.id);return;}
+        if(distMin<8){minimizeWindow(win.id);return;}
+        if(distMax<8){win.x=40;win.y=40;osDirty=true;return;}
+        // Start drag
+        draggingWindow=win;
+        dragWinOffset={x:osCursor.x-win.x,y:osCursor.y-win.y};
+        return;
+      }
+      // Content click
+      const cx=x+8,cy=y+36,cw=w-16,ch2=h-44;
+      if(osCursor.x>=cx&&osCursor.x<=cx+cw&&osCursor.y>=cy&&osCursor.y<=cy+ch2){
+        handleAppClick(win,osCursor.x-cx,osCursor.y-cy,cw,ch2);
+      }
+      return;
+    }
+  }
+}
+
+function osMouseUp(){
+  isOsMouseDown=false;
+  draggingWindow=null;
+}
+
+function osMouseMove(){
+  if(draggingWindow){
+    draggingWindow.x=Math.max(0,Math.min(OS_W-draggingWindow.width,osCursor.x-dragWinOffset.x));
+    draggingWindow.y=Math.max(26,Math.min(OS_H-60,osCursor.y-dragWinOffset.y));
+    osDirty=true;
+  }
+}
+
+function osKeyDown(key,code){
+  const activeWin=windows.find(w=>w.id===activeWindowId&&!w.minimized);
+  if(!activeWin)return;
+
+  if(activeWin.appId==='tetris'){
+    const t=activeWin.tetris;
+    if(!t||t.gameOver)return;
+    if(code==='ArrowLeft')tetrisMove(activeWin,-1,0);
+    else if(code==='ArrowRight')tetrisMove(activeWin,1,0);
+    else if(code==='ArrowDown'){tetrisMove(activeWin,0,1);activeWin.tetris.score+=1;}
+    else if(code==='ArrowUp')tetrisRotate(activeWin);
+    else if(code==='Space')tetrisHardDrop(activeWin);
+    else if(code==='KeyP')t.paused=!t.paused;
+  }else if(activeWin.appId==='snake'){
+    const s=activeWin.snake;
+    if(!s||s.gameOver)return;
+    if(code==='ArrowLeft')snakeSetDir(activeWin,-1,0);
+    else if(code==='ArrowRight')snakeSetDir(activeWin,1,0);
+    else if(code==='ArrowUp')snakeSetDir(activeWin,0,-1);
+    else if(code==='ArrowDown')snakeSetDir(activeWin,0,1);
+    else if(code==='KeyP')s.paused=!s.paused;
+  }else if(activeWin.appId==='terminal'){
+    termHandleKey(activeWin,key,code);
+  }else if(activeWin.appId==='notes'){
+    if(code==='Enter')activeWin.notes.text+='\n';
+    else if(code==='Backspace')activeWin.notes.text=activeWin.notes.text.slice(0,-1);
+    else if(key.length===1)activeWin.notes.text+=key;
+    osDirty=true;
+  }
+}
+
+function handleAppClick(win,rx,ry,cw,ch){
+  if(win.appId==='calculator'&&win._calcBtns){
+    for(const b of win._calcBtns){
+      if(rx>=b.x-win.x-8&&rx<=b.x-win.x-8+b.w&&ry>=b.y-win.y-36&&ry<=b.y-win.y-36+b.h){
+        calcAction(win,b.btn);
+        return;
+      }
+    }
+  }
+  if(win.appId==='settings'&&win._settingsToggles){
+    for(const t of win._settingsToggles){
+      if(rx>=t.x-win.x-8&&rx<=t.x-win.x-8+t.w&&ry>=t.y-win.y-36&&ry<=t.y-win.y-36+t.h){
+        win.settings[t.key]=!win.settings[t.key];
+        osDirty=true;
+        return;
+      }
+    }
+  }
+  if(win.appId==='tetris'&&win.tetris&&win.tetris.gameOver){
+    stopTetris(win);
+    initTetris(win);
+    osDirty=true;
+  }
+  if(win.appId==='snake'&&win.snake&&win.snake.gameOver){
+    stopSnake(win);
+    initSnake(win);
+    osDirty=true;
+  }
+}
+
+// ==================== UPDATE OS CURSOR FROM MOUSE ====================
+function updateOSCursorFromMouse(){
+  const mx=mouseGroup.position.x;
+  const mz=mouseGroup.position.z;
+  const pad=mousePadBounds;
+  const u=(mx-pad.xMin)/(pad.xMax-pad.xMin);
+  const v=(mz-pad.zMin)/(pad.zMax-pad.zMin);
+  osCursor.x=Math.round(u*OS_W);
+  osCursor.y=Math.round((1-v)*OS_H);
+  osCursor.x=Math.max(0,Math.min(OS_W-1,osCursor.x));
+  osCursor.y=Math.max(0,Math.min(OS_H-1,osCursor.y));
+  osDirty=true;
+}
+
+// ==================== INPUT HANDLING ====================
+function getIntersections(event){
+  mouse.x=(event.clientX/window.innerWidth)*2-1;
+  mouse.y=-(event.clientY/window.innerHeight)*2+1;
+  raycaster.setFromCamera(mouse,camera);
+  return raycaster.intersectObjects(scene.children,true);
+}
+
+function getDeskIntersection(event){
+  mouse.x=(event.clientX/window.innerWidth)*2-1;
+  mouse.y=-(event.clientY/window.innerHeight)*2+1;
+  raycaster.setFromCamera(mouse,camera);
+  const target=new THREE.Vector3();
+  return raycaster.ray.intersectPlane(deskPlane,target)?target:null;
+}
+
+// Mouse events on 3D scene
+renderer.domElement.addEventListener('mousedown',(e)=>{
+  if(currentState===STATE.START)return;
+  if(currentState===STATE.ZOOMED)return;
+  if(e.button===0){
+    const hits=getIntersections(e);
+    // Check if clicking on a key
+    for(const hit of hits){
+      let obj=hit.object;
+      while(obj){
+        const entry=keyMap.get(obj.name||'');
+        if(entry){pressKey3D(entry);osKeyDown(entry.char,entry.code);return;}
+        obj=obj.parent;
+      }
+    }
+    // Check if clicking on mouse
+    for(const hit of hits){
+      let obj=hit.object;
+      while(obj){
+        if(obj===mouseGroup||obj.parent===mouseGroup||(obj.name&&obj.name.startsWith('mouse-'))){
+          if(obj.name==='mouse-left'){
+            osMouseDown('left');
+            return;
+          }
+          if(obj.name==='mouse-right')return;
+          // Start dragging mouse
+          draggingMouse=true;
+          const pt=getDeskIntersection(e);
+          if(pt){
+            dragOffset.copy(mouseGroup.position).sub(pt);
+          }
+          return;
+        }
+        obj=obj.parent;
+      }
+    }
+    // Check if clicking on monitor screen
+    for(const hit of hits){
+      if(hit.object===screenMesh||hit.object.name==='screen'){
+        if(hit.uv){
+          osCursor.x=Math.round(hit.uv.x*OS_W);
+          osCursor.y=Math.round((1-hit.uv.y)*OS_H);
+          osMouseDown('left');
+        }
+        return;
+      }
+    }
+  }
+});
+
+renderer.domElement.addEventListener('mousemove',(e)=>{
+  if(currentState!==STATE.DESK)return;
+  if(draggingMouse){
+    const pt=getDeskIntersection(e);
+    if(pt){
+      const target=pt.add(dragOffset);
+      target.x=Math.max(mousePadBounds.xMin,Math.min(mousePadBounds.xMax,target.x));
+      target.z=Math.max(mousePadBounds.zMin,Math.min(mousePadBounds.zMax,target.z));
+      target.y=mouseGroup.position.y;
+      mouseGroup.position.copy(target);
+      updateOSCursorFromMouse();
+      osMouseMove();
+    }
+  }
+});
+
+renderer.domElement.addEventListener('mouseup',()=>{
+  draggingMouse=false;
+  osMouseUp();
+});
+
+// Keyboard events
+window.addEventListener('keydown',(e)=>{
+  if(currentState===STATE.START){
+    transitionTo(STATE.DESK);
+    return;
+  }
+  if(e.code==='Escape'){
+    transitionTo(STATE.START);
+    return;
+  }
+  if(e.code==='KeyZ'&&currentState===STATE.DESK){
+    transitionTo(STATE.ZOOMED);
+    return;
+  }
+  if(e.code==='KeyY'&&currentState===STATE.ZOOMED){
+    transitionTo(STATE.DESK);
+    return;
+  }
+
+  // Animate key on 3D keyboard
+  const entry=keyMap.get(e.code);
+  if(entry)pressKey3D(entry);
+
+  // Forward to OS
+  if(currentState===STATE.ZOOMED||currentState===STATE.DESK){
+    osKeyDown(e.key,e.code);
+  }
+  e.preventDefault();
+});
+
+window.addEventListener('keyup',(e)=>{
+  const entry=keyMap.get(e.code);
+  if(entry)releaseKey3D(entry);
+});
+
+// OS overlay mouse events (zoomed mode)
+osOverlay.addEventListener('mousedown',(e)=>{
+  if(currentState!==STATE.ZOOMED)return;
+  const rect=osOverlayCanvas.getBoundingClientRect();
+  const scaleX=OS_W/rect.width;
+  const scaleY=OS_H/rect.height;
+  osCursor.x=Math.round((e.clientX-rect.left)*scaleX);
+  osCursor.y=Math.round((e.clientY-rect.top)*scaleY);
+  osCursor.x=Math.max(0,Math.min(OS_W-1,osCursor.x));
+  osCursor.y=Math.max(0,Math.min(OS_H-1,osCursor.y));
+  osMouseDown('left');
+  osDirty=true;
+});
+
+osOverlay.addEventListener('mousemove',(e)=>{
+  if(currentState!==STATE.ZOOMED)return;
+  const rect=osOverlayCanvas.getBoundingClientRect();
+  const scaleX=OS_W/rect.width;
+  const scaleY=OS_H/rect.height;
+  osCursor.x=Math.round((e.clientX-rect.left)*scaleX);
+  osCursor.y=Math.round((e.clientY-rect.top)*scaleY);
+  osCursor.x=Math.max(0,Math.min(OS_W-1,osCursor.x));
+  osCursor.y=Math.max(0,Math.min(OS_H-1,osCursor.y));
+  osMouseMove();
+  osDirty=true;
+});
+
+osOverlay.addEventListener('mouseup',()=>{
+  osMouseUp();
+});
+
+// ==================== 3D KEY ANIMATION ====================
+function pressKey3D(entry){
+  if(entry.isPressed)return;
+  entry.isPressed=true;
+  entry.targetY=entry.restY-KEY_PRESS_DEPTH;
+  entry.mesh.material=entry.materialsPressed;
+  if(entry.pressTimer){clearTimeout(entry.pressTimer);entry.pressTimer=null;}
+  // Auto-release after 180ms (covers mouse clicks; real keyup will clear this sooner)
+  entry.pressTimer=setTimeout(()=>releaseKey3D(entry),180);
+}
+
+function releaseKey3D(entry){
+  if(entry.pressTimer){clearTimeout(entry.pressTimer);entry.pressTimer=null;}
+  if(!entry.isPressed)return;
+  entry.isPressed=false;
+  entry.targetY=entry.restY;
+  entry.mesh.material=entry.materials;
+}
+
+// ==================== STATE TRANSITIONS ====================
+function transitionTo(state){
+  if(state===currentState)return;
+  currentState=state;
+
+  if(state===STATE.START){
+    startScreen.classList.remove('hidden');
+    osOverlay.classList.remove('active');
+    document.body.style.cursor='default';
+    hintEl.style.opacity='1';
+    cameraTargetPos.set(0,0.75,2.6);
+    cameraTargetLook.set(0,0.4,-0.7);
+    zoomTransition=0;
+    allDeviceGroups.forEach(g=>g.visible=true);
+  }else if(state===STATE.DESK){
+    startScreen.classList.add('hidden');
+    osOverlay.classList.remove('active');
+    document.body.style.cursor='default';
+    hintEl.style.opacity='1';
+    cameraTargetPos.set(0,0.75,2.6);
+    cameraTargetLook.set(0,0.4,-0.7);
+    zoomTransition=0;
+    allDeviceGroups.forEach(g=>g.visible=true);
+    osDirty=true;
+  }else if(state===STATE.ZOOMED){
+    startScreen.classList.add('hidden');
+    osOverlay.classList.add('active');
+    document.body.style.cursor='none';
+    hintEl.style.opacity='0';
+    cameraTargetPos.set(0,0.55,-0.25);
+    cameraTargetLook.set(0,0.55,-0.71);
+    zoomTransition=1;
+    allDeviceGroups.forEach(g=>g.visible=false);
+    osDirty=true;
+  }
+}
+
+// ==================== RESIZE ====================
+window.addEventListener('resize',()=>{
+  renderer.setSize(window.innerWidth,window.innerHeight);
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+});
+
+// ==================== MAIN LOOP ====================
+const clock=new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+
+  const dt=Math.min(clock.getDelta(),0.1);
+
+  // Smooth camera transition
+  camera.position.lerp(cameraTargetPos,5*dt);
+  const currentLook=new THREE.Vector3();
+  // Smoothly interpolate the lookAt target
+  const lerpFactor=5*dt;
+  const tempLook=cameraTargetLook.clone();
+  // Use a dummy to track current look target
+  if(!camera._currentLook) camera._currentLook=cameraTargetLook.clone();
+  camera._currentLook.lerp(cameraTargetLook,lerpFactor);
+  camera.lookAt(camera._currentLook);
+
+  // Update key animations
+  for(const entry of keyEntries){
+    const dy=entry.targetY-entry.mesh.position.y;
+    if(Math.abs(dy)>0.0005){
+      entry.mesh.position.y+=dy*20*dt;
+      if(Math.abs(dy)<0.001)entry.mesh.position.y=entry.targetY;
+    }
+  }
+
+  // Update OS canvas if dirty
+  if(osDirty&&currentState!==STATE.START){
+    renderOS(osCtx);
+    screenTexture.needsUpdate=true;
+
+    // Also update overlay canvas in zoomed mode
+    if(currentState===STATE.ZOOMED){
+      osOverlayCtx.drawImage(osCanvas,0,0);
+    }
+    osDirty=false;
+  }
+
+  // Render 3D scene
+  renderer.render(scene,camera);
+}
+
+// ==================== INIT ====================
+// Open default windows
+openWindow('finder');
+windows[0].x=50;windows[0].y=50;
+openWindow('notes');
+windows[1].x=580;windows[1].y=60;
+
+// Initial OS render
+renderOS(osCtx);
+screenTexture.needsUpdate=true;
+
+// Start loop
+animate();
+
+console.log('Virtual 3D PC ready!');
+console.log('Z: Zoom to monitor | Y: Zoom out | ESC: Start screen');
+console.log('Click and drag the 3D mouse to move the cursor');
+console.log('Click 3D keys or use your real keyboard to type');
+</script>
+</body>
+</html>
